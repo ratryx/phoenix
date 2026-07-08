@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# PyInstaller
+build/
+dist/
+
+# Ambiente virtual
+venv/
+.venv/
+env/
+.env
+
+# Logs
+*.log
+
+# Saída local
+output/
+
+# IDEs
+.idea/
+.vscode/
+
+# Antigravity (configurações locais da IDE)
+.antigravity/
+
+# Variáveis de ambiente
+.env
+.env.local
+.env.*.local
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# ==============================================
+# NÃO IGNORAR (versionados intencionalmente):
+# .agents/
+# .specify/
+# AGENTS.md
+# phoenix.spec
+# specs/
+# ==============================================

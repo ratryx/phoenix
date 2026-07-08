@@ -1,0 +1,52 @@
+<svg width="256" height="256" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<radialGradient id="bg" cx="50%" cy="45%" r="65%">
+<stop offset="0%" stop-color="#2a0a05"/>
+<stop offset="100%" stop-color="#0b0604"/>
+</radialGradient>
+<linearGradient id="wingL" x1="0%" y1="0%" x2="100%" y2="100%">
+<stop offset="0%" stop-color="#ffe27a"/>
+<stop offset="40%" stop-color="#ff9d2e"/>
+<stop offset="100%" stop-color="#c4391b"/>
+</linearGradient>
+<linearGradient id="wingR" x1="100%" y1="0%" x2="0%" y2="100%">
+<stop offset="0%" stop-color="#ffe27a"/>
+<stop offset="40%" stop-color="#ff9d2e"/>
+<stop offset="100%" stop-color="#c4391b"/>
+</linearGradient>
+<linearGradient id="body" x1="50%" y1="0%" x2="50%" y2="100%">
+<stop offset="0%" stop-color="#ffd35c"/>
+<stop offset="55%" stop-color="#ff7a1a"/>
+<stop offset="100%" stop-color="#b32a14"/>
+</linearGradient>
+</defs>
+
+<circle cx="128" cy="128" r="128" fill="url(#bg)"/>
+
+<!-- cauda -->
+<path d="M128 195 C 110 215, 90 230, 65 245 C 95 228, 115 210, 124 192 Z" fill="#c4391b"/>
+<path d="M128 195 C 146 215, 166 230, 191 245 C 161 228, 141 210, 132 192 Z" fill="#c4391b"/>
+<path d="M128 198 C 122 220, 118 235, 112 248 C 122 230, 128 213, 130 196 Z" fill="#e6451f"/>
+<path d="M128 198 C 134 220, 138 235, 144 248 C 134 230, 128 213, 126 196 Z" fill="#e6451f"/>
+
+<!-- asa esquerda -->
+<path d="M128 110 C 80 95, 35 100, 12 130 C 22 115, 38 103, 58 98 C 40 108, 26 123, 22 142 C 38 122, 62 108, 88 104 C 72 116, 60 132, 58 148 C 76 128, 102 113, 128 110 Z" fill="url(#wingL)"/>
+
+<!-- asa direita -->
+<path d="M128 110 C 176 95, 221 100, 244 130 C 234 115, 218 103, 198 98 C 216 108, 230 123, 234 142 C 218 122, 194 108, 168 104 C 184 116, 196 132, 198 148 C 180 128, 154 113, 128 110 Z" fill="url(#wingR)"/>
+
+<!-- corpo -->
+<path d="M128 78 C 110 78, 96 95, 95 118 C 94 150, 108 195, 128 225 C 148 195, 162 150, 161 118 C 160 95, 146 78, 128 78 Z" fill="url(#body)"/>
+
+<!-- cabeça -->
+<path d="M128 50 C 113 50, 100 62, 97 80 C 95 98, 105 115, 128 124 C 151 115, 161 98, 159 80 C 156 62, 143 50, 128 50 Z" fill="url(#body)"/>
+
+<!-- crista -->
+<path d="M128 50 C 122 38, 113 28, 102 23 C 112 31, 119 41, 121 49 Z" fill="#ffd35c"/>
+<path d="M128 50 C 134 38, 143 28, 154 23 C 144 31, 137 41, 135 49 Z" fill="#ffd35c"/>
+<path d="M128 47 C 125 33, 121 21, 113 12 C 122 21, 127 33, 130 46 Z" fill="#ffe27a"/>
+
+<!-- bico -->
+<path d="M118 88 L 124 97 L 113 99 Z" fill="#3a1206"/>
+<path d="M138 88 L 132 97 L 143 99 Z" fill="#3a1206"/>
+</svg>
