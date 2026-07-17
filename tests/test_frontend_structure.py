@@ -21,6 +21,7 @@ def test_arquivos_existem():
     assert (base / "pages/otimizacao.js").exists()
     assert (base / "pages/servicos.js").exists()
     assert (base / "pages/historico.js").exists()
+    assert (base / "pages/relatorio.js").exists()
     assert (base / "../app.js").exists()
 
 def test_ordem_carregamento():
@@ -42,6 +43,7 @@ def test_ordem_carregamento():
         "js/pages/otimizacao.js",
         "js/pages/servicos.js",
         "js/pages/historico.js",
+        "js/pages/relatorio.js",
         "app.js"
     ]
     
@@ -113,6 +115,7 @@ def test_paginas_ainda_no_app_js():
     assert "executarOtimizacaoGeral" not in c, "Otimização não foi removida do app.js"
     assert "carregarServicos" not in c, "Serviços não foi removida do app.js"
     assert "carregarHistorico" not in c, "Histórico não foi removida do app.js"
+    assert "renderizarRelatorio" not in c, "Relatório não foi removido do app.js"
     assert "executarRotinaCompleta" in c, "Rotina Completa não está mais no app.js"
     
 def test_style_nao_alterado():

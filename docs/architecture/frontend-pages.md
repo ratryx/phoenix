@@ -206,3 +206,33 @@ gui/js/pages/
 - **Overlay:** Usa o `Phoenix.ui.feedback.mostrarOverlay("Consultando histórico...")` no request.
 - **Fronteira com Relatório:** A geração do relatório e sua visualização comparativa estão restritas a `app.js` (`renderizarRelatorio`) através da função de "Rotina Completa". A página do Histórico é um leitor primitivo do log.
 - **Globals/Dependências Restantes:** Nenhuma exposta. Necessita das instâncias `Phoenix.bridge`, `Phoenix.jobs` e `Phoenix.ui.feedback`.
+
+## Relatório (`gui/js/pages/relatorio.js`)
+
+**Rota:** `relatorio`
+**Namespace:** `Phoenix.pages.relatorio`
+
+### Funções Atuais (antes da extração)
+- `renderizarRelatorio(resultado)`: Exclusiva no `app.js`, injeta estaticamente as comparações no DOM.
+
+### Contratos e Dependências
+- **Origem dos Dados:** Política C — HTML montado imediatamente. A página não busca seu estado num endpoint nem o armazena em variável. Ela é chamada diretamente pela Rotina Completa no frontend.
+- **Payload da Rotina Completa:** 
+  ```json
+  {
+    "ok": true,
+    "antes": { "cpu": { "uso_percentual": 0.0 }, "memoria": { "percentual_uso": 0.0, "disponivel_gb": 0.0 } },
+    "depois": { "cpu": { "uso_percentual": 0.0 }, "memoria": { "percentual_uso": 0.0, "disponivel_gb": 0.0 } },
+    "espaco_liberado_mb": 0.0,
+    "relatorio_txt": "C:\\..."
+  }
+  ```
+- **IDs do DOM:** `#conteudo-relatorio`.
+- **Cálculos Frontend e Deltas:**
+  - `linhaComparativa` processa `depois - antes`.
+  - Tolerância de `< 0.01` é classificada como `"neutro"` (sinal `=`).
+  - Lógicas booleanas dependentes (`menorEMelhor`): CPU e RAM de uso são invertidas vs RAM disponível.
+  - Símbolos: `▼` e `▲`. Arredondamento numérico `Math.abs(diferenca).toFixed(1)`.
+- **Modais e Botões:** Inexistentes nesta página. A string bruta de exportação do `.txt` apenas é colocada no footer sem links ou botões de "Abrir Relatório".
+- **Estado Vazio e Erros:** Não há tratamento. A ausência do JSON explodiria o DOM, pois o `app.js` verifica o erro em `executarRotinaCompleta` antes de chamar este método.
+- **Fronteira:** O Histórico não se comunica com ela. A Rotina Completa gera os dados via Job no backend, faz `navigate("relatorio")` e só então injeta os blocos formatados de variação em tela.
