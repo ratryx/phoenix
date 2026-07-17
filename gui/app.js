@@ -87,7 +87,7 @@
         Phoenix.pages.limpeza.load();
         break;
       case "servicos":
-        carregarServicos();
+        Phoenix.pages.servicos.load();
         break;
       case "historico":
         carregarHistorico();
@@ -184,103 +184,6 @@
   // ──────────────────────────────────────────────
   //  Otimização (extraída para gui/js/pages/otimizacao.js)
   // ──────────────────────────────────────────────
-
-  // ──────────────────────────────────────────────
-  //  Serviços
-  // ──────────────────────────────────────────────
-
-  async function carregarServicos() {
-    var container = document.getElementById("conteudo-servicos");
-    if (!container) return;
-
-    container.innerHTML =
-      '<p class="texto-secundario">Carregando serviços...</p>';
-    mostrarOverlay("Consultando serviços do Windows...");
-
-    try {
-      var jobRes = await bridge.call("listar_servicos");
-      if (!jobRes || !jobRes.job_id) { esconderOverlay(); return; }
-      var resultado = await awaitJob(jobRes.job_id);
-      esconderOverlay();
-
-      if (!resultado || !resultado.ok) {
-        container.innerHTML =
-          '<div class="card"><span class="badge erro">Erro</span> ' +
-          ((resultado && resultado.erro) || "Erro desconhecido") +
-          "</div>";
-        return;
-      }
-
-      var linhas = (resultado.servicos || [])
-        .map(function (s) {
-          var ativo = s.status === "Rodando";
-          return (
-            "<tr>" +
-            "<td>" +
-            "<strong>" + s.nome_amigavel + "</strong>" +
-            '<div class="texto-terciario">' + s.descricao + "</div>" +
-            "</td>" +
-            "<td>" +
-            '<span class="badge ' + (ativo ? "sucesso" : "neutro") + '">' +
-            s.status +
-            "</span>" +
-            "</td>" +
-            "<td>" +
-            '<div class="toggle ' + (ativo ? "ativo" : "") + '"' +
-            ' data-servico="' + s.nome_servico + '"' +
-            ' data-ativo="' + ativo + '">' +
-            '<div class="bola"></div>' +
-            "</div>" +
-            "</td>" +
-            "</tr>"
-          );
-        })
-        .join("");
-
-      container.innerHTML =
-        '<div class="card">' +
-        '<table class="tabela-dados">' +
-        "<thead><tr><th>Serviço</th><th>Status</th><th>Ação</th></tr></thead>" +
-        "<tbody>" + linhas + "</tbody>" +
-        "</table>" +
-        "</div>";
-
-      // Registrar toggles dos serviços
-      container.querySelectorAll(".toggle").forEach(function (toggle) {
-        toggle.addEventListener("click", function () {
-          var nomeServico = toggle.dataset.servico;
-          var estaAtivo = toggle.dataset.ativo === "true";
-
-          Phoenix.operations.restorePoint.runProtected(async function () {
-            mostrarOverlay(
-              estaAtivo ? "Desativando serviço..." : "Ativando serviço..."
-            );
-            try {
-              var metodoAcao = estaAtivo
-                ? "desativar_servico"
-                : "ativar_servico";
-              var jobRes = await bridge.call(metodoAcao, nomeServico);
-              if (!jobRes || !jobRes.job_id) { esconderOverlay(); return; }
-              var resultado = await awaitJob(jobRes.job_id);
-              esconderOverlay();
-
-              if (resultado && resultado.ok) {
-                toggle.classList.toggle("ativo");
-                toggle.dataset.ativo = (!estaAtivo).toString();
-              }
-            } catch (e) {
-              console.error("[ERRO] Toggle serviço:", e);
-              esconderOverlay();
-            }
-          });
-        });
-      });
-    } catch (err) {
-      console.error("[ERRO] Serviços:", err);
-      esconderOverlay();
-      container.innerHTML = '<p class="texto-secundario">Erro ao carregar serviços.</p>';
-    }
-  }
 
   // ──────────────────────────────────────────────
   //  Histórico
@@ -483,9 +386,6 @@
     if (btnRotinaCard)
       btnRotinaCard.addEventListener("click", executarRotinaCompleta);
 
-    // Atualizar serviços
-    var btnServicos = document.getElementById("btn-atualizar-servicos");
-    if (btnServicos) btnServicos.addEventListener("click", carregarServicos);
   }
 
   // ──────────────────────────────────────────────

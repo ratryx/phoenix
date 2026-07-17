@@ -133,6 +133,23 @@ gui/js/pages/
 
 ## Mudanças e Desacoplamento
 - `app.js` exportou `corPorPercentual` para `window.corPorPercentual` como utilitário temporário compartilhado.
+# Frontend Pages Inventory (Post-Extraction)
+
+## Estrutura Criada
+```text
+gui/js/pages/
+├── inicio.js
+├── diagnostico.js
+└── hardware.js
+```
+
+## Dependências Injetadas
+- `Phoenix.pages.inicio.load()`
+- `Phoenix.pages.diagnostico.load()`
+- `Phoenix.pages.hardware.load()`
+
+## Mudanças e Desacoplamento
+- `app.js` exportou `corPorPercentual` para `window.corPorPercentual` como utilitário temporário compartilhado.
 - `app.js` teve o seu event listener de atualização de diagnóstico alterado para chamar `Phoenix.pages.diagnostico.load()`.
 - A manipulação do cache inicial e atualização em tempo real do dashboard foi encapsulada em `Phoenix.pages.inicio`.
 - A lógica do diagnóstico, incluindo processamento de score e injeção do banner HTML, agora pertence unicamente a `diagnostico.js`.
@@ -141,3 +158,28 @@ gui/js/pages/
 ## Globais Exportados (Temporariamente)
 - `window.corPorPercentual` - Utilizado por `inicio.js` e funções legadas de `app.js`.
 - `window.renderizarAbaHardware` - Utilizado temporariamente como hook estático até a remoção completa de listeners inline no HTML.
+
+## Serviços (`gui/js/pages/servicos.js`)
+
+**Rota:** `servicos`
+**Namespace:** `Phoenix.pages.servicos`
+
+### Funções Atuais (antes da extração)
+- `carregarServicos`: Busca a lista e renderiza na tela.
+- Ouvintes anônimos dentro de `carregarServicos`: Um listener `click` para cada toggle.
+
+### Contratos e Dependências
+- **Endpoints Utilizados:**
+  - `listar_servicos` (Síncrono/Assíncrono: Assíncrono com job `awaitJob`). Payload das entradas: `[{nome_servico, nome_amigavel, descricao, status}]`
+  - `ativar_servico` (Assíncrono com job). Payload: string `nome_servico`
+  - `desativar_servico` (Assíncrono com job). Payload: string `nome_servico`
+- **IDs do DOM:** `#conteudo-servicos`
+- **Classes/Elementos:** `.toggle`, `.bola`, `.badge`, `.sucesso`, `.neutro`, `.ativo`, `.tabela-dados`, `.card`
+- **Listeners:** Click nos botões `.toggle` com data-attributes `data-servico` e `data-ativo`.
+- **Estado Local:** O status atual ("Rodando" vs "Parado") é salvo localmente na class `.ativo` e atributo `data-ativo` do botão, atualizando a UI otimisticamente após o job retornar sucesso (`{ok: true}`). A lista inteira não recarrega.
+- **Filtros/Busca:** Não existem filtros nem busca nativamente nesta tela.
+- **Confirmação/Proteção Existente:** Usa Ponto de Restauração em cada mutação de serviço via `Phoenix.operations.restorePoint.runProtected(async function() {})`. Portanto, qualquer tentativa de ativação ou desativação exigirá ou já usará o ponto de restauração, com todos os seus modais nativos.
+- **Serviços Protegidos/Bloqueados:** O Frontend não faz distinção se um serviço é protegido. Ele exibe e atacha eventos para todos que vêm na listagem. O Backend envia unicamente a lista baseada em seu dict interno `SERVICOS_SEGUROS` e descarta implicitamente qualquer serviço crítico.
+- **Overlay/Feedback:** Usa `Phoenix.ui.feedback.mostrarOverlay()` indicando a mudança e o encerra no finally.
+- **Estados de Serviço:** "Rodando" (sucesso), "Parado" / "Não encontrado" / "Desconhecido" / "Erro ao consultar" (neutro). A renderização checa estritamente `status === "Rodando"` para setar a variável de interface `ativo = true`.
+- **Globals/Dependências Restantes:** Nenhuma global específica. Necessita de `Phoenix.bridge`, `Phoenix.jobs`, `Phoenix.operations.restorePoint`, `Phoenix.ui.feedback`.
