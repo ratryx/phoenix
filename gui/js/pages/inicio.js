@@ -3,26 +3,9 @@
 
     const page = {};
     
-    // Globals do app.js
-    function getCorPorPercentual(pct) {
-        if (window.corPorPercentual) return window.corPorPercentual(pct);
-        if (pct >= 90) return "erro";
-        if (pct >= 70) return "alerta";
-        return "";
-    }
-
     // ──────────────────────────────────────────────
     //  Carregar hardware inicial (cache)
     // ──────────────────────────────────────────────
-
-    page.load = async function () {
-        // Rotina principal é chamada no bootstrap. O router só chama .load() mas a Início 
-        // já fica pré-carregada.
-        // Apenas recarrega hardware se não tiver.
-        if (!Phoenix.state.hardware) {
-            await page.carregarHardwareInicial();
-        }
-    };
 
     page.carregarHardwareInicial = async function () {
         try {
@@ -68,8 +51,8 @@
         var cards = document.getElementById("cards-resumo-inicio");
         if (!cards) return;
 
-        var corCPU = getCorPorPercentual(cpu.uso_percentual);
-        var corRAM = getCorPorPercentual(ram.percentual_uso);
+        var corCPU = Phoenix.ui.corPorPercentual(cpu.uso_percentual);
+        var corRAM = Phoenix.ui.corPorPercentual(ram.percentual_uso);
         var nomeGPU = gpus.length > 0 ? gpus[0].nome : 'Não detectada';
 
         cards.innerHTML =
@@ -92,7 +75,7 @@
             '<div class="valor" style="font-size:15px">' + nomeGPU + '</div>' +
             (gpus.length > 0 && gpus[0].uso_percentual != null ?
                 '<div class="barra-progresso">' +
-                '<div class="preenchimento ' + getCorPorPercentual(gpus[0].uso_percentual) +
+                '<div class="preenchimento ' + Phoenix.ui.corPorPercentual(gpus[0].uso_percentual) +
                 '" style="width:' + gpus[0].uso_percentual + '%"></div>' +
                 '</div>' +
                 '<div style="font-size:11px;color:var(--cor-texto-secundario);margin-top:4px">' +
@@ -142,7 +125,7 @@
 
         if (cardCPU && dados.cpu) {
             var pct = dados.cpu.uso_percentual;
-            var cor = getCorPorPercentual(pct);
+            var cor = Phoenix.ui.corPorPercentual(pct);
             cardCPU.querySelector('.valor').innerHTML =
                 pct + '<span class="unidade">%</span>';
             var barra = cardCPU.querySelector('.preenchimento');
@@ -154,7 +137,7 @@
 
         if (cardRAM && dados.memoria) {
             var pct = dados.memoria.percentual_uso;
-            var cor = getCorPorPercentual(pct);
+            var cor = Phoenix.ui.corPorPercentual(pct);
             cardRAM.querySelector('.valor').innerHTML =
                 pct + '<span class="unidade">%</span>';
             var barra = cardRAM.querySelector('.preenchimento');

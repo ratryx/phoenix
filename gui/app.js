@@ -51,7 +51,8 @@
     if (pct >= 70) return "alerta";
     return "";
   }
-  window.corPorPercentual = corPorPercentual;
+  Phoenix.ui = Phoenix.ui || {};
+  Phoenix.ui.corPorPercentual = corPorPercentual;
 
   // ──────────────────────────────────────────────
   //  Overlay (globais — usados pelo backend)
