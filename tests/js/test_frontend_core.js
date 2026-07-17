@@ -7,6 +7,7 @@ const vm = require('vm');
 const window = {
     addEventListener: () => {},
     removeEventListener: () => {},
+    location: { hash: '' }
 };
 global.window = window;
 

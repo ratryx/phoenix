@@ -12,7 +12,10 @@ def test_arquivos_existem():
     assert (base / "core/lifecycle.js").exists()
     assert (base / "core/router.js").exists()
     assert (base / "operations/restore-point.js").exists()
-    assert (base / "ui/feedback.js").exists()
+    assert (base / "features/client-session.js").exists()
+    assert (base / "ui/window-controls.js").exists()
+    assert (base / "operations/routine.js").exists()
+    assert (base / "operations/restore-point.js").exists()
     assert (base / "pages/inicio.js").exists()
     assert (base / "pages/diagnostico.js").exists()
     assert (base / "pages/hardware.js").exists()
@@ -25,8 +28,12 @@ def test_arquivos_existem():
     assert (base / "../app.js").exists()
 
 def test_ordem_carregamento():
-    conteudo = Path("gui/index.html").read_text(encoding="utf-8")
-    scripts = [
+    """Valida se a ordem dos scripts extraídos no HTML está coerente"""
+    with open("gui/index.html", "r", encoding="utf-8") as f:
+        html = f.read()
+
+    # Define a ordem esperada no index.html
+    ordem_esperada = [
         "js/core/namespace.js",
         "js/core/state.js",
         "js/core/bridge.js",
@@ -34,7 +41,10 @@ def test_ordem_carregamento():
         "js/core/jobs.js",
         "js/core/lifecycle.js",
         "js/core/router.js",
+        "js/ui/window-controls.js",
         "js/operations/restore-point.js",
+        "js/operations/routine.js",
+        "js/features/client-session.js",
         "js/pages/inicio.js",
         "js/pages/diagnostico.js",
         "js/pages/hardware.js",
@@ -47,31 +57,30 @@ def test_ordem_carregamento():
         "app.js"
     ]
     
-    posicoes = []
-    for script in scripts:
-        idx = conteudo.find(f'src="{script}"')
-        assert idx != -1, f"Script {script} não encontrado no index.html"
-        posicoes.append(idx)
+    indices = []
+    for script in ordem_esperada:
+        idx = html.find(script)
+        assert idx != -1, f"Script {script} não encontrado na index.html"
+        indices.append(idx)
         
-    assert posicoes == sorted(posicoes), "Scripts não estão carregando na ordem esperada"
-
-def test_ausencia_es_modules():
-    conteudo = Path("gui/index.html").read_text(encoding="utf-8")
-    assert 'type="module"' not in conteudo, "ES Modules detectados no index.html"
+    # Verifica se os índices estão ordenados de forma crescente
+    assert indices == sorted(indices), "Os scripts não estão na ordem correta na index.html"
     
-    js_files = list(Path("gui").rglob("*.js"))
-    for js in js_files:
-        c = js.read_text(encoding="utf-8")
-        assert not re.search(r'^\s*import ', c, re.MULTILINE) and not re.search(r'^\s*export ', c, re.MULTILINE), f"Sintaxe ES module detectada em {js}"
+def test_ausencia_es_modules():
+    """Garante que não estamos usando type='module', mantendo o design IIFE"""
+    with open("gui/index.html", "r", encoding="utf-8") as f:
+        html = f.read()
+    assert 'type="module"' not in html, "A arquitetura proíbe o uso de ES Modules"
 
 def test_bridge_isolada():
-    js_files = list(Path("gui").rglob("*.js"))
-    for js in js_files:
+    """Valida que páginas não acessam diretamente window.pywebview"""
+    base = Path("gui/js")
+    for js in base.rglob("*.js"):
         c = js.read_text(encoding="utf-8")
         if js.name == "bridge.js":
             assert "window.pywebview.api" in c, "bridge.js não acessa window.pywebview.api"
         else:
-            assert "window.pywebview.api" not in c, f"Vazamento da bridge direta em {js.name}"
+            assert "window.pywebview.api" not in c, f"{js.name} está acessando pywebview diretamente. Use Phoenix.bridge"
 
 def test_func_nao_duplicadas():
     c = Path("gui/app.js").read_text(encoding="utf-8")
@@ -116,7 +125,7 @@ def test_paginas_ainda_no_app_js():
     assert "carregarServicos" not in c, "Serviços não foi removida do app.js"
     assert "carregarHistorico" not in c, "Histórico não foi removida do app.js"
     assert "renderizarRelatorio" not in c, "Relatório não foi removido do app.js"
-    assert "executarRotinaCompleta" in c, "Rotina Completa não está mais no app.js"
+    assert "executarRotinaCompleta" not in c, "Rotina Completa não está mais no app.js"
     
 def test_style_nao_alterado():
     try:

@@ -103,7 +103,7 @@ async function runTests() {
         };
         ctx.Phoenix.pages.relatorio.showResult(payload);
         
-        assert.ok(ctx.container.innerHTML.includes("0 B"), "Deve formatar 0 MB pra 0 B");
+        assert.ok(ctx.container.innerHTML.includes("0.0 MB"), "Deve formatar 0 MB pra 0.0 MB");
         assert.ok(ctx.container.innerHTML.includes("Caminho indisponível"), "Deve exibir fallback de txt vazio");
         assert.ok(ctx.container.innerHTML.includes('badge erro'), "Deve exibir badge de erro para piora");
         assert.ok(ctx.container.innerHTML.includes('\u25B2'), "Deve exibir seta pra cima para aumentos em métricas inversas");

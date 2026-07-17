@@ -12,6 +12,7 @@
     Phoenix.ui.feedback = Phoenix.ui.feedback || {};
     Phoenix.app = Phoenix.app || {};
     Phoenix.operations = Phoenix.operations || {};
+    Phoenix.features = Phoenix.features || {};
 
     global.Phoenix = Phoenix;
 })(window);
