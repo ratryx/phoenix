@@ -24,6 +24,9 @@ Esta lista deve ser executada no Windows (em ambiente de teste ou máquina virtu
 
 ## Funcionalidades Core
 - [ ] Diagnóstico completo conclui e renderiza o relatório final na interface.
+- [x] Extração de Limpeza com suíte e cobertura estrutural (commit `c175479`)
+- [x] Restore Point (Ponto de Restauração) em módulo de operação (compartilhado por Otimização e Rotina Completa)
+- [x] Extração de Otimização (Geral, Gaming, Disco, RAM, Startup)
 - [Admin] [ ] Limpeza completa conclui com sucesso, exibindo o espaço liberado em MB/GB.
 - [Admin] [ ] Ponto de restauração do sistema pode ser criado com sucesso.
 - [Admin] [ ] Otimização geral conclui.

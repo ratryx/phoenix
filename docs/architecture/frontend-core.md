@@ -42,6 +42,11 @@ Centraliza os manipuladores assíncronos que precisam ser parados periodicamente
 - **Timers:** `tempoReal` (global, métricas gerais), `sensores` (HWMonitor, removido no exit da aba `hwmonitor`).
 - **Política de Limpeza:** `clearInterval()` por nome. Sair da aba 'hwmonitor' desliga o timer de nome 'sensores'.
 
+- `Phoenix.lifecycle`: Gerenciamento do ciclo de vida da aplicação
+- `Phoenix.router`: Roteamento e navegação de páginas virtuais
+- `Phoenix.operations.*`: Lógicas globais e protegidas compartilhadas por diversas páginas (ex: `restorePoint`).
+- `Phoenix.pages.*`: Contém a lógica encapsulada de cada página extraída.
+
 ## Router (`Phoenix.router`)
 Lida com a transição entre abas (escondendo e exibindo divs). Invoca o loader da página através de hooks `Phoenix.app.loadPage` (ou repassa callback). Cuida também da integração com lifecycle para limpar intervalos ao sair das telas.
 - **Páginas Conhecidas:** `inicio`, `diagnostico`, `hardware`, `limpeza`, `otimizacao`, `servicos`, `historico`, `hwmonitor`, `relatorio`.

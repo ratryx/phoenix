@@ -173,135 +173,10 @@
 
 
   // ──────────────────────────────────────────────
-  //  Modal de confirmação do ponto de restauração
+  //  Ponto de restauração (extraído para operations)
   // ──────────────────────────────────────────────
 
-  function exibirModalRestauracao(titulo, mensagem, tipo, aoConfirmar, aoCancelar) {
-    var modal = document.getElementById("modal-restauracao");
-    var tituloEl = document.getElementById("modal-titulo");
-    var mensagemEl = document.getElementById("modal-mensagem");
-    var iconEl = document.getElementById("modal-icon");
-    var btnConfirmar = document.getElementById("btn-modal-confirmar");
-    var btnCancelar = document.getElementById("btn-modal-cancelar");
 
-    if (!modal) return;
-
-    tituloEl.textContent = titulo;
-    mensagemEl.textContent = mensagem;
-
-    // Reset classes e ícone
-    iconEl.className = "modal-status-icon " + tipo;
-    if (tipo === "sucesso") {
-      iconEl.textContent = "✓";
-    } else if (tipo === "erro" || tipo === "alerta") {
-      iconEl.textContent = "⚠";
-    }
-
-    // Ajustar textos dos botões
-    if (tipo === "sucesso") {
-      btnConfirmar.textContent = "Confirmar e Prosseguir";
-      btnConfirmar.className = "botao primario";
-    } else {
-      btnConfirmar.textContent = "Continuar mesmo assim";
-      btnConfirmar.className = "botao primario";
-    }
-    btnCancelar.textContent = "Cancelar";
-
-    // Garantir botão confirmar visível (pode ter sido escondido antes)
-    btnConfirmar.style.display = "";
-
-    // Event handlers (com remoção automática)
-    function cliqueConfirmar() {
-      modal.classList.remove("visivel");
-      desregistrar();
-      aoConfirmar();
-    }
-
-    function cliqueCancelar() {
-      modal.classList.remove("visivel");
-      desregistrar();
-      aoCancelar();
-    }
-
-    function desregistrar() {
-      btnConfirmar.removeEventListener("click", cliqueConfirmar);
-      btnCancelar.removeEventListener("click", cliqueCancelar);
-    }
-
-    btnConfirmar.addEventListener("click", cliqueConfirmar);
-    btnCancelar.addEventListener("click", cliqueCancelar);
-
-    modal.classList.add("visivel");
-  }
-
-  // ──────────────────────────────────────────────
-  //  Ponto de restauração (antes de otimizações)
-  // ──────────────────────────────────────────────
-
-  async function comPontoRestauracao(acaoFn) {
-    if (STATE.restorePointCreatedThisSession) {
-      await acaoFn();
-      return;
-    }
-
-    mostrarOverlay('Criando ponto de restauração...', true);
-    
-    // Simular progresso enquanto o PowerShell roda
-    atualizarOverlay('Invocando PowerShell...', 10);
-    
-    const progressoTimer = setInterval(() => {
-      const fill = document.getElementById('overlay-barra-fill');
-      if (fill && !fill.classList.contains('indeterminado')) {
-        const atual = parseFloat(fill.style.width) || 10;
-        if (atual < 85) {
-          atualizarOverlay('Criando ponto de restauração do sistema...', atual + 5);
-        }
-      }
-    }, 2000);
-    
-    try {
-      const jobRes = await bridge.call("criar_ponto_restauracao");
-      const res = await window.awaitJob(jobRes.job_id);
-      clearInterval(progressoTimer);
-      
-      if (res && res.ok) {
-        STATE.restorePointCreatedThisSession = true;
-        atualizarOverlay('Ponto de restauração criado!', 100);
-        setTimeout(async () => {
-          esconderOverlay(true, true);
-          await acaoFn();
-        }, 800);
-      } else {
-        esconderOverlay(true, false);
-        setTimeout(async () => {
-          const continuar = await confirmarModal(
-            'Ponto de restauração indisponível',
-            'Não foi possível criar um ponto de restauração do sistema. Deseja continuar com a otimização mesmo assim? Em caso de problemas, não será possível reverter automaticamente.',
-            '⚠️'
-          );
-          if (continuar) {
-            STATE.restorePointCreatedThisSession = true; // Para não perguntar novamente
-            await acaoFn();
-          }
-        }, 1300); // 1300ms porque o esconderOverlay destrutivo demora 1200ms para sumir da tela
-      }
-    } catch(e) {
-      console.error("[ERRO] Ponto de restauração:", e);
-      clearInterval(progressoTimer);
-      esconderOverlay(true, false);
-      setTimeout(async () => {
-        const continuar = await confirmarModal(
-          'Erro ao criar ponto de restauração',
-          'Ocorreu um erro interno ao tentar criar o ponto de restauração. Deseja continuar com a otimização mesmo assim?',
-          '🚨'
-        );
-        if (continuar) {
-          STATE.restorePointCreatedThisSession = true;
-          await acaoFn();
-        }
-      }, 1300);
-    }
-  }
 
   // ──────────────────────────────────────────────
   //  Otimização
@@ -325,7 +200,7 @@
   }
 
   async function executarOtimizacaoGeral() {
-    comPontoRestauracao(async function () {
+    Phoenix.operations.restorePoint.runProtected(async function () {
       mostrarOverlay("Aplicando otimização geral...", true);
       try {
         var jobRes = await bridge.call("executar_otimizacao_geral");
@@ -341,7 +216,7 @@
   }
 
   async function executarOtimizacaoGaming() {
-    comPontoRestauracao(async function () {
+    Phoenix.operations.restorePoint.runProtected(async function () {
       mostrarOverlay("Aplicando otimização para jogos...", true);
       try {
         var jobRes = await bridge.call("executar_otimizacao_gaming", false);
@@ -439,7 +314,7 @@
           var nomeServico = toggle.dataset.servico;
           var estaAtivo = toggle.dataset.ativo === "true";
 
-          comPontoRestauracao(async function () {
+          Phoenix.operations.restorePoint.runProtected(async function () {
             mostrarOverlay(
               estaAtivo ? "Desativando serviço..." : "Ativando serviço..."
             );
@@ -532,7 +407,7 @@
   // ──────────────────────────────────────────────
 
   function executarRotinaCompleta() {
-    comPontoRestauracao(async function () {
+    Phoenix.operations.restorePoint.runProtected(async function () {
       mostrarOverlay(
         "Executando rotina completa — isso pode levar alguns minutos...", true
       );

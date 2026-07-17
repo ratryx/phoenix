@@ -11,6 +11,7 @@ def test_arquivos_existem():
     assert (base / "core/jobs.js").exists()
     assert (base / "core/lifecycle.js").exists()
     assert (base / "core/router.js").exists()
+    assert (base / "operations/restore-point.js").exists()
     assert (base / "ui/feedback.js").exists()
     assert (base / "pages/inicio.js").exists()
     assert (base / "pages/diagnostico.js").exists()
@@ -28,6 +29,7 @@ def test_ordem_carregamento():
         "js/core/jobs.js",
         "js/core/lifecycle.js",
         "js/core/router.js",
+        "js/operations/restore-point.js",
         "js/pages/inicio.js",
         "js/pages/diagnostico.js",
         "js/pages/hardware.js",
