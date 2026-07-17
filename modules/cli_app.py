@@ -10,12 +10,12 @@ Chamado pelo launcher.py — não execute este arquivo diretamente em produção
 
 import sys
 import time
-from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt, Confirm
 from rich.table import Table
 from rich import box
 
+from modules.shared import console
 from modules import banner
 from modules import diagnostico
 from modules import limpeza
@@ -24,8 +24,9 @@ from modules import servicos
 from modules import logs
 from modules import relatorio
 from modules import hardware as hardware_mod
-
-console = Console()
+from modules import smart
+from modules import driver_check
+from modules import rollback
 
 ESTADO = {
     "id_atendimento": None,
@@ -46,14 +47,17 @@ def exibir_menu():
 [bold]8[/bold]  - Otimizar disco (TRIM/desfragmentação)
 [bold]9[/bold]  - Ver histórico de atendimentos
 [bold]10[/bold] - [bold {banner.COR_PRIMARIA}]Executar ROTINA COMPLETA[/bold {banner.COR_PRIMARIA}] (recomendado p/ atendimento)
+[bold]11[/bold] - Saúde dos discos (S.M.A.R.T.)
+[bold]12[/bold] - Verificar drivers de GPU
+[bold]13[/bold] - Verificação de integridade do Windows (DISM + SFC)
+[bold]14[/bold] - Desfazer otimizações (rollback)
+[bold]15[/bold] - Status das Otimizações (Verificar e Reaplicar)
 [bold]0[/bold]  - Sair
     """
     console.print(Panel(opcoes, title="Menu Principal", border_style=banner.COR_PRIMARIA, box=box.ROUNDED))
 
-
 def pausar():
     Prompt.ask(f"\n[{banner.COR_SECUNDARIA}]Pressione ENTER para voltar ao menu[/{banner.COR_SECUNDARIA}]", default="")
-
 
 def iniciar_atendimento():
     """Pede o nome do cliente (opcional) e cria um novo ID de atendimento."""
@@ -65,7 +69,6 @@ def iniciar_atendimento():
     ESTADO["nome_cliente"] = nome
     ESTADO["id_atendimento"] = logs.gerar_id_atendimento()
     return ESTADO["id_atendimento"]
-
 
 def fluxo_hardware_detalhado(hw_info: dict):
     """Exibe informações detalhadas de hardware, incluindo GPU."""
@@ -113,6 +116,11 @@ def fluxo_hardware_detalhado(hw_info: dict):
                 tabela_gpu.add_row("Versão do driver", gpu["driver_versao"])
             tabela_gpu.add_row("Origem dos dados", gpu.get("fonte_dados", "—"))
             console.print(tabela_gpu)
+            
+    console.print()
+    if Confirm.ask("Deseja forçar o rescan do hardware e atualizar o cache agora?", default=False):
+        hardware_mod.forcar_rescan_hardware()
+        console.print("[green]Rescan completo! O novo hardware será carregado no próximo acesso.[/green]")
 
 
 def _executar_fluxo_restauracao_cli() -> bool:
@@ -149,7 +157,7 @@ def _executar_fluxo_restauracao_cli() -> bool:
 def rotina_completa():
     """
     Executa a rotina padrão de atendimento:
-    snapshot 'antes' -> limpeza -> otimização -> snapshot 'depois' -> relatório comparativo.
+    snapshot 'antes' -> limpeza -> backup -> otimização -> snapshot 'depois' -> relatório comparativo.
     """
     id_atendimento = iniciar_atendimento()
 
@@ -157,22 +165,25 @@ def rotina_completa():
     banner.exibir_secao("Iniciando rotina completa Phoenix")
     time.sleep(0.3)
 
-    console.print("\n[bold]Etapa 1/4 — Coletando diagnóstico inicial...[/bold]")
+    console.print("\n[bold]Etapa 1/5 — Coletando diagnóstico inicial...[/bold]")
     dados_antes = diagnostico.coletar_diagnostico_silencioso()
     logs.salvar_snapshot(id_atendimento, "antes", dados_antes, ESTADO["nome_cliente"])
     logs.registrar_acao(id_atendimento, "Diagnóstico inicial coletado", nome_cliente=ESTADO["nome_cliente"])
     banner.msg_sucesso("Diagnóstico inicial salvo")
 
-    console.print("\n[bold]Etapa 2/4 — Limpeza do sistema...[/bold]")
+    console.print("\n[bold]Etapa 2/5 — Limpeza do sistema...[/bold]")
     espaco_liberado = limpeza.executar_limpeza_completa(id_atendimento)
 
-    console.print("\n[bold]Etapa 3/4 — Otimização de performance...[/bold]")
+    console.print("\n[bold]Etapa 3/5 — Preparando backup para rollback...[/bold]")
+    rollback.salvar_backup_pre_otimizacao()
+
+    console.print("\n[bold]Etapa 4/5 — Otimização de performance...[/bold]")
     if _executar_fluxo_restauracao_cli():
         otimizacao.executar_otimizacao_geral(id_atendimento)
     else:
         console.print("[yellow]Etapa de otimização pulada pelo usuário.[/yellow]")
 
-    console.print("\n[bold]Etapa 4/4 — Coletando diagnóstico final...[/bold]")
+    console.print("\n[bold]Etapa 5/5 — Coletando diagnóstico final...[/bold]")
     dados_depois = diagnostico.coletar_diagnostico_silencioso()
     logs.salvar_snapshot(id_atendimento, "depois", dados_depois, ESTADO["nome_cliente"])
     logs.registrar_acao(id_atendimento, "Diagnóstico final coletado")
@@ -187,11 +198,15 @@ def rotina_completa():
 
     pasta_logs = logs.obter_pasta_logs()
     caminho_txt = pasta_logs / f"{id_atendimento}_relatorio.txt"
+    caminho_html = pasta_logs / f"{id_atendimento}_relatorio.html"
     relatorio.exportar_relatorio_txt(snapshot_antes, snapshot_depois, espaco_liberado_mb, caminho_txt)
-    console.print(f"\n[{banner.COR_SECUNDARIA}]Relatório exportado em: {caminho_txt}[/{banner.COR_SECUNDARIA}]")
+    relatorio.exportar_relatorio_html(snapshot_antes, snapshot_depois, espaco_liberado_mb, caminho_html)
+    console.print(f"\n[{banner.COR_SECUNDARIA}]Relatório TXT: {caminho_txt}[/{banner.COR_SECUNDARIA}]")
+    console.print(f"[{banner.COR_SECUNDARIA}]Relatório HTML: {caminho_html}[/{banner.COR_SECUNDARIA}]")
 
     console.print(Panel(
-        "Rotina completa finalizada! PC limpo e otimizado.",
+        "Rotina completa finalizada! PC limpo e otimizado.\n"
+        "[dim]Use a opção 14 do menu para desfazer as otimizações, se necessário.[/dim]",
         border_style=banner.COR_SUCESSO
     ))
 
@@ -207,6 +222,7 @@ def fluxo_otimizacao_geral_avulsa():
     id_atendimento = None
     if Confirm.ask("Deseja registrar esta otimização em um atendimento?", default=False):
         id_atendimento = iniciar_atendimento()
+    rollback.salvar_backup_pre_otimizacao()
     if _executar_fluxo_restauracao_cli():
         otimizacao.executar_otimizacao_geral(id_atendimento)
 
@@ -215,14 +231,45 @@ def fluxo_otimizacao_gaming_avulsa():
     id_atendimento = None
     if Confirm.ask("Deseja registrar esta otimização em um atendimento?", default=False):
         id_atendimento = iniciar_atendimento()
+    rollback.salvar_backup_pre_otimizacao()
     if _executar_fluxo_restauracao_cli():
         otimizacao.executar_otimizacao_gaming(id_atendimento)
+
+
+def fluxo_status_otimizacoes():
+    """Exibe o status atual das otimizações e permite reaplicar."""
+    console.print()
+    banner.exibir_secao("Diagnosticando status das otimizações...")
+    status = otimizacao.verificar_status_otimizacoes()
+    
+    tabela = Table(box=box.ROUNDED, border_style=banner.COR_PRIMARIA)
+    tabela.add_column("Status", justify="center")
+    tabela.add_column("Otimização", style="bold white")
+    tabela.add_column("Detalhe", style="dim")
+    tabela.add_column("ID", style="dim")
+    
+    for item in status["itens"]:
+        icone = "[green]✅ Ativo[/green]" if item["ativo"] else "[red]❌ Inativo[/red]"
+        tabela.add_row(icone, item["descricao"], item["detalhe"], item["id"])
+        
+    console.print(tabela)
+    
+    if status["total_inativos"] > 0:
+        console.print(f"\n[yellow]Foram encontradas {status['total_inativos']} otimizações inativas no momento.[/yellow]")
+        if Confirm.ask("Deseja reaplicar todas as otimizações inativas agora?", default=True):
+            res = otimizacao.reaplicar_todas_inativas(status)
+            if res.get("ok"):
+                console.print("[green]Otimizações reaplicadas com sucesso![/green]")
+            else:
+                console.print("[red]Houve um erro ao tentar reaplicar otimizações.[/red]")
+    else:
+        console.print("\n[green]Todas as otimizações verificadas estão ativas![/green]")
 
 
 def iniciar(hw_info: dict = None):
     """Ponto de entrada do modo CLI, chamado pelo launcher.py."""
     if hw_info is None:
-        hw_info = hardware_mod.coletar_hardware_completo()
+        hw_info = hardware_mod.obter_hardware_com_cache()
 
     console.clear()
     banner.exibir_banner(modo="CLI")
@@ -268,6 +315,21 @@ def iniciar(hw_info: dict = None):
                 pausar()
             elif escolha == "10":
                 rotina_completa()
+                pausar()
+            elif escolha == "11":
+                smart.executar_verificacao_smart()
+                pausar()
+            elif escolha == "12":
+                driver_check.executar_verificacao_drivers()
+                pausar()
+            elif escolha == "13":
+                otimizacao.executar_verificacao_integridade_sistema()
+                pausar()
+            elif escolha == "14":
+                rollback.menu_rollback()
+                pausar()
+            elif escolha == "15":
+                fluxo_status_otimizacoes()
                 pausar()
             elif escolha == "0":
                 console.print(Panel("Obrigado por usar o Phoenix Optimizer!", border_style=banner.COR_PRIMARIA))

@@ -12,35 +12,27 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich import box
 
-console = Console()
+from modules.shared import console
 
 
 def obter_pasta_logs() -> Path:
-    """
-    Retorna a pasta de logs em um local sempre gravável.
-
-    Importante: NÃO usamos a pasta do executável aqui, porque quando o
-    programa é instalado em "C:\\Program Files\\..." (padrão do Inno Setup),
-    o Windows bloqueia escrita nessa pasta para a aplicação, mesmo rodando
-    como administrador. Isso fazia o programa travar/fechar ao tentar
-    salvar qualquer log.
-
-    Em vez disso, usamos %PROGRAMDATA%\\PhoenixOptimizer\\logs no Windows
-    (pasta padrão para dados de aplicações, sempre gravável), ou uma pasta
-    local "logs" ao lado do script quando em modo desenvolvimento/Linux.
-    """
+    from modules.shared import IS_PORTABLE, obter_pasta_logs_atual
+    
+    if IS_PORTABLE:
+        return obter_pasta_logs_atual()
+    
+    # Comportamento original para modo PC
     if sys.platform == "win32":
         base = Path(os.environ.get("PROGRAMDATA", Path.home())) / "PhoenixOptimizer"
     elif getattr(sys, "frozen", False):
         base = Path(sys.executable).parent
     else:
         base = Path(__file__).resolve().parent.parent
-
+    
     pasta = base / "logs"
     pasta.mkdir(parents=True, exist_ok=True)
     return pasta

@@ -41,7 +41,7 @@ class PhoenixAPI:
         self._hw_info = hw_info
         self._id_atendimento = None
         self._nome_cliente = ""
-        self.janela = None
+        self._janela = None
 
     def _iniciar_job(self, target_fn, *args, **kwargs) -> dict:
         """Inicia um job em segundo plano, retornando o job_id imediatamente."""
@@ -83,11 +83,205 @@ class PhoenixAPI:
         self._id_atendimento = logs.gerar_id_atendimento()
         return {"id_atendimento": self._id_atendimento}
 
+    def obter_clientes_portable(self) -> dict:
+        """Lista clientes salvos no pen drive (modo portable)."""
+        from modules.shared import IS_PORTABLE, listar_clientes_portable
+        if not IS_PORTABLE:
+            return {"ok": False, "portable": False}
+        return {
+            "ok": True,
+            "portable": True,
+            "clientes": listar_clientes_portable()
+        }
+
+    def selecionar_cliente(self, nome: str) -> dict:
+        """Define o cliente ativo da sessão."""
+        from modules.shared import (definir_cliente_ativo, 
+                                    salvar_meta_cliente, IS_PORTABLE)
+        if not nome or not nome.strip():
+            return {"ok": False, "erro": "Nome inválido"}
+        nome = nome.strip()
+        definir_cliente_ativo(nome)
+        if IS_PORTABLE:
+            salvar_meta_cliente(nome)
+        return {"ok": True, "cliente": nome}
+
+    def remover_cliente_portable(self, id_cliente: str) -> dict:
+        """Remove um cliente do pen drive."""
+        from modules.shared import remover_cliente_portable
+        if remover_cliente_portable(id_cliente):
+            return {"ok": True}
+        return {"ok": False, "erro": "Não foi possível remover o cliente"}
+
+    def obter_modo_portable(self) -> dict:
+        from modules.shared import IS_PORTABLE, CLIENTE_ATIVO
+        return {
+            "portable": IS_PORTABLE,
+            "cliente_ativo": CLIENTE_ATIVO
+        }
+
     # ---------- Diagnóstico ----------
 
     def obter_diagnostico(self) -> dict:
         """Coleta diagnóstico completo em segundo plano para exibir na GUI (fire-and-forget)."""
         return self._iniciar_job(lambda: {"ok": True, "dados": diagnostico.coletar_diagnostico_silencioso()})
+
+    def obter_metricas_rapidas(self) -> dict:
+        """Retorna CPU% e RAM% instantâneos sem bloquear (interval=0). Uso: polling de tempo real na GUI."""
+        import psutil
+        cpu = psutil.cpu_percent(interval=0.1)  # bloqueia 100ms mas retorna valor real
+        mem = psutil.virtual_memory()
+        freq = psutil.cpu_freq()
+        return {
+            "ok": True,
+            "cpu_percent": cpu,
+            "ram_percent": round(mem.percent, 1),
+            "ram_disponivel_gb": round(mem.available / (1024**3), 1),
+            "cpu_freq_mhz": round(freq.current, 0) if freq else None
+        }
+    def obter_info_sistema_detalhado(self) -> dict:
+        import platform, psutil
+        
+        # CPU
+        freq = psutil.cpu_freq()
+        
+        # Disco por partição
+        discos = []
+        for p in psutil.disk_partitions():
+            try:
+                uso = psutil.disk_usage(p.mountpoint)
+                discos.append({
+                    "unidade": p.device,
+                    "fstype": p.fstype,
+                    "total_gb": round(uso.total / (1024**3), 1),
+                    "usado_gb": round(uso.used / (1024**3), 1),
+                    "livre_gb": round(uso.free / (1024**3), 1),
+                    "percentual": uso.percent
+                })
+            except Exception:
+                continue
+        
+        # RAM detalhada
+        mem = psutil.virtual_memory()
+        try:
+            swap = psutil.swap_memory()
+            swap_total = round(swap.total / (1024**3), 1)
+            swap_usado = round(swap.used / (1024**3), 1)
+        except Exception:
+            swap_total = None
+            swap_usado = None
+        
+        # Sistema
+        boot_time = psutil.boot_time()
+        from datetime import datetime
+        uptime_segundos = (datetime.now() - datetime.fromtimestamp(boot_time)).seconds
+        horas = uptime_segundos // 3600
+        minutos = (uptime_segundos % 3600) // 60
+        
+        return {
+            "ok": True,
+            "sistema": {
+                "os": f"{platform.system()} {platform.release()}",
+                "versao": platform.version()[:50],
+                "arquitetura": platform.machine(),
+                "uptime": f"{horas}h {minutos}m"
+            },
+            "cpu": {
+                "modelo": self._hw_info.get("cpu", {}).get("modelo", "N/A"),
+                "nucleos_fisicos": psutil.cpu_count(logical=False),
+                "nucleos_logicos": psutil.cpu_count(logical=True),
+                "freq_atual": round(freq.current, 0) if freq else None,
+                "freq_max": round(freq.max, 0) if freq and freq.max else None,
+                "freq_min": round(freq.min, 0) if freq and freq.min else None,
+                "arquitetura": platform.machine()
+            },
+            "ram": {
+                "total_gb": round(mem.total / (1024**3), 1),
+                "disponivel_gb": round(mem.available / (1024**3), 1),
+                "usada_gb": round(mem.used / (1024**3), 1),
+                "percentual": round(mem.percent, 1),
+                "swap_total_gb": swap_total,
+                "swap_usado_gb": swap_usado
+            },
+            "discos": discos,
+            "gpus": self._hw_info.get("gpus", [])
+        }
+
+    def obter_metricas_completas(self) -> dict:
+        import psutil, time
+        
+        # CPU
+        cpu_total = psutil.cpu_percent(interval=0.1)
+        cpu_por_nucleo = psutil.cpu_percent(interval=None, percpu=True)
+        freq = psutil.cpu_freq()
+        
+        # RAM
+        mem = psutil.virtual_memory()
+        
+        # Disco I/O (delta)
+        io1 = psutil.disk_io_counters()
+        time.sleep(0.5)
+        io2 = psutil.disk_io_counters()
+        read_mb = round((io2.read_bytes - io1.read_bytes) / (1024**2) / 0.5, 1) if io1 and io2 else 0
+        write_mb = round((io2.write_bytes - io1.write_bytes) / (1024**2) / 0.5, 1) if io1 and io2 else 0
+        
+        # GPU
+        gpu_data = None
+        try:
+            import GPUtil
+            gpus = GPUtil.getGPUs()
+            if gpus:
+                g = gpus[0]
+                gpu_data = {
+                    "nome": g.name,
+                    "uso": int(g.load * 100),
+                    "temp": int(g.temperature),
+                    "vram_usada": int(g.memoryUsed),
+                    "vram_total": int(g.memoryTotal)
+                }
+        except Exception:
+            pass
+        
+        return {
+            "ok": True,
+            "cpu": {
+                "total": cpu_total,
+                "por_nucleo": cpu_por_nucleo,
+                "freq_mhz": round(freq.current, 0) if freq else None,
+                "nucleos": len(cpu_por_nucleo)
+            },
+            "ram": {
+                "percent": round(mem.percent, 1),
+                "usada_gb": round(mem.used / (1024**3), 1),
+                "total_gb": round(mem.total / (1024**3), 1),
+                "disponivel_gb": round(mem.available / (1024**3), 1)
+            },
+            "disco": {
+                "leitura_mb": read_mb,
+                "escrita_mb": write_mb
+            },
+            "gpu": gpu_data
+        }
+
+    def obter_gpu_rapida(self) -> dict:
+        """Retorna métricas rápidas da GPU primária via GPUtil (uso, temp, VRAM)."""
+        try:
+            import GPUtil
+            gpus = GPUtil.getGPUs()
+            if gpus:
+                g = gpus[0]
+                return {
+                    "ok": True,
+                    "gpu": {
+                        "uso": int(g.load * 100),
+                        "temp": int(g.temperature),
+                        "vram_usada": int(g.memoryUsed),
+                        "vram_total": int(g.memoryTotal)
+                    }
+                }
+        except Exception:
+            pass
+        return {"ok": False, "gpu": None}
 
     # ---------- Limpeza ----------
 
@@ -102,6 +296,36 @@ class PhoenixAPI:
     def criar_ponto_restauracao(self) -> dict:
         """Cria um ponto de restauração em segundo plano (fire-and-forget)."""
         return self._iniciar_job(otimizacao.criar_ponto_restauracao)
+
+    def carregar_hardware_cache(self) -> dict:
+        """Carrega hardware do cache ou refaz scan (fire-and-forget)."""
+        job_id = str(uuid.uuid4())
+        _tarefas[job_id] = {"status": "running", "resultado": None, "progresso": 0, "mensagem": "Iniciando detecção..."}
+
+        def prog_cb(msg):
+            pct = _tarefas[job_id].get("progresso", 0)
+            if "CPU" in msg: pct = 33
+            elif "RAM" in msg: pct = 66
+            elif "GPU" in msg: pct = 90
+            elif "Final" in msg: pct = 100
+            _tarefas[job_id] = {"status": "running", "resultado": None, "progresso": pct, "mensagem": msg}
+
+        def worker():
+            try:
+                hw = hardware_mod.obter_hardware_com_cache(progress_callback=prog_cb)
+                self._hw_info = hw
+                res = {"ok": True, "hardware": hw}
+            except Exception as e:
+                import traceback
+                res = {"ok": False, "erro": str(e), "detalhe": traceback.format_exc()}
+            _tarefas[job_id] = {"status": "done", "resultado": res}
+
+        threading.Thread(target=worker, daemon=True).start()
+        return {"job_id": job_id}
+
+    def forcar_rescan_hardware(self) -> dict:
+        """Força um scan completo de hardware (fire-and-forget)."""
+        return self._iniciar_job(lambda: {"ok": True, "hardware": hardware_mod.coletar_hardware_completo()})
 
     def executar_otimizacao_geral(self) -> dict:
         """Aplica otimizações gerais em segundo plano (fire-and-forget)."""
@@ -138,10 +362,9 @@ class PhoenixAPI:
     # ---------- Serviços ----------
 
     def listar_servicos(self) -> dict:
-        try:
-            return {"ok": True, "servicos": servicos.listar_status_servicos()}
-        except Exception as e:
-            return {"ok": False, "erro": str(e)}
+        return self._iniciar_job(
+            lambda: {"ok": True, "servicos": servicos.listar_status_servicos()}
+        )
 
     def desativar_servico(self, nome_servico: str) -> dict:
         """Desativa um serviço em segundo plano (fire-and-forget)."""
@@ -195,6 +418,18 @@ class PhoenixAPI:
             }
         return self._iniciar_job(rotina)
 
+    def liberar_memoria_standby(self) -> dict:
+        return self._iniciar_job(
+            lambda: {"ok": otimizacao.liberar_memoria_standby(), 
+                     "mensagem": "Memória standby liberada com sucesso"}
+        )
+
+    def analisar_startup(self) -> dict:
+        return self._iniciar_job(
+            lambda: {"ok": True, 
+                     "entradas": otimizacao.analisar_startup()}
+        )
+
     # ---------- Arrastar Janela Frameless ----------
 
     def iniciar_drag(self, start_mouse_x: int, start_mouse_y: int, start_win_x: int, start_win_y: int):
@@ -205,12 +440,12 @@ class PhoenixAPI:
         self._is_dragging = True
 
     def mover_janela(self, current_mouse_x: int, current_mouse_y: int):
-        if hasattr(self, "_is_dragging") and self._is_dragging and self.janela:
+        if hasattr(self, "_is_dragging") and self._is_dragging and self._janela:
             delta_x = current_mouse_x - self._drag_start_mouse_x
             delta_y = current_mouse_y - self._drag_start_mouse_y
             new_x = self._drag_start_win_x + delta_x
             new_y = self._drag_start_win_y + delta_y
-            self.janela.move(new_x, new_y)
+            self._janela.move(new_x, new_y)
 
     def parar_drag(self):
         self._is_dragging = False
@@ -242,7 +477,14 @@ def _caminho_recurso(caminho_relativo: str) -> str:
 def iniciar(hw_info: dict = None):
     """Ponto de entrada do modo GUI, chamado pelo launcher.py."""
     if hw_info is None:
-        hw_info = hardware_mod.coletar_hardware_completo()
+        hw_info = {
+            "sistema_operacional": "",
+            "cpu": {"modelo": "", "nucleos_fisicos": 0, "nucleos_logicos": 0, 
+                    "frequencia_atual_mhz": None, "frequencia_max_mhz": None, 
+                    "uso_percentual": 0},
+            "ram": {"total_gb": 0, "disponivel_gb": 0, "percentual_uso": 0},
+            "gpus": []
+        }
 
     api = PhoenixAPI(hw_info)
     caminho_html = _caminho_recurso(os.path.join("gui", "index.html"))
@@ -259,7 +501,10 @@ def iniciar(hw_info: dict = None):
         background_color="#15120F",
     )
 
-    api.janela = janela
+    api._janela = janela
+
+    import psutil as _psutil
+    _psutil.cpu_percent(interval=None)  # chamada de aquecimento
 
     webview.start(debug=False)
 

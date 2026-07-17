@@ -9,36 +9,45 @@ diagnóstico completo do programa (para mostrar ao cliente o hardware real).
 import platform
 import subprocess
 import psutil
+import concurrent.futures
+
+try:
+    import wmi
+except ImportError:
+    wmi = None
+
+try:
+    import GPUtil
+except ImportError:
+    GPUtil = None
 
 
 def coletar_cpu_info() -> dict:
-    """Coleta informações detalhadas da CPU, incluindo o modelo do processador."""
     nome_cpu = platform.processor()
-
-    # No Windows, platform.processor() às vezes retorna algo genérico.
-    # Tentamos pegar o nome real via PowerShell/WMI quando possível.
-    if platform.system() == "Windows":
+    
+    # Tenta WMI com timeout de 3 segundos
+    def _wmi_cpu():
+        w = wmi.WMI()
+        return w.Win32_Processor()[0].Name.strip()
+    
+    if platform.system() == "Windows" and wmi is not None:
         try:
-            resultado = subprocess.run(
-                ["powershell", "-Command",
-                 "(Get-CimInstance Win32_Processor).Name"],
-                capture_output=True, text=True, timeout=10
-            )
-            nome_detectado = resultado.stdout.strip()
-            if nome_detectado:
-                nome_cpu = nome_detectado
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                future = ex.submit(_wmi_cpu)
+                nome_detectado = future.result(timeout=3)
+                if nome_detectado:
+                    nome_cpu = nome_detectado
         except Exception:
-            pass
-
+            pass  # timeout ou erro → usa platform.processor()
+    
     freq = psutil.cpu_freq()
-
     return {
         "modelo": nome_cpu,
         "nucleos_fisicos": psutil.cpu_count(logical=False),
         "nucleos_logicos": psutil.cpu_count(logical=True),
         "frequencia_atual_mhz": round(freq.current, 0) if freq else None,
         "frequencia_max_mhz": round(freq.max, 0) if freq and freq.max else None,
-        "uso_percentual": psutil.cpu_percent(interval=0.5),
+        "uso_percentual": psutil.cpu_percent(interval=0.1),
     }
 
 
@@ -52,83 +61,65 @@ def coletar_ram_info() -> dict:
     }
 
 
-def _consultar_gpu_powershell() -> list:
-    """
-    Consulta informações básicas de GPU via WMI (funciona para qualquer
-    fabricante — NVIDIA, AMD, Intel — mas não traz uso/temperatura em tempo
-    real, que são específicos de cada driver).
-    """
-    comando_ps = (
-        "Get-CimInstance Win32_VideoController | "
-        "Select-Object Name, AdapterRAM, DriverVersion, AdapterCompatibility | "
-        "ConvertTo-Json"
-    )
+def _consultar_gpu_wmi() -> list:
+    if not wmi:
+        return []
+    
+    def _wmi_gpu():
+        w = wmi.WMI()
+        gpus = []
+        for placa in w.Win32_VideoController():
+            ram_bytes = placa.AdapterRAM
+            try:
+                ram_bytes = int(ram_bytes) if ram_bytes else None
+            except:
+                ram_bytes = None
+            vram_mb = round(ram_bytes / (1024 ** 2)) if ram_bytes and ram_bytes > 0 else None
+            gpus.append({
+                "nome": placa.Name or "GPU desconhecida",
+                "fabricante": placa.AdapterCompatibility or "Desconhecido",
+                "vram_total_mb": vram_mb,
+                "driver_versao": placa.DriverVersion
+            })
+        return gpus
+    
     try:
-        resultado = subprocess.run(
-            ["powershell", "-Command", comando_ps],
-            capture_output=True, text=True, timeout=15
-        )
-        import json
-        saida = resultado.stdout.strip()
-        if not saida:
-            return []
-        dados = json.loads(saida)
-        if isinstance(dados, dict):
-            dados = [dados]
-        return dados
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            future = ex.submit(_wmi_gpu)
+            return future.result(timeout=3)
     except Exception:
         return []
 
-
-def _consultar_gpu_nvidia_smi() -> list:
-    """
-    Consulta informações detalhadas de GPUs NVIDIA via nvidia-smi
-    (uso real, temperatura, VRAM usada/total). Só funciona se o driver
-    NVIDIA estiver instalado — outras marcas não têm esse utilitário.
-    """
-    try:
-        resultado = subprocess.run(
-            ["nvidia-smi",
-             "--query-gpu=name,memory.total,memory.used,utilization.gpu,temperature.gpu",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=10
-        )
-        if resultado.returncode != 0:
-            return []
-
-        gpus = []
-        for linha in resultado.stdout.strip().split("\n"):
-            partes = [p.strip() for p in linha.split(",")]
-            if len(partes) == 5:
-                gpus.append({
-                    "nome": partes[0],
-                    "vram_total_mb": int(partes[1]),
-                    "vram_usada_mb": int(partes[2]),
-                    "uso_percentual": int(partes[3]),
-                    "temperatura_c": int(partes[4]),
-                })
-        return gpus
-    except (FileNotFoundError, subprocess.TimeoutExpired, ValueError):
+def _consultar_gpu_gputil() -> list:
+    """Consulta NVIDIA GPUs usando GPUtil."""
+    if not GPUtil:
         return []
-
+    try:
+        placas = GPUtil.getGPUs()
+        gpus = []
+        for placa in placas:
+            gpus.append({
+                "nome": placa.name,
+                "vram_total_mb": int(placa.memoryTotal),
+                "vram_usada_mb": int(placa.memoryUsed),
+                "uso_percentual": int(placa.load * 100),
+                "temperatura_c": int(placa.temperature),
+            })
+        return gpus
+    except Exception:
+        return []
 
 def coletar_gpu_info() -> list:
     """
-    Coleta informações de todas as GPUs detectadas no sistema.
-
-    Estratégia em duas camadas:
-    1. nvidia-smi (se existir) — dá dados completos e em tempo real, mas só para NVIDIA.
-    2. WMI via PowerShell — funciona para qualquer fabricante (NVIDIA, AMD, Intel),
-       mas só traz nome, VRAM declarada e versão do driver (sem uso/temperatura).
-
-    O resultado combina as duas fontes: GPUs NVIDIA aparecem com dados completos,
-    outras GPUs aparecem com os dados básicos disponíveis.
+    Coleta informações de todas as GPUs detectadas no sistema,
+    usando GPUtil como primário e WMI como fallback estático.
     """
     gpus_resultado = []
-
-    gpus_nvidia = _consultar_gpu_nvidia_smi()
-    nomes_nvidia_detectados = {g["nome"] for g in gpus_nvidia}
-
+    
+    # Primário: NVIDIA via GPUtil
+    gpus_nvidia = _consultar_gpu_gputil()
+    nomes_nvidia = {g["nome"] for g in gpus_nvidia}
+    
     for gpu in gpus_nvidia:
         gpus_resultado.append({
             "nome": gpu["nome"],
@@ -137,43 +128,47 @@ def coletar_gpu_info() -> list:
             "vram_usada_mb": gpu["vram_usada_mb"],
             "uso_percentual": gpu["uso_percentual"],
             "temperatura_c": gpu["temperatura_c"],
-            "fonte_dados": "nvidia-smi (tempo real)",
+            "fonte_dados": "GPUtil (tempo real)",
         })
-
-    gpus_wmi = _consultar_gpu_powershell()
+        
+    # Fallback: Todas as GPUs via WMI
+    gpus_wmi = _consultar_gpu_wmi()
     for gpu in gpus_wmi:
-        nome = gpu.get("Name", "GPU desconhecida")
-
-        # Evita duplicar GPUs NVIDIA já capturadas com dados completos via nvidia-smi
-        if nome in nomes_nvidia_detectados:
+        if gpu["nome"] in nomes_nvidia:
             continue
-
-        ram_bytes = gpu.get("AdapterRAM")
-        vram_mb = round(ram_bytes / (1024 ** 2)) if ram_bytes and ram_bytes > 0 else None
-
-        fabricante = gpu.get("AdapterCompatibility", "Desconhecido")
-
+            
         gpus_resultado.append({
-            "nome": nome,
-            "fabricante": fabricante,
-            "vram_total_mb": vram_mb,
+            "nome": gpu["nome"],
+            "fabricante": gpu["fabricante"],
+            "vram_total_mb": gpu["vram_total_mb"],
             "vram_usada_mb": None,
             "uso_percentual": None,
             "temperatura_c": None,
-            "driver_versao": gpu.get("DriverVersion"),
+            "driver_versao": gpu.get("driver_versao"),
             "fonte_dados": "WMI (sem dados em tempo real)",
         })
-
+        
     return gpus_resultado
 
 
-def coletar_hardware_completo() -> dict:
+def coletar_hardware_completo(progress_callback=None) -> dict:
     """Coleta CPU, RAM e GPU em uma única estrutura, usada pelo launcher e pelo diagnóstico."""
+    
+    if progress_callback: progress_callback("Coletando CPU...")
+    cpu = coletar_cpu_info()
+    
+    if progress_callback: progress_callback("Coletando RAM...")
+    ram = coletar_ram_info()
+    
+    if progress_callback: progress_callback("Coletando GPU...")
+    gpus = coletar_gpu_info()
+    
+    if progress_callback: progress_callback("Finalizando...")
     return {
         "sistema_operacional": f"{platform.system()} {platform.release()}",
-        "cpu": coletar_cpu_info(),
-        "ram": coletar_ram_info(),
-        "gpus": coletar_gpu_info(),
+        "cpu": cpu,
+        "ram": ram,
+        "gpus": gpus,
     }
 
 
@@ -213,8 +208,102 @@ def classificar_capacidade_hardware(hardware: dict) -> str:
         return "baixo"
 
 
+def obter_validacao_rapida() -> dict:
+    """
+    Retorna métricas super rápidas para validar se o hardware mudou
+    desde o último cache (usado pela Feature 011).
+    Evita chamadas lentas WMI se possível.
+    """
+    cpu = platform.processor()
+    if not cpu or cpu.isspace():
+        cpu = "Desconhecido"
+    
+    mem = psutil.virtual_memory()
+    ram_gb = round(mem.total / (1024 ** 3), 1)
+
+    return {
+        "cpu_modelo": cpu,
+        "ram_total_gb": ram_gb
+    }
+
+
+def obter_hardware_com_cache(forcar_rescan: bool = False, progress_callback=None) -> dict:
+    """
+    Tenta carregar o hardware do cache (hardware.json).
+    Se o cache for inválido, expirado (30 dias) ou forcar_rescan for True,
+    refaz a varredura completa e atualiza o cache.
+    """
+    import os
+    import json
+    from datetime import datetime
+    from modules.shared import CACHE_DIR
+    
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    cache_file = CACHE_DIR / "hardware.json"
+    
+    if not forcar_rescan and cache_file.exists():
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                cache_data = json.load(f)
+                
+            # Se o cache existir, retorna imediatamente e lança thread para validar/atualizar
+            if "dados" in cache_data:
+                import threading
+                def _background_update():
+                    try:
+                        validacao_atual = obter_validacao_rapida()
+                        validacao_cache = cache_data.get("validacao", {})
+                        
+                        data_scan = datetime.fromisoformat(cache_data.get("data_scan", "2000-01-01T00:00:00"))
+                        dias_passados = (datetime.now() - data_scan).days
+                        
+                        if dias_passados >= 30 or validacao_atual["cpu_modelo"] != validacao_cache.get("cpu_modelo") or abs(validacao_atual["ram_total_gb"] - validacao_cache.get("ram_total_gb", 0)) >= 1.0:
+                            forcar_rescan_hardware()
+                        else:
+                            pass
+                    except Exception:
+                        pass
+                
+                threading.Thread(target=_background_update, daemon=True).start()
+                return cache_data["dados"]
+        except Exception:
+            pass # Se o cache estiver corrompido, ignora e refaz
+
+    # Refaz scan
+    dados_completos = coletar_hardware_completo(progress_callback=progress_callback)
+    validacao = obter_validacao_rapida()
+    
+    # Prepara objeto de cache
+    novo_cache = {
+        "data_scan": datetime.now().isoformat(),
+        "validacao": validacao,
+        "dados": dados_completos
+    }
+    
+    # Salva cache de forma silenciosa
+    try:
+        with open(cache_file, "w", encoding="utf-8") as f:
+            json.dump(novo_cache, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+        
+    return dados_completos
+
+def forcar_rescan_hardware() -> dict:
+    """Força um rescan completo do hardware, deletando o cache existente."""
+    from modules.shared import CACHE_DIR
+    cache_file = CACHE_DIR / "hardware.json"
+    try:
+        if cache_file.exists():
+            cache_file.unlink()
+    except Exception:
+        pass
+    
+    return obter_hardware_com_cache(forcar_rescan=True)
+
+
 if __name__ == "__main__":
     import json
-    hw = coletar_hardware_completo()
+    hw = obter_hardware_com_cache()
     print(json.dumps(hw, indent=2, ensure_ascii=False))
     print("\nClassificação:", classificar_capacidade_hardware(hw))

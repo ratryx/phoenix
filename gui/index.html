@@ -10,6 +10,54 @@
 <div class="fundo-gradiente"></div>
 <div id="camada-particulas"></div>
 
+<div id="tela-selecao-cliente" style="display:none;
+  position:fixed;inset:0;background:var(--cor-fundo);
+  z-index:999;align-items:center;
+  justify-content:center;flex-direction:column">
+  
+  <div style="width:520px;max-width:90vw">
+    <div style="text-align:center;margin-bottom:32px">
+      <svg width="48" height="48" viewBox="0 0 64 64" fill="none">
+        <path d="M32 8c-3 5-6 11-6 18 0 9 4 16 6 20 2-4 6-11 6-20 0-7-3-13-6-18z" fill="#D89B4A"/>
+        <path d="M32 20c-8-2-18 0-24 8 4-1 12-1 18 3-6 1-12 5-15 11 5-2 12-2 17 1-3 3-5 8-5 13 4-3 7-8 9-13" stroke="#D89B4A" stroke-width="2" fill="none" stroke-linecap="round"/>
+      </svg>
+      <div style="font-size:22px;font-weight:700;
+        color:var(--cor-primaria);margin-top:12px">
+        Phoenix Optimizer
+      </div>
+      <div style="color:var(--cor-texto-secundario);
+        font-size:13px;margin-top:4px">
+        Modo Portable — Selecione o cliente
+      </div>
+    </div>
+    
+    <!-- Lista de clientes existentes -->
+    <div id="lista-clientes-portable" style="margin-bottom:16px"></div>
+    
+    <!-- Novo cliente -->
+    <div class="card">
+      <div style="font-weight:600;margin-bottom:12px;
+        color:var(--cor-primaria)">+ Novo cliente</div>
+      <input type="text" id="input-novo-cliente"
+        placeholder="Nome do cliente ou PC (ex: PC do José)"
+        style="width:100%;padding:10px 14px;
+          background:rgba(255,255,255,0.05);
+          border:1px solid var(--cor-painel-borda);
+          border-radius:var(--raio-sm);
+          color:var(--cor-texto);font-size:14px;
+          outline:none;box-sizing:border-box"
+        onkeydown="if(event.key==='Enter')confirmarNovoCliente()">
+      <div style="margin-top:12px;display:flex;
+        justify-content:flex-end">
+        <button class="botao primario" 
+          onclick="confirmarNovoCliente()">
+          Iniciar atendimento
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="app">
 
   <!-- Barra de título customizada -->
@@ -60,6 +108,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
         Limpeza
       </div>
+      <div class="item-menu" data-pagina="hwmonitor">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        HWMonitor
+      </div>
       <div class="item-menu" data-pagina="otimizacao">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
         Otimização
@@ -79,7 +131,10 @@
       </div>
 
       <div class="sidebar-rodape" id="rodape-hardware">
-        Detectando hardware...
+        <div id="texto-rodape">Detectando hardware...</div>
+        <div class="barra-progresso" id="barra-progresso-rodape" style="margin-top: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; height: 6px; overflow: hidden; display: block;">
+           <div id="preenchimento-rodape" style="width: 0%; height: 100%; background: #D89B4A; transition: width 0.3s ease-in-out;"></div>
+        </div>
       </div>
     </div>
 
@@ -131,11 +186,21 @@
       <div class="pagina" id="pagina-hardware">
         <div class="cabecalho-pagina">
           <div>
-            <h1>Hardware detalhado</h1>
-            <p>Informações de CPU, memória e GPU</p>
+            <h1>Hardware</h1>
+            <p>Informações detalhadas do sistema</p>
           </div>
         </div>
-        <div id="conteudo-hardware"></div>
+        
+        <!-- Abas internas -->
+        <div class="hw-abas" id="hw-abas">
+          <button class="hw-aba ativa" data-aba="cpu">CPU</button>
+          <button class="hw-aba" data-aba="gpu">GPU</button>
+          <button class="hw-aba" data-aba="memoria">Memória</button>
+          <button class="hw-aba" data-aba="sistema">Sistema</button>
+          <button class="hw-aba" data-aba="discos">Discos</button>
+        </div>
+        
+        <div id="hw-conteudo"></div>
       </div>
 
       <!-- Página: Limpeza -->
@@ -150,6 +215,10 @@
         <div id="conteudo-limpeza">
           <p class="texto-secundario">Nenhuma limpeza executada nesta sessão ainda.</p>
         </div>
+      </div>
+
+      <!-- Página: HWMonitor -->
+      <div class="pagina" id="pagina-hwmonitor">
       </div>
 
       <!-- Página: Otimização -->
@@ -190,6 +259,35 @@
             <button class="botao primario" id="btn-otimizar-disco">Executar</button>
           </div>
         </div>
+
+        <div class="card">
+          <div class="flex-entre">
+            <div>
+              <strong>Liberar memória RAM (Standby)</strong>
+              <p class="texto-secundario mt-0">
+                Libera memória em cache que o Windows mantém reservada. 
+                Seguro e instantâneo — o sistema recupera o cache 
+                automaticamente conforme necessário.
+              </p>
+            </div>
+            <button class="botao primario" id="btn-liberar-ram">Liberar</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="flex-entre">
+            <div>
+              <strong>Analisar programas de inicialização</strong>
+              <p class="texto-secundario mt-0">
+                Lista todos os programas que abrem com o Windows 
+                e identifica os que mais impactam o tempo de boot.
+              </p>
+            </div>
+            <button class="botao primario" id="btn-analisar-startup">Analisar</button>
+          </div>
+        </div>
+
+        <div id="resultado-startup" style="display:none; margin-bottom:16px;"></div>
 
         <div id="resultado-otimizacao"></div>
       </div>
@@ -234,10 +332,58 @@
   </div>
 </div>
 
+<!-- Barra de progresso global -->
+<div id="barra-progresso-global" style="
+  position: fixed;
+  top: 40px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 200;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+">
+  <div id="barra-progresso-fill" style="
+    height: 100%;
+    background: var(--cor-primaria);
+    width: 0%;
+    transition: width 0.3s ease;
+    box-shadow: 0 0 8px rgba(216, 155, 74, 0.6);
+  "></div>
+</div>
+
+<div id="overlay-texto" style="
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(28, 24, 20, 0.95);
+  border: 1px solid var(--cor-painel-borda);
+  border-radius: var(--raio-sm);
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--cor-texto-secundario);
+  z-index: 200;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  white-space: nowrap;
+">Carregando...</div>
+
 <!-- Overlay de processamento -->
 <div class="overlay-processando" id="overlay-processando">
-  <div class="anel-grande"></div>
-  <div class="texto-status" id="texto-overlay">Processando...</div>
+  <div class="overlay-progresso-card">
+    <div class="overlay-icone" id="overlay-icone">⚙️</div>
+    <div class="overlay-titulo" id="overlay-titulo">Processando...</div>
+    <div class="overlay-subtitulo" id="overlay-subtitulo">
+      Aguarde, isso pode levar alguns segundos
+    </div>
+    <div class="overlay-barra-container">
+      <div class="overlay-barra-fill" id="overlay-barra-fill"></div>
+    </div>
+    <div class="overlay-status" id="overlay-status">Iniciando...</div>
+  </div>
 </div>
 
 <!-- Modal de Confirmação do Ponto de Restauração -->
@@ -253,6 +399,23 @@
     <div class="modal-botoes" id="modal-botoes">
       <button class="botao primario" id="btn-modal-confirmar">Confirmar</button>
       <button class="botao" id="btn-modal-cancelar">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-container" id="modal-confirmacao">
+  <div class="modal-card">
+    <div class="modal-cabecalho">
+      <div style="font-size:32px" id="modal-confirm-icone">⚠️</div>
+      <h2 id="modal-confirm-titulo">Atenção</h2>
+    </div>
+    <div class="modal-conteudo">
+      <p id="modal-confirm-mensagem" style="margin:0;font-size:14px;
+        line-height:1.6;color:var(--cor-texto-secundario)"></p>
+    </div>
+    <div class="modal-botoes">
+      <button class="botao" id="btn-modal-confirm-cancelar">Cancelar</button>
+      <button class="botao primario" id="btn-modal-confirm-ok">Continuar</button>
     </div>
   </div>
 </div>

@@ -48,6 +48,7 @@ HAS_CONSOLE = setup_console()
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
+from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from modules import banner, hardware
 
@@ -103,9 +104,8 @@ def exibir_tela_escolha_modo(hw_info: dict, recomendacao: str):
 def main():
     if not HAS_CONSOLE:
         try:
-            hw_info = hardware.coletar_hardware_completo()
             from modules import gui_app
-            gui_app.iniciar(hw_info)
+            gui_app.iniciar(None)
             return
         except Exception as e:
             try:
@@ -119,10 +119,32 @@ def main():
 
     console.clear()
     banner.exibir_banner(modo="Iniciando...")
-    console.print(Panel("Detectando hardware do sistema...", border_style=banner.COR_SECUNDARIA))
 
-    hw_info = hardware.coletar_hardware_completo()
+    hw_info = None
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console
+    ) as progress:
+        task = progress.add_task("[cyan]Detectando hardware do sistema...", total=None)
+        
+        def update_progress(msg):
+            progress.update(task, description=f"[cyan]{msg}")
+            
+        hw_info = hardware.obter_hardware_com_cache(progress_callback=update_progress)
+        progress.update(task, description="[green]Hardware detectado com sucesso!")
     recomendacao = hardware.classificar_capacidade_hardware(hw_info)
+
+    from modules.shared import IS_PORTABLE
+
+    if IS_PORTABLE:
+        from modules import selecao_cliente
+        cliente_escolhido = selecao_cliente.exibir_selecao_cli()
+        if not cliente_escolhido:
+            sys.exit(0)
+        from modules.shared import definir_cliente_ativo, salvar_meta_cliente
+        definir_cliente_ativo(cliente_escolhido)
+        salvar_meta_cliente(cliente_escolhido)
 
     escolha = exibir_tela_escolha_modo(hw_info, recomendacao)
 

@@ -1,0 +1,5 @@
+[AutoRun]
+open=PhoenixOptimizer.exe
+label=Phoenix Optimizer  
+icon=PhoenixOptimizer.exe,0
+action=Abrir Phoenix Optimizer

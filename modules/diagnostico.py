@@ -6,12 +6,11 @@ Funciona em Windows 10 e 11.
 
 import platform
 import psutil
-from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich import box
 
-console = Console()
+from modules.shared import console
 
 
 def bytes_para_gb(valor_bytes: int) -> float:
