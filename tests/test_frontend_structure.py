@@ -145,3 +145,9 @@ def test_nenhum_alerta_nativo():
         c = js.read_text(encoding="utf-8")
         assert not re.search(r'\balert\(', c), f"alert() nativo encontrado em {js}"
         assert not re.search(r'\bconfirm\(', c), f"confirm() nativo encontrado em {js}"
+
+def test_limpeza_sem_modal():
+    c = Path("gui/js/pages/limpeza.js").read_text(encoding="utf-8")
+    assert "confirmarModal" not in c, "confirmarModal não deve ser usado na Limpeza"
+    assert "window.confirm" not in c, "window.confirm não deve ser usado"
+    assert "alert(" not in c, "alert não deve ser usado"

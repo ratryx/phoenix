@@ -79,11 +79,10 @@
 - **Job ID recebido:** `Phoenix.bridge.call("executar_limpeza")`
 - **Espera:** `Phoenix.jobs.awaitJob(job_id)`
 - **Payload Esperado Final:** `{ok: true, espaco_liberado_mb: 123.45}` ou `{ok: false, erro: "..."}`
-- **Categorias no backend:** Temp do Windows, Temp do usuário, Cache de prefetch, Logs do Windows Update, Relatórios de erro do Windows, Cache de miniaturas, Cache do Chrome, Cache do Edge, Lixo de instaladores, Cache de fontes do Windows, Dumps de memória, Cache do Firefox, Lixeira, Cache de DNS. (Não retornadas detalhadas para o frontend atualmente, mas agrupadas no backend).
-- **Proteção contra concorrência:** Implementada flag `executando` interna no escopo da IIFE e protegida pelo `finally`. 
-- **Confirmação e Overlays:** Utiliza exclusivamente o namespace `Phoenix.ui.feedback` (`confirmarModal`, `mostrarOverlay`, `esconderOverlay`).
+- **Categorias no backend:** Temp do Windows, Temp do usuário, Cache de prefetch, Logs do Windows Update, Relatórios de erro do Windows, Cache de miniaturas, Cache do Chrome, Cache do Edge, Lixo de instaladores, Cache de fontes do Windows, Dumps de memória, Cache do Firefox, Lixeira, Cache de DNS. (São exclusivas do backend, a GUI exibe apenas o total liberado).
+- **Proteção contra concorrência:** Implementada flag `executando` interna no escopo da IIFE.
+- **Overlays e Feedbacks:** A limpeza inicia diretamente ao clicar sem confirmação prévia, exibindo o overlay global com `Phoenix.ui.feedback`. (Caso haja desejo de confirmação futura, deverá ser implementada como feature separada).
 - **Comportamento em Falha de Bridge ou Timeout de Job:** Erros desarmam o overlay, liberam a flag e expõem a mensagem ao usuário.
-- **Cancelamento:** Cancela sem abrir o overlay e sem iniciar job, nem travar flag.
 - **Tamanho atual app.js**: Aproximadamente 974 linhas.
 
 

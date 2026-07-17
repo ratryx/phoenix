@@ -57,24 +57,13 @@ async function runTests() {
         assert(sandbox.mockBtn.onclick, "Listener registrado no botão");
         assert(sandbox.mockBtn.dataset.eventosRegistrados === "true", "Guard de listener atualizado");
 
-        // 2. Confirmação = Cancelar
-        let calledBridge = false;
-        sandbox.Phoenix.bridge.call = async () => { calledBridge = true; return { job_id: '123' }; };
-        sandbox.Phoenix.ui.feedback.confirmarModal = async (titulo, texto) => {
-            assert(titulo === "Confirmação", "modal recebe textos corretos");
-            return false;
-        };
-        
-        await sandbox.mockBtn.onclick();
-        assert(!calledBridge, "cancelar não chama bridge");
-        assert(!sandbox.overlayAberto, "cancelamento não abre overlay destrutivo");
-
-        // 3. Execução = Sucesso
-        sandbox.Phoenix.ui.feedback.confirmarModal = async () => true;
+        // 2. Execução = Sucesso
         sandbox.Phoenix.ui.feedback.mostrarOverlay = () => { sandbox.overlayAberto = true; };
         sandbox.Phoenix.ui.feedback.esconderOverlay = () => { sandbox.overlayAberto = false; };
-        calledBridge = false;
+        
+        let calledBridge = false;
         let jobCalled = false;
+        
         sandbox.Phoenix.bridge.call = async (ep) => {
             assert(ep === "executar_limpeza", "endpoint correto");
             calledBridge = true;
@@ -92,7 +81,7 @@ async function runTests() {
         await new Promise(r => setTimeout(r, 10));
         assert(sandbox.overlayAberto, "overlay abre");
         
-        // 4. Proteção contra duplicação (Concorrência)
+        // 3. Proteção contra duplicação (Concorrência)
         let callCount = 0;
         sandbox.Phoenix.bridge.call = async () => { callCount++; return { job_id: '1' }; };
         let execPromise2 = sandbox.mockBtn.onclick(); // deveria retornar imediatamente por estar executando
@@ -105,16 +94,18 @@ async function runTests() {
 
         // Flag liberada em sucesso
         callCount = 0;
+        sandbox.Phoenix.bridge.call = async () => { callCount++; return { job_id: '1' }; };
+        sandbox.Phoenix.jobs.awaitJob = async () => ({ ok: true, espaco_liberado_mb: 100 });
         await sandbox.mockBtn.onclick(); // Roda de novo
         assert(callCount === 1, "flag liberada em sucesso");
 
-        // 5. Tratamento de falhas: `{ok: false}`
+        // 4. Tratamento de falhas: `{ok: false}`
         sandbox.Phoenix.jobs.awaitJob = async () => ({ ok: false, erro: "Algo falhou" });
         await sandbox.mockBtn.onclick();
         assert(sandbox.mockContainer.innerHTML.includes("Algo falhou"), "{ok: false} tratado");
-        assert(sandbox.mockContainer.innerHTML.includes("Erro"), "zero MB tratado indiretamente em falha");
+        assert(sandbox.mockContainer.innerHTML.includes("Erro"), "erro é renderizado");
         
-        // 6. Tratamento de falhas: Bridge Error
+        // 5. Tratamento de falhas: Bridge Error
         sandbox.Phoenix.bridge.call = async () => { throw new Error("bridge error"); };
         await sandbox.mockBtn.onclick();
         assert(!sandbox.overlayAberto, "overlay não permanece aberto após erro");
@@ -125,10 +116,13 @@ async function runTests() {
         await sandbox.mockBtn.onclick();
         assert(sandbox.mockContainer.innerHTML.includes("0.0 MB"), "zero MB tratado");
 
-        // 7. Limites
+        // 6. Limites
         assert(!code.includes("executarOtimizacao"), "módulo não contém otimização");
         assert(!code.includes("carregarServicos"), "módulo não contém serviços");
         assert(!code.includes("executarRotinaCompleta"), "módulo não contém rotina completa");
+        assert(!code.includes("confirmarModal"), "não existe chamada a confirmarModal");
+        assert(!code.includes("window.confirm"), "não existe chamada a window.confirm");
+        assert(!code.includes("alert("), "não existe chamada a alert");
 
         console.log("Todos os testes JS de limpeza passaram.");
 

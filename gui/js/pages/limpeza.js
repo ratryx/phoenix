@@ -21,23 +21,14 @@
 
     page.execute = async function () {
         if (executando) return;
-        
-        const confirmado = await Phoenix.ui.feedback.confirmarModal(
-            "Confirmação",
-            "Deseja realmente iniciar a limpeza do sistema?",
-            "⚠️"
-        );
-
-        if (!confirmado) return;
-
         executando = true;
+
         Phoenix.ui.feedback.mostrarOverlay("Limpando arquivos temporários...", true);
         
         try {
             const jobRes = await Phoenix.bridge.call("executar_limpeza");
             if (!jobRes || !jobRes.job_id) {
                 Phoenix.ui.feedback.esconderOverlay(true, false);
-                executando = false;
                 return;
             }
             const resultado = await Phoenix.jobs.awaitJob(jobRes.job_id);
