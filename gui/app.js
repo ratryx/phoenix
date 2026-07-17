@@ -15,23 +15,28 @@
 (function () {
   "use strict";
 
+  const STATE = Phoenix.state;
+  const bridge = Phoenix.bridge;
+  const jobs = Phoenix.jobs;
+  const lifecycle = Phoenix.lifecycle;
+  const router = Phoenix.router;
+  const feedback = Phoenix.ui.feedback;
+
+  const mostrarOverlay = feedback.mostrarOverlay;
+  const esconderOverlay = feedback.esconderOverlay;
+  const atualizarOverlay = feedback.atualizarOverlay;
+  const confirmarModal = feedback.confirmarModal;
+  const awaitJob = jobs.awaitJob;
+
+  router.setPageLoader(carregarConteudoPagina);
+
+
   // ──────────────────────────────────────────────
   //  Estado centralizado
   // ──────────────────────────────────────────────
 
-  const STATE = {
-    hardware: null,
-    nivelQualidadeVisual: "medio",
-    paginaAtual: "inicio",
-    intervalos: {
-      tempoReal: null,
-    },
-    restorePointCreatedThisSession: false,
-    acaoPendenteAposRestauracao: null,
-  };
-
-  var _sensoresInterval = null;
-
+  
+  
   // ──────────────────────────────────────────────
   //  Utilitários puros
   // ──────────────────────────────────────────────
@@ -51,207 +56,23 @@
   //  Overlay (globais — usados pelo backend)
   // ──────────────────────────────────────────────
 
-  var _barraProgresso = null;
-
-  function mostrarOverlay(texto, destrutivo = false) {
-    if (!destrutivo) {
-      // Barra de progresso fina no topo (já existente)
-      const barra = document.getElementById('barra-progresso-global');
-      const fill = document.getElementById('barra-progresso-fill');
-      const textoEl = document.getElementById('overlay-texto');
-      if (barra) barra.style.opacity = '1';
-      if (textoEl) { 
-        textoEl.textContent = texto || 'Carregando...'; 
-        textoEl.style.opacity = '1'; 
-      }
-      if (fill) {
-        fill.style.width = '0%';
-        setTimeout(() => { if (fill) fill.style.width = '60%'; }, 50);
-        setTimeout(() => { if (fill) fill.style.width = '80%'; }, 500);
-      }
-      _barraProgresso = { barra, fill, textoEl };
-      return;
-    }
-    
-    // Overlay destrutivo com card de progresso
-    const overlay = document.getElementById('overlay-processando');
-    const titulo = document.getElementById('overlay-titulo');
-    const subtitulo = document.getElementById('overlay-subtitulo');
-    const barraFill = document.getElementById('overlay-barra-fill');
-    const status = document.getElementById('overlay-status');
-    const icone = document.getElementById('overlay-icone');
-    
-    if (titulo) titulo.textContent = texto || 'Processando...';
-    if (subtitulo) subtitulo.textContent = 'Aguarde, isso pode levar alguns segundos';
-    if (status) status.textContent = 'Iniciando...';
-    if (icone) icone.textContent = '⚙️';
-    
-    // Inicia animação indeterminada
-    if (barraFill) {
-      barraFill.classList.add('indeterminado');
-      barraFill.style.width = '';
-    }
-    
-    if (overlay) overlay.classList.add('visivel');
-  }
-
-  function atualizarOverlay(texto, percentual = null) {
-    const status = document.getElementById('overlay-status');
-    const barraFill = document.getElementById('overlay-barra-fill');
-    
-    if (status) status.textContent = texto;
-    
-    if (percentual !== null && barraFill) {
-      barraFill.classList.remove('indeterminado');
-      barraFill.style.width = percentual + '%';
-    }
-  }
-
-  function esconderOverlay(destrutivo = false, sucesso = true) {
-    if (!destrutivo) {
-      if (_barraProgresso) {
-        const { barra, fill, textoEl } = _barraProgresso;
-        if (fill) fill.style.width = '100%';
-        setTimeout(() => {
-          if (barra) barra.style.opacity = '0';
-          if (textoEl) textoEl.style.opacity = '0';
-          setTimeout(() => { if (fill) fill.style.width = '0%'; }, 300);
-        }, 300);
-        _barraProgresso = null;
-      }
-      return;
-    }
-    
-    const overlay = document.getElementById('overlay-processando');
-    const barraFill = document.getElementById('overlay-barra-fill');
-    const titulo = document.getElementById('overlay-titulo');
-    const icone = document.getElementById('overlay-icone');
-    const status = document.getElementById('overlay-status');
-    
-    // Mostrar conclusão antes de fechar
-    if (barraFill) {
-      barraFill.classList.remove('indeterminado');
-      barraFill.style.width = '100%';
-    }
-    if (icone) icone.textContent = sucesso ? '✅' : '⚠️';
-    if (titulo) titulo.textContent = sucesso ? 'Concluído!' : 'Atenção';
-    if (status) status.textContent = sucesso ? 'Operação finalizada com sucesso' : 'Verifique os resultados';
-    
-    setTimeout(() => {
-      if (overlay) overlay.classList.remove('visivel');
-      // Reset para próxima vez
-      setTimeout(() => {
-        if (barraFill) {
-          barraFill.style.width = '0%';
-          barraFill.classList.remove('indeterminado');
-        }
-      }, 300);
-    }, 1200);
-  }
-
-  // Expor globalmente (usado em callbacks e pelo backend)
-  window.mostrarOverlay = mostrarOverlay;
-  window.esconderOverlay = esconderOverlay;
-
+  
+  
   // ──────────────────────────────────────────────
   //  awaitJob — global, com timeout de 60s
   // ──────────────────────────────────────────────
 
-  window.awaitJob = function (jobId, progressCallback) {
-    return new Promise(function (resolve, reject) {
-      var MAX_TENTATIVAS = 120; // 60 segundos máximo (120 × 500ms)
-      var tentativas = 0;
-
-      function check() {
-        tentativas++;
-        if (tentativas > MAX_TENTATIVAS) {
-          reject(new Error("Timeout: job demorou mais de 60s"));
-          return;
-        }
-        window.pywebview.api
-          .verificar_tarefa(jobId)
-          .then(function (estado) {
-            if (progressCallback && estado.progresso !== undefined) {
-              progressCallback(estado.progresso, estado.mensagem);
-            }
-            if (estado.status === "done") {
-              resolve(estado.resultado);
-            } else if (estado.status === "not_found") {
-              reject(new Error("Job não encontrado: " + jobId));
-            } else {
-              setTimeout(check, 500);
-            }
-          })
-          .catch(reject);
-      }
-
-      setTimeout(check, 500);
-    });
-  };
-
+  
   // ──────────────────────────────────────────────
   //  Modal de Confirmação Customizado
   // ──────────────────────────────────────────────
 
-  function confirmarModal(titulo, mensagem, icone = '⚠️') {
-    return new Promise((resolve) => {
-      const modal = document.getElementById('modal-confirmacao');
-      const tituloEl = document.getElementById('modal-confirm-titulo');
-      const mensagemEl = document.getElementById('modal-confirm-mensagem');
-      const iconeEl = document.getElementById('modal-confirm-icone');
-      const btnOk = document.getElementById('btn-modal-confirm-ok');
-      const btnCancelar = document.getElementById('btn-modal-confirm-cancelar');
-      
-      if (tituloEl) tituloEl.textContent = titulo;
-      if (mensagemEl) mensagemEl.textContent = mensagem;
-      if (iconeEl) iconeEl.textContent = icone;
-      
-      modal.classList.add('visivel');
-      
-      const fechar = (resultado) => {
-        modal.classList.remove('visivel');
-        btnOk.removeEventListener('click', onOk);
-        btnCancelar.removeEventListener('click', onCancelar);
-        resolve(resultado);
-      };
-      
-      const onOk = () => fechar(true);
-      const onCancelar = () => fechar(false);
-      
-      btnOk.addEventListener('click', onOk);
-      btnCancelar.addEventListener('click', onCancelar);
-    });
-  }
-
+  
   // ──────────────────────────────────────────────
   //  Navegação entre páginas
   // ──────────────────────────────────────────────
 
-  function irParaPagina(idPagina) {
-    // Parar polling do HWMonitor ao sair da aba
-    if (STATE.paginaAtual === 'hwmonitor' && _sensoresInterval) {
-      clearInterval(_sensoresInterval);
-      _sensoresInterval = null;
-    }
-
-    document
-      .querySelectorAll(".pagina")
-      .forEach(function (p) { p.classList.remove("ativa"); });
-    document
-      .querySelectorAll(".item-menu")
-      .forEach(function (m) { m.classList.remove("ativo"); });
-
-    var pagina = document.getElementById("pagina-" + idPagina);
-    if (pagina) pagina.classList.add("ativa");
-
-    var itemMenu = document.querySelector(
-      '.item-menu[data-pagina="' + idPagina + '"]'
-    );
-    if (itemMenu) itemMenu.classList.add("ativo");
-
-    STATE.paginaAtual = idPagina;
-  }
-
+  
   function carregarConteudoPagina(pagina) {
     switch (pagina) {
       case "diagnostico":
@@ -320,7 +141,7 @@
 
   async function aplicarQualidadeVisual() {
     try {
-      var nivel = await window.pywebview.api.obter_nivel_qualidade_visual();
+      var nivel = await bridge.call("obter_nivel_qualidade_visual");
       aplicarNivelQualidade(nivel || "medio");
     } catch (e) {
       aplicarNivelQualidade("medio");
@@ -333,7 +154,7 @@
 
   async function carregarHardwareInicial() {
     try {
-      var jobRes = await window.pywebview.api.carregar_hardware_cache();
+      var jobRes = await bridge.call("carregar_hardware_cache");
       if (jobRes && jobRes.job_id) {
         var hw = await awaitJob(jobRes.job_id);
         if (hw && hw.ok && hw.hardware) {
@@ -435,11 +256,11 @@
 
   function iniciarAtualizacaoTempoReal() {
     var atualizando = false;
-    STATE.intervalos.tempoReal = setInterval(async function () {
+    lifecycle.setInterval("tempoReal", async function () {
       if (atualizando) return; // evita empilhar
       atualizando = true;
       try {
-        var res = await window.pywebview.api.obter_metricas_rapidas();
+        var res = await bridge.call("obter_metricas_rapidas");
         if (res && res.ok) {
           atualizarCardsTempoReal({
             cpu: { uso_percentual: res.cpu_percent },
@@ -496,7 +317,7 @@
   async function carregarDiagnostico() {
     mostrarOverlay("Coletando diagnóstico...");
     try {
-      var jobRes = await window.pywebview.api.obter_diagnostico();
+      var jobRes = await bridge.call("obter_diagnostico");
       if (!jobRes || !jobRes.job_id) {
         esconderOverlay();
         return;
@@ -795,10 +616,10 @@
       '</div>';
 
     // Inicia polling específico pro HWMonitor
-    if (_sensoresInterval) clearInterval(_sensoresInterval);
-    _sensoresInterval = setInterval(async function() {
+    /* if (_sensoresInterval) */ lifecycle.clearInterval("sensores");
+    lifecycle.setInterval("sensores", async function() {
       try {
-        var res = await window.pywebview.api.obter_metricas_completas();
+        var res = await bridge.call("obter_metricas_completas");
         if (!res || !res.ok) return;
 
         // Atualiza CPU
@@ -885,7 +706,7 @@
     
     mostrarOverlay('Coletando informações do sistema...');
     try {
-      const res = await window.pywebview.api.obter_info_sistema_detalhado();
+      const res = await bridge.call("obter_info_sistema_detalhado");
       esconderOverlay();
       if (res && res.ok) {
         STATE.dadosSistema = res;
@@ -998,7 +819,7 @@
   async function executarLimpeza() {
     mostrarOverlay("Limpando arquivos temporários...", true);
     try {
-      var jobRes = await window.pywebview.api.executar_limpeza();
+      var jobRes = await bridge.call("executar_limpeza");
       if (!jobRes || !jobRes.job_id) {
         esconderOverlay(true);
         return;
@@ -1121,7 +942,7 @@
     }, 2000);
     
     try {
-      const jobRes = await window.pywebview.api.criar_ponto_restauracao();
+      const jobRes = await bridge.call("criar_ponto_restauracao");
       const res = await window.awaitJob(jobRes.job_id);
       clearInterval(progressoTimer);
       
@@ -1189,7 +1010,7 @@
     comPontoRestauracao(async function () {
       mostrarOverlay("Aplicando otimização geral...", true);
       try {
-        var jobRes = await window.pywebview.api.executar_otimizacao_geral();
+        var jobRes = await bridge.call("executar_otimizacao_geral");
         if (!jobRes || !jobRes.job_id) { esconderOverlay(true); return; }
         var resultado = await awaitJob(jobRes.job_id);
         esconderOverlay(true);
@@ -1205,7 +1026,7 @@
     comPontoRestauracao(async function () {
       mostrarOverlay("Aplicando otimização para jogos...", true);
       try {
-        var jobRes = await window.pywebview.api.executar_otimizacao_gaming(false);
+        var jobRes = await bridge.call("executar_otimizacao_gaming", false);
         if (!jobRes || !jobRes.job_id) { esconderOverlay(true); return; }
         var resultado = await awaitJob(jobRes.job_id);
         esconderOverlay(true);
@@ -1223,7 +1044,7 @@
   async function executarOtimizacaoDisco() {
     mostrarOverlay("Otimizando disco — isso pode levar alguns minutos...", true);
     try {
-      var jobRes = await window.pywebview.api.otimizar_disco();
+      var jobRes = await bridge.call("otimizar_disco");
       if (!jobRes || !jobRes.job_id) { esconderOverlay(true); return; }
       var resultado = await awaitJob(jobRes.job_id);
       esconderOverlay(true);
@@ -1247,7 +1068,7 @@
     mostrarOverlay("Consultando serviços do Windows...");
 
     try {
-      var jobRes = await window.pywebview.api.listar_servicos();
+      var jobRes = await bridge.call("listar_servicos");
       if (!jobRes || !jobRes.job_id) { esconderOverlay(); return; }
       var resultado = await awaitJob(jobRes.job_id);
       esconderOverlay();
@@ -1308,7 +1129,7 @@
               var metodoAcao = estaAtivo
                 ? "desativar_servico"
                 : "ativar_servico";
-              var jobRes = await window.pywebview.api[metodoAcao](nomeServico);
+              var jobRes = await bridge.call(metodoAcao, nomeServico);
               if (!jobRes || !jobRes.job_id) { esconderOverlay(); return; }
               var resultado = await awaitJob(jobRes.job_id);
               esconderOverlay();
@@ -1344,7 +1165,7 @@
     mostrarOverlay("Consultando histórico...");
 
     try {
-      var jobRes = await window.pywebview.api.obter_historico();
+      var jobRes = await bridge.call("obter_historico");
       if (!jobRes || !jobRes.job_id) { esconderOverlay(); return; }
       var resultado = await awaitJob(jobRes.job_id);
       esconderOverlay();
@@ -1398,7 +1219,7 @@
         "Executando rotina completa — isso pode levar alguns minutos...", true
       );
       try {
-        var jobRes = await window.pywebview.api.executar_rotina_completa("");
+        var jobRes = await bridge.call("executar_rotina_completa", "");
         if (!jobRes || !jobRes.job_id) { esconderOverlay(true); return; }
         var resultado = await awaitJob(jobRes.job_id);
         esconderOverlay(true);
@@ -1412,7 +1233,7 @@
           return;
         }
 
-        irParaPagina("relatorio");
+        router.navigate("relatorio");
         renderizarRelatorio(resultado);
       } catch (e) {
         console.error("[ERRO] Rotina completa:", e);
@@ -1509,7 +1330,7 @@
       .forEach(function (item) {
         item.addEventListener("click", function () {
           var pagina = item.dataset.pagina;
-          irParaPagina(pagina);
+          router.navigate(pagina);
           carregarConteudoPagina(pagina);
         });
       });
@@ -1557,7 +1378,7 @@
     document.getElementById('btn-liberar-ram')?.addEventListener('click', async () => {
       mostrarOverlay('Liberando memória RAM standby...', true);
       try {
-        const jobRes = await window.pywebview.api.liberar_memoria_standby();
+        const jobRes = await bridge.call("liberar_memoria_standby");
         const res = await window.awaitJob(jobRes.job_id);
         esconderOverlay(true, res?.ok);
       } catch(e) { esconderOverlay(true, false); }
@@ -1567,7 +1388,7 @@
     document.getElementById('btn-analisar-startup')?.addEventListener('click', async () => {
       mostrarOverlay('Analisando programas de inicialização...');
       try {
-        const jobRes = await window.pywebview.api.analisar_startup();
+        const jobRes = await bridge.call("analisar_startup");
         const res = await window.awaitJob(jobRes.job_id);
         esconderOverlay();
         if (res?.ok && res.entradas) {
@@ -1617,14 +1438,14 @@
     var btnMin = document.getElementById("btn-minimizar");
     if (btnMin) {
       btnMin.addEventListener("click", function () {
-        window.pywebview.api.minimizar_janela();
+        bridge.call("minimizar_janela");
       });
     }
 
     var btnFechar = document.getElementById("btn-fechar");
     if (btnFechar) {
       btnFechar.addEventListener("click", function () {
-        window.pywebview.api.fechar_janela();
+        bridge.call("fechar_janela");
       });
     }
   }
@@ -1640,8 +1461,8 @@
     var animFrameId = null;
 
     function processarMovimento() {
-      if (estaArrastando && window.pywebview && window.pywebview.api) {
-        window.pywebview.api.mover_janela(ultimoX, ultimoY);
+      if (estaArrastando && bridge.isReady()) {
+        bridge.call("mover_janela", ultimoX, ultimoY);
         animFrameId = requestAnimationFrame(processarMovimento);
       } else {
         animFrameId = null;
@@ -1677,8 +1498,8 @@
         var winX = e.screenX - e.clientX;
         var winY = e.screenY - e.clientY;
 
-        if (window.pywebview && window.pywebview.api) {
-          window.pywebview.api.iniciar_drag(e.screenX, e.screenY, winX, winY);
+        if (bridge.isReady()) {
+          bridge.call("iniciar_drag", e.screenX, e.screenY, winX, winY);
         }
 
         if (!animFrameId) {
@@ -1703,8 +1524,8 @@
           cancelAnimationFrame(animFrameId);
           animFrameId = null;
         }
-        if (window.pywebview && window.pywebview.api) {
-          window.pywebview.api.parar_drag();
+        if (bridge.isReady()) {
+          bridge.call("parar_drag");
         }
       }
     });
@@ -1718,7 +1539,7 @@
     const tela = document.getElementById('tela-selecao-cliente');
     if (tela) tela.style.display = 'flex';
     
-    const res = await window.pywebview.api.obter_clientes_portable();
+    const res = await bridge.call("obter_clientes_portable");
     const lista = document.getElementById('lista-clientes-portable');
     
     if (res.clientes && res.clientes.length > 0) {
@@ -1758,7 +1579,7 @@
   }
 
   async function selecionarCliente(nome) {
-    const res = await window.pywebview.api.selecionar_cliente(nome);
+    const res = await bridge.call("selecionar_cliente", nome);
     if (res.ok) {
       const tela = document.getElementById('tela-selecao-cliente');
       if (tela) tela.style.display = 'none';
@@ -1777,7 +1598,7 @@
     );
     if (!confirm) return;
     
-    const res = await window.pywebview.api.remover_cliente_portable(id);
+    const res = await bridge.call("remover_cliente_portable", id);
     if (res.ok) {
       await exibirSelecaoCliente();
     }
@@ -1800,10 +1621,18 @@
   //  INICIALIZAÇÃO — única entrada
   // ──────────────────────────────────────────────
 
-  window.addEventListener("pywebviewready", async function () {
+  
+  let bootstrapStarted = false;
+
+  async function bootstrap() {
+    if (bootstrapStarted) return;
+    bootstrapStarted = true;
+
+    await bridge.whenReady();
+
     // Verificar modo portable
     try {
-      const modoRes = await window.pywebview.api.obter_modo_portable();
+      const modoRes = await bridge.call("obter_modo_portable");
       if (modoRes.portable) {
         await exibirSelecaoCliente();
       }
@@ -1816,5 +1645,7 @@
     registrarBotoesJanela();
     registrarDrag();
     iniciarAtualizacaoTempoReal();
-  });
+  }
+
+  bootstrap();
 })();
