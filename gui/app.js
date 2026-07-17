@@ -51,6 +51,7 @@
     if (pct >= 70) return "alerta";
     return "";
   }
+  window.corPorPercentual = corPorPercentual;
 
   // ──────────────────────────────────────────────
   //  Overlay (globais — usados pelo backend)
@@ -76,10 +77,10 @@
   function carregarConteudoPagina(pagina) {
     switch (pagina) {
       case "diagnostico":
-        carregarDiagnostico();
+        Phoenix.pages.diagnostico.load();
         break;
       case "hardware":
-        carregarHardware();
+        Phoenix.pages.hardware.load();
         break;
       case "limpeza":
         // Conteúdo carrega ao clicar no botão dedicado
@@ -148,381 +149,15 @@
     }
   }
 
-  // ──────────────────────────────────────────────
-  //  Carregar hardware inicial (cache)
-  // ──────────────────────────────────────────────
+  
 
-  async function carregarHardwareInicial() {
-    try {
-      var jobRes = await bridge.call("carregar_hardware_cache");
-      if (jobRes && jobRes.job_id) {
-        var hw = await awaitJob(jobRes.job_id);
-        if (hw && hw.ok && hw.hardware) {
-          STATE.hardware = hw.hardware;
-          atualizarCardsHardware(hw.hardware);
-
-          var textoRodape = document.getElementById("texto-rodape");
-          if (textoRodape) {
-            textoRodape.textContent =
-              hw.hardware.cpu && hw.hardware.cpu.modelo
-                ? hw.hardware.cpu.modelo
-                : "Hardware detectado";
-          }
-          var barraRodape = document.getElementById("barra-progresso-rodape");
-          if (barraRodape) barraRodape.style.display = "none";
-        } else {
-          atualizarRodapeFalha("Hardware não detectado");
-        }
-      }
-    } catch (e) {
-      atualizarRodapeFalha("Erro ao detectar hardware");
-    }
-  }
-
-  function atualizarRodapeFalha(msg) {
-    var textoRodape = document.getElementById("texto-rodape");
-    if (textoRodape) textoRodape.textContent = msg;
-    var barraRodape = document.getElementById("barra-progresso-rodape");
-    if (barraRodape) barraRodape.style.display = "none";
-  }
-
-  // ──────────────────────────────────────────────
-  //  Renderização dos cards de hardware (início)
-  // ──────────────────────────────────────────────
-
-  function atualizarCardsHardware(hw) {
-    if (!hw) return;
-    var cpu = hw.cpu, ram = hw.ram, gpus = hw.gpus || [];
-    var cards = document.getElementById("cards-resumo-inicio");
-    if (!cards) return;
-
-    var corCPU = corPorPercentual(cpu.uso_percentual);
-    var corRAM = corPorPercentual(ram.percentual_uso);
-    var nomeGPU = gpus.length > 0 ? gpus[0].nome : 'Não detectada';
-
-    cards.innerHTML =
-      '<div class="card-metrica" data-card="cpu">' +
-      '<div class="rotulo">CPU</div>' +
-      '<div class="valor">' + cpu.uso_percentual + '<span class="unidade">%</span></div>' +
-      '<div class="barra-progresso">' +
-      '<div class="preenchimento ' + corCPU + '" style="width:' + cpu.uso_percentual + '%"></div>' +
-      '</div>' +
-      '</div>' +
-      '<div class="card-metrica" data-card="ram">' +
-      '<div class="rotulo">Memória RAM</div>' +
-      '<div class="valor">' + ram.percentual_uso + '<span class="unidade">%</span></div>' +
-      '<div class="barra-progresso">' +
-      '<div class="preenchimento ' + corRAM + '" style="width:' + ram.percentual_uso + '%"></div>' +
-      '</div>' +
-      '</div>' +
-      '<div class="card-metrica" data-card="gpu-uso">' +
-      '<div class="rotulo">GPU</div>' +
-      '<div class="valor" style="font-size:15px">' + nomeGPU + '</div>' +
-      (gpus.length > 0 && gpus[0].uso_percentual != null ?
-        '<div class="barra-progresso">' +
-        '<div class="preenchimento ' + corPorPercentual(gpus[0].uso_percentual) +
-        '" style="width:' + gpus[0].uso_percentual + '%"></div>' +
-        '</div>' +
-        '<div style="font-size:11px;color:var(--cor-texto-secundario);margin-top:4px">' +
-        gpus[0].uso_percentual + '% · ' +
-        (gpus[0].temperatura_c != null ? gpus[0].temperatura_c + '°C' : '') +
-        '</div>'
-        : '') +
-      '</div>';
-
-    var rodape = document.getElementById("texto-rodape");
-    if (rodape) {
-      rodape.textContent =
-        cpu.nucleos_logicos + ' núcleos · ' + ram.total_gb + ' GB RAM';
-    }
-  }
-
-  function preencherRodapeHardware(hw) {
-    if (!hw) return;
-    var rodape = document.getElementById("rodape-hardware");
-    if (!rodape) return;
-    var cpu = hw.cpu || {};
-    var ram = hw.ram || {};
-    rodape.innerHTML =
-      (cpu.nucleos_logicos || "?") +
-      " núcleos · " +
-      (ram.total_gb || "?") +
-      " GB RAM";
-  }
-
-  // ──────────────────────────────────────────────
-  //  Atualização em tempo real (2s)
-  // ──────────────────────────────────────────────
-
-  function iniciarAtualizacaoTempoReal() {
-    var atualizando = false;
-    lifecycle.setInterval("tempoReal", async function () {
-      if (atualizando) return; // evita empilhar
-      atualizando = true;
-      try {
-        var res = await bridge.call("obter_metricas_rapidas");
-        if (res && res.ok) {
-          atualizarCardsTempoReal({
-            cpu: { uso_percentual: res.cpu_percent },
-            memoria: {
-              percentual_uso: res.ram_percent,
-              disponivel_gb: res.ram_disponivel_gb,
-            },
-          });
-        }
-      } catch (e) {
-        // Silencioso — próximo ciclo tenta de novo
-      }
-      atualizando = false;
-    }, 3000);
-  }
-
-  /**
-   * Atualiza SOMENTE os valores dos cards existentes na página Início,
-   * sem redesenhar todo o innerHTML. Evita flicker e é muito mais rápido.
-   */
-  function atualizarCardsTempoReal(dados) {
-    var cardCPU = document.querySelector('[data-card="cpu"]');
-    var cardRAM = document.querySelector('[data-card="ram"]');
-
-    if (cardCPU && dados.cpu) {
-      var pct = dados.cpu.uso_percentual;
-      var cor = corPorPercentual(pct);
-      cardCPU.querySelector('.valor').innerHTML =
-        pct + '<span class="unidade">%</span>';
-      var barra = cardCPU.querySelector('.preenchimento');
-      if (barra) {
-        barra.style.width = pct + '%';
-        barra.className = 'preenchimento ' + cor;
-      }
-    }
-
-    if (cardRAM && dados.memoria) {
-      var pct = dados.memoria.percentual_uso;
-      var cor = corPorPercentual(pct);
-      cardRAM.querySelector('.valor').innerHTML =
-        pct + '<span class="unidade">%</span>';
-      var barra = cardRAM.querySelector('.preenchimento');
-      if (barra) {
-        barra.style.width = pct + '%';
-        barra.className = 'preenchimento ' + cor;
-      }
-    }
-  }
+  
 
   // ──────────────────────────────────────────────
   //  Diagnóstico completo
   // ──────────────────────────────────────────────
 
-  async function carregarDiagnostico() {
-    mostrarOverlay("Coletando diagnóstico...");
-    try {
-      var jobRes = await bridge.call("obter_diagnostico");
-      if (!jobRes || !jobRes.job_id) {
-        esconderOverlay();
-        return;
-      }
-      var resultado = await awaitJob(jobRes.job_id);
-      esconderOverlay();
-      renderizarDiagnostico(resultado);
-    } catch (e) {
-      console.error("[ERRO] Diagnóstico:", e);
-      esconderOverlay();
-    }
-  }
 
-  function renderizarDiagnostico(resultado) {
-    var container = document.getElementById("conteudo-diagnostico");
-    if (!container) return;
-
-    if (!resultado || !resultado.ok) {
-      container.innerHTML =
-        '<div class="card"><span class="badge erro">Erro</span> ' +
-        ((resultado && resultado.erro) || "Erro desconhecido") +
-        "</div>";
-      return;
-    }
-
-    var d = resultado.dados;
-    var cpuPct = d.cpu.uso_percentual || 0;
-    var ramPct = d.memoria.percentual_uso || 0;
-    var discos = d.discos || [];
-    var maiorUsoDiscos = 0;
-    if (discos.length > 0) {
-      maiorUsoDiscos = Math.max.apply(null, discos.map(function(disk) { return disk.percentual_uso || 0; }));
-    }
-
-    // Score & Warnings
-    var scoreCPU = Math.max(0, 100 - cpuPct);
-    var scoreRAM = Math.max(0, 100 - ramPct);
-    var scoreDisco = Math.max(0, 100 - maiorUsoDiscos);
-    var scoreGeral = Math.round((scoreCPU + scoreRAM + scoreDisco) / 3);
-
-    var problemas = [];
-    if (cpuPct > 80) problemas.push("CPU sobrecarregada");
-    if (ramPct > 85) problemas.push("Memória no limite");
-    if (maiorUsoDiscos > 70) problemas.push("Disco quase cheio");
-
-    var numProblemas = problemas.length;
-    var corFundo, corBorda, icone, titulo, subtitulo, corTexto;
-    
-    if (numProblemas === 0) {
-      corFundo = 'rgba(111, 174, 124, 0.1)';
-      corBorda = 'rgba(111, 174, 124, 0.2)';
-      icone = '✅';
-      titulo = 'PC em bom estado — nenhuma ação necessária';
-      subtitulo = 'Todos os parâmetros estão dentro da normalidade.';
-      corTexto = 'var(--cor-sucesso)';
-    } else if (numProblemas === 1 || numProblemas === 2) {
-      corFundo = 'rgba(217, 162, 59, 0.1)';
-      corBorda = 'rgba(217, 162, 59, 0.2)';
-      icone = '⚠️';
-      titulo = 'Atenção — ' + numProblemas + ' pontos de melhoria detectados';
-      subtitulo = problemas.join(', ') + '.';
-      corTexto = 'var(--cor-alerta)';
-    } else {
-      corFundo = 'rgba(194, 85, 74, 0.1)';
-      corBorda = 'rgba(194, 85, 74, 0.2)';
-      icone = '🚨';
-      titulo = 'PC sobrecarregado — ação recomendada';
-      subtitulo = problemas.join(', ') + '.';
-      corTexto = 'var(--cor-erro)';
-    }
-
-    var bannerHtml = `
-      <div style="
-        background: linear-gradient(135deg, ${corFundo}, transparent);
-        border: 1px solid ${corBorda};
-        border-radius: var(--raio-md);
-        padding: 20px 24px;
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        margin-bottom: 24px;
-      ">
-        <div style="font-size: 36px">${icone}</div>
-        <div>
-          <div style="font-size:18px;font-weight:700;color:${corTexto}">${titulo}</div>
-          <div style="color:var(--cor-texto-secundario);font-size:13px">${subtitulo}</div>
-        </div>
-        <div style="margin-left:auto;font-size:48px;font-weight:800;
-          color:${corTexto};opacity:0.15">${scoreGeral}</div>
-      </div>`;
-
-    function corBadge(pct) { return pct >= 80 ? 'erro' : pct >= 60 ? 'alerta' : 'sucesso'; }
-    function textoBadge(pct) { return pct >= 80 ? 'Crítico' : pct >= 60 ? 'Atenção' : 'Ótimo'; }
-    function corBarra(pct) { return pct >= 80 ? 'erro' : pct >= 60 ? 'alerta' : ''; }
-
-    var numProc = (d.processos || []).length;
-    var cardsHtml = `
-      <div class="grade-cards">
-        <div class="card-metrica">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div class="rotulo">CPU</div>
-            <span class="badge ${corBadge(cpuPct)}">${textoBadge(cpuPct)}</span>
-          </div>
-          <div class="valor">${cpuPct}<span class="unidade">%</span></div>
-          <div class="barra-progresso"><div class="preenchimento ${corBarra(cpuPct)}" style="width:${cpuPct}%"></div></div>
-          <div class="texto-secundario mt-0">Uso atual de CPU</div>
-        </div>
-        
-        <div class="card-metrica">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div class="rotulo">Memória RAM</div>
-            <span class="badge ${corBadge(ramPct)}">${textoBadge(ramPct)}</span>
-          </div>
-          <div class="valor">${ramPct}<span class="unidade">%</span></div>
-          <div class="barra-progresso"><div class="preenchimento ${corBarra(ramPct)}" style="width:${ramPct}%"></div></div>
-          <div class="texto-secundario mt-0">${d.memoria.disponivel_gb} GB disponíveis</div>
-        </div>
-        
-        <div class="card-metrica">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div class="rotulo">Disco (C:)</div>
-            <span class="badge ${corBadge(maiorUsoDiscos)}">${textoBadge(maiorUsoDiscos)}</span>
-          </div>
-          <div class="valor">${maiorUsoDiscos}<span class="unidade">%</span></div>
-          <div class="barra-progresso"><div class="preenchimento ${corBarra(maiorUsoDiscos)}" style="width:${maiorUsoDiscos}%"></div></div>
-          <div class="texto-secundario mt-0">Uso do disco principal</div>
-        </div>
-
-        <div class="card-metrica">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <div class="rotulo">Processos</div>
-            <span class="badge neutro">Info</span>
-          </div>
-          <div class="valor">${numProc}</div>
-          <div class="barra-progresso"><div class="preenchimento" style="width:100%; opacity:0.1"></div></div>
-          <div class="texto-secundario mt-0">Executando no momento</div>
-        </div>
-      </div>`;
-
-    var processosHtml = '';
-    if (cpuPct > 70 || ramPct > 70) {
-      var topProcessos = (d.processos || []).slice(0, 5).map(function(p) {
-        var cpuP = p.cpu_percent || 0;
-        var ramP = p.memory_percent || 0;
-        var badgeProc = (cpuP > 20 || ramP > 10) ? 'erro' : (cpuP > 10 || ramP > 5) ? 'alerta' : 'sucesso';
-        var textProc = (cpuP > 20 || ramP > 10) ? 'Alto impacto' : (cpuP > 10 || ramP > 5) ? 'Médio impacto' : 'Baixo impacto';
-        return '<tr><td>' + (p.name || "desconhecido") + ' <span class="badge ' + badgeProc + '" style="margin-left:8px;font-size:9px">' + textProc + '</span></td>' +
-               '<td>' + cpuP.toFixed(1) + '%</td><td>' + ramP.toFixed(1) + '%</td></tr>';
-      }).join('');
-      
-      processosHtml = `
-        <div class="card" id="secao-processos">
-          <strong>Processos com maior consumo</strong>
-          <table class="tabela-dados" style="margin-top:12px">
-            <thead><tr><th>Processo</th><th>CPU</th><th>RAM</th></tr></thead>
-            <tbody>${topProcessos}</tbody>
-          </table>
-        </div>`;
-    }
-
-    var acoesHtml = '';
-    if (maiorUsoDiscos > 70) {
-      acoesHtml += `
-        <div class="card" style="border-left: 3px solid var(--cor-primaria); display:flex; align-items:center; gap:16px; cursor:pointer" onclick="document.querySelector('.item-menu[data-pagina=\\'limpeza\\']').click()">
-          <div style="font-size:24px">🧹</div>
-          <div style="flex:1">
-            <div style="font-weight:600">Executar limpeza</div>
-            <div class="texto-secundario">O disco está cheio. Remova arquivos temporários e libere espaço.</div>
-          </div>
-          <button class="botao primario" style="flex-shrink:0">Limpar</button>
-        </div>`;
-    }
-    
-    if (cpuPct > 80) {
-      acoesHtml += `
-        <div class="card" style="border-left: 3px solid var(--cor-primaria); display:flex; align-items:center; gap:16px; cursor:pointer" onclick="document.getElementById('secao-processos') && document.getElementById('secao-processos').scrollIntoView({behavior: 'smooth'})">
-          <div style="font-size:24px">⚙️</div>
-          <div style="flex:1">
-            <div style="font-weight:600">Ver processos em segundo plano</div>
-            <div class="texto-secundario">O uso da CPU está elevado. Verifique os processos ativos.</div>
-          </div>
-          <button class="botao primario" style="flex-shrink:0">Ver processos</button>
-        </div>`;
-    }
-    
-    if (acoesHtml === '') {
-      acoesHtml = `
-        <div class="card" style="border-left: 3px solid var(--cor-primaria); display:flex; align-items:center; gap:16px; cursor:pointer" onclick="document.querySelector('.item-menu[data-pagina=\\'otimizacao\\']').click()">
-          <div style="font-size:24px">⚡</div>
-          <div style="flex:1">
-            <div style="font-weight:600">Aplicar otimizações</div>
-            <div class="texto-secundario">Melhore o desempenho geral com ajustes no sistema.</div>
-          </div>
-          <button class="botao primario" style="flex-shrink:0">Otimizar</button>
-        </div>`;
-    }
-    
-    var recomendacoesContainer = `
-      <div style="margin-top:24px">
-        <h3 style="color:var(--cor-texto);font-size:16px;margin-bottom:12px">Ações recomendadas</h3>
-        ${acoesHtml}
-      </div>`;
-
-    container.innerHTML = bannerHtml + cardsHtml + processosHtml + recomendacoesContainer;
-  }
 
   // ──────────────────────────────────────────────
   //  HWMonitor — monitoramento em tempo real
@@ -694,123 +329,7 @@
   //  Hardware detalhado
   // ──────────────────────────────────────────────
 
-  async function carregarHardware() {
-    // Registrar abas internas
-    document.querySelectorAll('.hw-aba').forEach(aba => {
-      aba.addEventListener('click', () => {
-        document.querySelectorAll('.hw-aba').forEach(a => a.classList.remove('ativa'));
-        aba.classList.add('ativa');
-        renderizarAbaHardware(aba.dataset.aba);
-      });
-    });
-    
-    mostrarOverlay('Coletando informações do sistema...');
-    try {
-      const res = await bridge.call("obter_info_sistema_detalhado");
-      esconderOverlay();
-      if (res && res.ok) {
-        STATE.dadosSistema = res;
-        renderizarAbaHardware('cpu');
-      } else {
-        document.getElementById('hw-conteudo').innerHTML = 
-          '<p class="texto-secundario">Erro ao coletar dados.</p>';
-      }
-    } catch(e) {
-      esconderOverlay();
-      document.getElementById('hw-conteudo').innerHTML = 
-        '<p class="texto-secundario">Erro ao coletar dados.</p>';
-    }
-  }
 
-  function renderizarAbaHardware(aba) {
-    const d = STATE.dadosSistema;
-    if (!d) return;
-    const container = document.getElementById('hw-conteudo');
-    
-    if (aba === 'cpu') {
-      container.innerHTML = `
-        <div class="card" style="margin-bottom:16px">
-          <div class="hw-secao-titulo">Processador</div>
-          <table class="tabela-dados">
-            <tr><td>Modelo</td><td>${d.cpu.modelo}</td></tr>
-            <tr><td>Núcleos físicos</td><td>${d.cpu.nucleos_fisicos}</td></tr>
-            <tr><td>Threads lógicas</td><td>${d.cpu.nucleos_logicos}</td></tr>
-            <tr><td>Frequência atual</td><td>${d.cpu.freq_atual ? d.cpu.freq_atual + ' MHz' : 'N/A'}</td></tr>
-            <tr><td>Frequência máxima</td><td>${d.cpu.freq_max ? d.cpu.freq_max + ' MHz' : 'N/A'}</td></tr>
-            <tr><td>Frequência mínima</td><td>${d.cpu.freq_min ? d.cpu.freq_min + ' MHz' : 'N/A'}</td></tr>
-            <tr><td>Arquitetura</td><td>${d.cpu.arquitetura}</td></tr>
-          </table>
-        </div>`;
-    }
-    
-    else if (aba === 'gpu') {
-      if (!d.gpus || d.gpus.length === 0) {
-        container.innerHTML = '<p class="texto-secundario">Nenhuma GPU detectada.</p>';
-        return;
-      }
-      container.innerHTML = d.gpus.map(gpu => `
-        <div class="card" style="margin-bottom:16px">
-          <div class="hw-secao-titulo">${gpu.nome}</div>
-          <table class="tabela-dados">
-            <tr><td>Fabricante</td><td>${gpu.fabricante || 'N/A'}</td></tr>
-            <tr><td>VRAM total</td><td>${gpu.vram_total_mb ? (gpu.vram_total_mb/1024).toFixed(1) + ' GB (' + gpu.vram_total_mb + ' MB)' : 'N/A'}</td></tr>
-            <tr><td>VRAM em uso</td><td>${gpu.vram_usada_mb ? gpu.vram_usada_mb + ' MB' : 'N/A'}</td></tr>
-            <tr><td>Uso atual</td><td>${gpu.uso_percentual != null ? gpu.uso_percentual + '%' : 'N/A'}</td></tr>
-            <tr><td>Temperatura</td><td>${gpu.temperatura_c != null ? gpu.temperatura_c + '°C' : 'N/A'}</td></tr>
-            <tr><td>Driver</td><td>${gpu.driver_versao || 'N/A'}</td></tr>
-            <tr><td>Fonte dos dados</td><td>${gpu.fonte_dados || 'N/A'}</td></tr>
-          </table>
-        </div>`).join('');
-    }
-    
-    else if (aba === 'memoria') {
-      container.innerHTML = `
-        <div class="card" style="margin-bottom:16px">
-          <div class="hw-secao-titulo">Memória RAM</div>
-          <table class="tabela-dados">
-            <tr><td>Total instalada</td><td>${d.ram.total_gb} GB</td></tr>
-            <tr><td>Em uso</td><td>${d.ram.usada_gb} GB (${d.ram.percentual}%)</td></tr>
-            <tr><td>Disponível</td><td>${d.ram.disponivel_gb} GB</td></tr>
-          </table>
-          <div class="barra-progresso" style="margin-top:16px">
-            <div class="preenchimento ${d.ram.percentual > 90 ? 'erro' : d.ram.percentual > 70 ? 'alerta' : ''}" 
-              style="width:${d.ram.percentual}%"></div>
-          </div>
-          <div class="texto-secundario" style="margin-top:6px">${d.ram.percentual}% em uso</div>
-        </div>`;
-    }
-    
-    else if (aba === 'sistema') {
-      container.innerHTML = `
-        <div class="card" style="margin-bottom:16px">
-          <div class="hw-secao-titulo">Sistema Operacional</div>
-          <table class="tabela-dados">
-            <tr><td>Sistema</td><td>${d.sistema.os}</td></tr>
-            <tr><td>Versão</td><td>${d.sistema.versao}</td></tr>
-            <tr><td>Arquitetura</td><td>${d.sistema.arquitetura}</td></tr>
-            <tr><td>Tempo ligado</td><td>${d.sistema.uptime}</td></tr>
-          </table>
-        </div>`;
-    }
-    
-    else if (aba === 'discos') {
-      container.innerHTML = d.discos.map(disco => `
-        <div class="card" style="margin-bottom:16px">
-          <div class="hw-secao-titulo">${disco.unidade}</div>
-          <table class="tabela-dados">
-            <tr><td>Total</td><td>${disco.total_gb} GB</td></tr>
-            <tr><td>Usado</td><td>${disco.usado_gb} GB</td></tr>
-            <tr><td>Livre</td><td>${disco.livre_gb} GB</td></tr>
-            <tr><td>Sistema de arquivos</td><td>${disco.fstype}</td></tr>
-          </table>
-          <div class="barra-progresso" style="margin-top:12px">
-            <div class="preenchimento ${disco.percentual > 90 ? 'erro' : disco.percentual > 70 ? 'alerta' : ''}"
-              style="width:${disco.percentual}%"></div>
-          </div>
-          <div class="texto-secundario" style="margin-top:6px">${disco.percentual}% ocupado</div>
-        </div>`).join('');
-    }
-  }
 
   // ──────────────────────────────────────────────
   //  Limpeza
@@ -1343,7 +862,7 @@
   function registrarBotoesAcao() {
     // Diagnóstico
     var btnDiag = document.getElementById("btn-atualizar-diagnostico");
-    if (btnDiag) btnDiag.addEventListener("click", carregarDiagnostico);
+    if (btnDiag) btnDiag.addEventListener("click", () => Phoenix.pages.diagnostico.load());
 
     // Limpeza
     var btnLimpeza = document.getElementById("btn-executar-limpeza");
@@ -1639,12 +1158,12 @@
     } catch(e) {}
 
     await aplicarQualidadeVisual();
-    await carregarHardwareInicial();
+    await Phoenix.pages.inicio.carregarHardwareInicial();
     registrarSidebar();
     registrarBotoesAcao();
     registrarBotoesJanela();
     registrarDrag();
-    iniciarAtualizacaoTempoReal();
+    Phoenix.pages.inicio.iniciarAtualizacaoTempoReal();
   }
 
   bootstrap();
