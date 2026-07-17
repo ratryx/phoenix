@@ -26,14 +26,38 @@
 - **Globals necessários**: `Phoenix.jobs.awaitJob`, `Phoenix.ui.feedback`.
 - **Retorno esperado**: void.
 
-## Página Hardware
-- **Funções Atuais**: `carregarHardware`, `renderizarAbaHardware`
-- **Chamadas à bridge**: `obter_info_sistema_detalhado`
-- **Estado lido**: `STATE.dadosSistema`
-- **Estado alterado**: `STATE.dadosSistema`
-- **IDs do DOM**: `hw-conteudo`, `.hw-aba`
-- **Listeners**: `.hw-aba` click listener (delegação ou attach inline em `carregarHardware`).
-- **Helpers**: Nenhum.
+## Hardware (`gui/js/pages/hardware.js`)
+
+**Rota:** `hardware`
+**Namespace:** `Phoenix.pages.hardware`
+
+### Funções
+- `load()`: Delega para `carregarHardware()`.
+- `carregarHardware()`: Associa eventos de abas se não existirem, aciona a bridge `obter_info_sistema_detalhado`, salva dados em `Phoenix.state.dadosSistema` e renderiza a aba CPU.
+- `renderTab(aba)`: Responsável por injetar o HTML dinâmico com base na aba (`cpu`, `gpu`, `memoria`, `sistema`, `discos`).
+
+### Compatibilidade
+- Exporta temporariamente `window.renderizarAbaHardware` para lidar com os cliques das abas que ainda estão hardcoded.
+
+## Sensores / HWMonitor (`gui/js/pages/sensores.js`)
+
+**Rota:** `hwmonitor`
+**Namespace:** `Phoenix.pages.hwmonitor`
+
+### Endpoint Utilizado
+- `obter_metricas_completas`
+- **Payload Esperado:** `{ok: true, cpu: {total, freq_mhz, por_nucleo}, ram: {percent, usada_gb, disponivel_gb}, gpu: {uso, temp, vram_usada, vram_total}, disco: {leitura_mb, escrita_mb}}`
+
+### Comportamento
+- **Entrada:** `load()` e `enter()` renderizam a estrutura base e realizam uma primeira atualização imediata, registrando também o polling no `Phoenix.lifecycle` sob a chave `sensores`.
+- **Polling:** A cada 3000 ms. Há proteção contra sobreposição de requisições travando a flag `atualizando`.
+- **Saída:** O `lifecycle.leavePage("hwmonitor")` é chamado indiretamente pelo router, limpando o timer.
+- **Erro:** Falhas na requisição do endpoint são tratadas no catch e a flag é limpa silenciosamente.
+- **Fallbacks:** Renderiza fallback se temperatura não suportada. Trata a ausência de `%`.
+- **IDs do DOM:** `hw-cpu-total`, `hw-cpu-bar`, `hw-cpu-freq`, `hw-nucleos`, `hw-ram-pct`, `hw-ram-bar`, `hw-ram-usada`, `hw-ram-livre`, `hw-gpu-nome`, `hw-gpu-uso`, `hw-gpu-bar`, `hw-gpu-temp`, `hw-gpu-vram`, `hw-disk-read`, `hw-disk-write`.
+- **Estado:** Utiliza `Phoenix.state.hardware` e `Phoenix.state.paginaAtual`.
+- **Helpers:** Utiliza `Phoenix.ui.corPorPercentual` para barras.
+
 - **Intervalos**: Nenhum.
 - **Funções compartilhadas**: Nenhuma.
 - **Globals necessários**: Nenhum.

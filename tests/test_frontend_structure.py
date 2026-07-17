@@ -15,6 +15,7 @@ def test_arquivos_existem():
     assert (base / "pages/inicio.js").exists()
     assert (base / "pages/diagnostico.js").exists()
     assert (base / "pages/hardware.js").exists()
+    assert (base / "pages/sensores.js").exists()
 
 def test_ordem_carregamento():
     conteudo = Path("gui/index.html").read_text(encoding="utf-8")
@@ -29,6 +30,7 @@ def test_ordem_carregamento():
         "js/pages/inicio.js",
         "js/pages/diagnostico.js",
         "js/pages/hardware.js",
+        "js/pages/sensores.js",
         "app.js"
     ]
     
@@ -68,7 +70,8 @@ def test_func_nao_duplicadas():
         "function carregarDiagnostico",
         "function renderizarDiagnostico",
         "function carregarHardware",
-        "function renderizarAbaHardware"
+        "function renderizarAbaHardware",
+        "function carregarSensores"
     ]
     for func in funcs_removidas:
         assert func not in c, f"{func} permaneceu duplicada no app.js"
@@ -83,7 +86,8 @@ def test_funcoes_possuem_implementacao():
         "carregarDiagnostico",
         "renderizarDiagnostico",
         "carregarHardware",
-        "renderTab"
+        "renderTab",
+        "atualizar"
     ]
     all_content = "".join(f.read_text(encoding="utf-8") for f in js_files)
     for func in funcs_migradas:
@@ -91,7 +95,6 @@ def test_funcoes_possuem_implementacao():
 
 def test_paginas_ainda_no_app_js():
     c = Path("gui/app.js").read_text(encoding="utf-8")
-    assert "carregarSensores" in c, "Sensores não está mais no app.js"
     assert "executarLimpeza" in c, "Limpeza não está mais no app.js"
     assert "executarOtimizacaoGeral" in c, "Otimização não está mais no app.js"
     assert "carregarServicos" in c, "Serviços não está mais no app.js"
@@ -117,7 +120,7 @@ def test_ids_dom_preservados():
     assert 'id="hw-conteudo"' in html
 
 def test_modulos_usam_phoenix_pages():
-    for f in ["inicio.js", "diagnostico.js", "hardware.js"]:
+    for f in ["inicio.js", "diagnostico.js", "hardware.js", "sensores.js"]:
         c = Path(f"gui/js/pages/{f}").read_text(encoding="utf-8")
         assert "Phoenix.pages." in c or "Phoenix.pages =" in c
 
