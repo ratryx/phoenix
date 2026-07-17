@@ -95,7 +95,10 @@
       case "hwmonitor":
         Phoenix.pages.hwmonitor.load();
         break;
-      // inicio, otimizacao, relatorio — conteúdo estático ou gerado sob demanda
+      case "otimizacao":
+        Phoenix.pages.otimizacao.load();
+        break;
+      // inicio, relatorio — conteúdo estático ou gerado sob demanda
     }
   }
 
@@ -179,74 +182,8 @@
 
 
   // ──────────────────────────────────────────────
-  //  Otimização
+  //  Otimização (extraída para gui/js/pages/otimizacao.js)
   // ──────────────────────────────────────────────
-
-  function exibirResultadoOtimizacao(resultado, mensagemSucesso) {
-    var container = document.getElementById("resultado-otimizacao");
-    if (!container) return;
-
-    if (!resultado || !resultado.ok) {
-      container.innerHTML =
-        '<div class="card"><span class="badge erro">Erro</span> ' +
-        ((resultado && resultado.erro) || "Erro desconhecido") +
-        "</div>";
-      return;
-    }
-    container.innerHTML =
-      '<div class="card"><span class="badge sucesso">Concluído</span> ' +
-      mensagemSucesso +
-      "</div>";
-  }
-
-  async function executarOtimizacaoGeral() {
-    Phoenix.operations.restorePoint.runProtected(async function () {
-      mostrarOverlay("Aplicando otimização geral...", true);
-      try {
-        var jobRes = await bridge.call("executar_otimizacao_geral");
-        if (!jobRes || !jobRes.job_id) { esconderOverlay(true); return; }
-        var resultado = await awaitJob(jobRes.job_id);
-        esconderOverlay(true);
-        exibirResultadoOtimizacao(resultado, "Otimização geral aplicada.");
-      } catch (e) {
-        console.error("[ERRO] Otimização geral:", e);
-        esconderOverlay(true);
-      }
-    });
-  }
-
-  async function executarOtimizacaoGaming() {
-    Phoenix.operations.restorePoint.runProtected(async function () {
-      mostrarOverlay("Aplicando otimização para jogos...", true);
-      try {
-        var jobRes = await bridge.call("executar_otimizacao_gaming", false);
-        if (!jobRes || !jobRes.job_id) { esconderOverlay(true); return; }
-        var resultado = await awaitJob(jobRes.job_id);
-        esconderOverlay(true);
-        exibirResultadoOtimizacao(
-          resultado,
-          "Otimização para jogos aplicada. Reinicie o PC para garantir efeito completo."
-        );
-      } catch (e) {
-        console.error("[ERRO] Otimização gaming:", e);
-        esconderOverlay(true);
-      }
-    });
-  }
-
-  async function executarOtimizacaoDisco() {
-    mostrarOverlay("Otimizando disco — isso pode levar alguns minutos...", true);
-    try {
-      var jobRes = await bridge.call("otimizar_disco");
-      if (!jobRes || !jobRes.job_id) { esconderOverlay(true); return; }
-      var resultado = await awaitJob(jobRes.job_id);
-      esconderOverlay(true);
-      exibirResultadoOtimizacao(resultado, "Otimização de disco concluída.");
-    } catch (e) {
-      console.error("[ERRO] Otimização disco:", e);
-      esconderOverlay(true);
-    }
-  }
 
   // ──────────────────────────────────────────────
   //  Serviços
@@ -538,19 +475,6 @@
     var btnDiag = document.getElementById("btn-atualizar-diagnostico");
     if (btnDiag) btnDiag.addEventListener("click", () => Phoenix.pages.diagnostico.load());
 
-    // Otimização geral
-    var btnOtGeral = document.getElementById("btn-otimizacao-geral");
-    if (btnOtGeral) btnOtGeral.addEventListener("click", executarOtimizacaoGeral);
-
-    // Otimização gaming
-    var btnOtGaming = document.getElementById("btn-otimizacao-gaming");
-    if (btnOtGaming)
-      btnOtGaming.addEventListener("click", executarOtimizacaoGaming);
-
-    // Otimizar disco
-    var btnDisco = document.getElementById("btn-otimizar-disco");
-    if (btnDisco) btnDisco.addEventListener("click", executarOtimizacaoDisco);
-
     // Rotina completa — sidebar e card
     var btnRotina = document.getElementById("btn-rotina-completa");
     if (btnRotina) btnRotina.addEventListener("click", executarRotinaCompleta);
@@ -562,61 +486,6 @@
     // Atualizar serviços
     var btnServicos = document.getElementById("btn-atualizar-servicos");
     if (btnServicos) btnServicos.addEventListener("click", carregarServicos);
-
-    // Liberar RAM
-    document.getElementById('btn-liberar-ram')?.addEventListener('click', async () => {
-      mostrarOverlay('Liberando memória RAM standby...', true);
-      try {
-        const jobRes = await bridge.call("liberar_memoria_standby");
-        const res = await window.awaitJob(jobRes.job_id);
-        esconderOverlay(true, res?.ok);
-      } catch(e) { esconderOverlay(true, false); }
-    });
-
-    // Analisar Startup
-    document.getElementById('btn-analisar-startup')?.addEventListener('click', async () => {
-      mostrarOverlay('Analisando programas de inicialização...');
-      try {
-        const jobRes = await bridge.call("analisar_startup");
-        const res = await window.awaitJob(jobRes.job_id);
-        esconderOverlay();
-        if (res?.ok && res.entradas) {
-          const container = document.getElementById('resultado-startup');
-          container.style.display = 'block';
-          container.innerHTML = `
-            <div class="card">
-              <strong style="color:var(--cor-primaria)">
-                ${res.entradas.length} programas encontrados no startup
-              </strong>
-              <table class="tabela-dados" style="margin-top:16px">
-                <thead>
-                  <tr>
-                    <th>Programa</th>
-                    <th>Origem</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${res.entradas.map(e => `
-                    <tr>
-                      <td>${e.nome}</td>
-                      <td>
-                        <span class="badge ${e.raiz === 'HKLM' ? 'alerta' : 'neutro'}">
-                          ${e.raiz}
-                        </span>
-                      </td>
-                    </tr>
-                  `).join('')}
-                </tbody>
-              </table>
-              <p class="texto-secundario" style="margin-top:12px">
-                💡 Use o Gerenciador de Tarefas (Ctrl+Shift+Esc → 
-                Inicializar) para desativar programas desnecessários.
-              </p>
-            </div>
-          `;
-        }
-      } catch(e) { esconderOverlay(); }
-    });
   }
 
   // ──────────────────────────────────────────────

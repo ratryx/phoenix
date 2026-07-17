@@ -85,6 +85,34 @@
 - **Comportamento em Falha de Bridge ou Timeout de Job:** Erros desarmam o overlay, liberam a flag e expõem a mensagem ao usuário.
 - **Tamanho atual app.js**: Aproximadamente 974 linhas.
 
+## Otimização (`gui/js/pages/otimizacao.js`)
+
+**Rota:** `otimizacao`
+**Namespace:** `Phoenix.pages.otimizacao`
+
+### Funções
+- `load()`: Associa os event listeners aos botões da página de otimização (Geral, Gaming, Disco, Liberar RAM, Analisar Startup) caso ainda não estejam associados.
+- `executeGeneral()`: Aciona a otimização geral, executando de forma protegida via `Phoenix.operations.restorePoint.runProtected`.
+- `executeGaming()`: Aciona a otimização para jogos (também protegida).
+- `optimizeDisk()`: Executa a otimização de disco (não usa ponto de restauração, direto pela bridge).
+- `releaseStandbyMemory()`: Limpa a RAM Standby (não usa ponto de restauração).
+- `analyzeStartup()`: Analisa entradas de inicialização do sistema (não usa ponto de restauração, renderiza lista de programas).
+- `exibirResultadoOtimizacao()`: Utilitário para renderização de conclusão das otimizações.
+
+### Contratos e Dependências
+- **Endpoints:** 
+  - `executar_otimizacao_geral` (job)
+  - `executar_otimizacao_gaming` (job, pass `false`)
+  - `otimizar_disco` (job)
+  - `liberar_memoria_standby` (job)
+  - `analisar_startup` (job)
+- **Operações que exigem Ponto de Restauração:** Otimização Geral e Otimização Gaming. Ambas delegam o wrapper para `Phoenix.operations.restorePoint.runProtected(fn)`.
+- **Proteção Concorrente:** Possui flags locais (`executandoGeral`, `executandoGaming`, `executandoDisco`, `executandoRam`, `executandoStartup`) para prevenir duplicação de solicitações na mesma sub-rotina.
+- **Overlays e Modais:** Utiliza `Phoenix.ui.feedback`.
+- **Estado:** Ponto de restauração utiliza indiretamente o `Phoenix.state.restorePointCreatedThisSession`.
+- **Resultado:** Renderizados dentro do DOM no container de `resultado-otimizacao` ou `resultado-startup`.
+- **Política de Falha:** Erros cancelam a operação específica, fecham overlay e loggam no console, não travando a página.
+
 
 ## App.js Tamanho Atual
 Aproximadamente 1651 linhas.

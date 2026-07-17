@@ -18,6 +18,7 @@ def test_arquivos_existem():
     assert (base / "pages/hardware.js").exists()
     assert (base / "pages/sensores.js").exists()
     assert (base / "pages/limpeza.js").exists()
+    assert (base / "pages/otimizacao.js").exists()
 
 def test_ordem_carregamento():
     conteudo = Path("gui/index.html").read_text(encoding="utf-8")
@@ -35,6 +36,7 @@ def test_ordem_carregamento():
         "js/pages/hardware.js",
         "js/pages/sensores.js",
         "js/pages/limpeza.js",
+        "js/pages/otimizacao.js",
         "app.js"
     ]
     
@@ -103,7 +105,7 @@ def test_paginas_ainda_no_app_js():
     c = Path("gui/app.js").read_text(encoding="utf-8")
     assert "executarLimpeza" not in c, "Limpeza não foi removida do app.js"
     assert "renderizarLimpeza" not in c, "Limpeza não foi removida do app.js"
-    assert "executarOtimizacaoGeral" in c, "Otimização não está mais no app.js"
+    assert "executarOtimizacaoGeral" not in c, "Otimização não foi removida do app.js"
     assert "carregarServicos" in c, "Serviços não está mais no app.js"
     assert "carregarHistorico" in c, "Histórico não está mais no app.js"
     assert "executarRotinaCompleta" in c, "Rotina Completa não está mais no app.js"
