@@ -17,6 +17,7 @@ A classe depende estruturalmente da injeção explícita de serviços de domíni
 * **JobManager (`self._job_manager`)**: Gerencia o despacho, _threading_ seguro e TTL de chamadas assíncronas (Jobs). A API não constrói mais threads nativas `threading.Thread` manualmente.
 * **HardwareService (`self._hardware_service`)**: Prove a leitura limpa e persistência no cache de hardwares, isolando o framework de coletores complexos como `psutil` ou `GPUtil`.
 * **WindowController (`self._window_controller`)**: Gerencia as operações matemáticas de drag, redimensionamento, offset de cliques, minimização e fechamento da janela nativa.
+* **RoutineService (`self._routine_service`)**: Orquestra o fluxo macro de execução sequencial (diagnóstico, limpeza, otimização, logs e relatórios). A `PhoenixAPI` apenas repassa a este serviço não contendo mais os processos bloqueantes da regra de negócios em seus métodos.
 
 ## Responsabilidades que permanecem na API
 A API ainda guarda alguns atributos residuais que aguardam serviços dedicados:

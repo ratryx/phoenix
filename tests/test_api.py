@@ -21,11 +21,46 @@ def test_api_injecao_manager():
     assert api._hardware_service is hw_service
     assert api._window_controller is win_ctrl
     
-    # E instanciacao padrao funciona
     api_default = PhoenixAPI({})
     assert isinstance(api_default._job_manager, JobManager)
     assert type(api_default._hardware_service).__name__ == "HardwareService"
     assert type(api_default._window_controller).__name__ == "WindowController"
+    assert type(api_default._routine_service).__name__ == "RoutineService"
+
+def test_api_delegacao_routine_service(monkeypatch):
+    """Valida se a API injeta e aciona o RoutineService corretamente sem chamar módulos diretos."""
+    class MockRoutineService:
+        def __init__(self):
+            self.chamadas = []
+        def executar(self, id_atendimento, nome_cliente):
+            self.chamadas.append((id_atendimento, nome_cliente))
+            return {"ok": True, "res": "mockado"}
+
+    mock_routine = MockRoutineService()
+    manager = JobManager()
+    
+    api = PhoenixAPI({}, job_manager=manager, routine_service=mock_routine)
+    
+    # Chama o endpoint
+    res = api.executar_rotina_completa(nome_cliente="Fulano")
+    assert "job_id" in res
+    
+    import time
+    time.sleep(0.1)
+    
+    payload = api.verificar_tarefa(res["job_id"])
+    assert payload["status"] == "done"
+    assert payload["resultado"] == {"ok": True, "res": "mockado"}
+    
+    # Valida parâmetros passados pro serviço
+    assert len(mock_routine.chamadas) == 1
+    chamada = mock_routine.chamadas[0]
+    
+    assert chamada[0] == api._id_atendimento
+    assert chamada[1] == "Fulano"
+    
+    job_interno = manager._jobs[res["job_id"]]
+    assert job_interno["exclusive_group"] == "system_mutation"
 
 def test_api_delegacao_verificar_tarefa():
     """Valida se verificar_tarefa delega de fato para o JobManager."""

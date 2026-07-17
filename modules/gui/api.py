@@ -15,7 +15,7 @@ class PhoenixAPI:
     pywebview serializa automaticamente para JSON no lado do JavaScript.
     """
 
-    def __init__(self, hw_info: dict, job_manager=None, hardware_service=None, window_controller=None):
+    def __init__(self, hw_info: dict, job_manager=None, hardware_service=None, window_controller=None, routine_service=None):
         self._hw_info = hw_info
         self._id_atendimento = None
         self._nome_cliente = ""
@@ -30,6 +30,11 @@ class PhoenixAPI:
             from modules.gui.window_controller import WindowController
             window_controller = WindowController()
         self._window_controller = window_controller
+
+        if routine_service is None:
+            from modules.core.routine_service import RoutineService
+            routine_service = RoutineService()
+        self._routine_service = routine_service
 
     def _iniciar_job(self, target_fn, *args, operation_name="unknown", exclusive_group=None, **kwargs) -> dict:
         """Delega a criação do job para o JobManager e retorna o formato esperado pelo JS."""
@@ -244,37 +249,14 @@ class PhoenixAPI:
 
     def executar_rotina_completa(self, nome_cliente: str = "") -> dict:
         """Executa a rotina completa em segundo plano (fire-and-forget)."""
+        self.iniciar_atendimento(nome_cliente)
+        
         def rotina():
-            self.iniciar_atendimento(nome_cliente)
-            id_atendimento = self._id_atendimento
-
-            dados_antes = diagnostico.coletar_diagnostico_silencioso()
-            logs.salvar_snapshot(id_atendimento, "antes", dados_antes, self._nome_cliente)
-            logs.registrar_acao(id_atendimento, "Diagnóstico inicial coletado", nome_cliente=self._nome_cliente)
-
-            espaco_liberado = limpeza.executar_limpeza_completa(id_atendimento)
-            otimizacao.executar_otimizacao_geral(id_atendimento)
-
-            dados_depois = diagnostico.coletar_diagnostico_silencioso()
-            logs.salvar_snapshot(id_atendimento, "depois", dados_depois, self._nome_cliente)
-            logs.registrar_acao(id_atendimento, "Diagnóstico final coletado")
-
-            espaco_liberado_mb = round(espaco_liberado / (1024 ** 2), 2)
-
-            pasta_logs = logs.obter_pasta_logs()
-            caminho_txt = pasta_logs / f"{id_atendimento}_relatorio.txt"
-            snapshot_antes = logs.carregar_snapshot(id_atendimento, "antes")
-            snapshot_depois = logs.carregar_snapshot(id_atendimento, "depois")
-            relatorio.exportar_relatorio_txt(snapshot_antes, snapshot_depois, espaco_liberado_mb, caminho_txt)
-
-            return {
-                "ok": True,
-                "id_atendimento": id_atendimento,
-                "antes": dados_antes,
-                "depois": dados_depois,
-                "espaco_liberado_mb": espaco_liberado_mb,
-                "relatorio_txt": str(caminho_txt),
-            }
+            return self._routine_service.executar(
+                id_atendimento=self._id_atendimento,
+                nome_cliente=self._nome_cliente
+            )
+            
         return self._iniciar_job(rotina, operation_name="rotina_completa", exclusive_group="system_mutation")
 
     def liberar_memoria_standby(self) -> dict:
