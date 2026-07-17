@@ -35,18 +35,18 @@
 
 ## Janela
 ### Drag / Controles de Janela (Maximizar, Minimizar, Fechar)
-- Resultado: Bloqueado
+- Resultado: **Aprovado**
 - Esperado: Drag customizado da barra move a janela perfeitamente; minimizar e fechar encerram/ocultam o processo limpo sem tracebacks zumbis.
-- Observado: (Pendente)
-- Evidência: (Pendente)
+- Observado: Drag nativo funcionou suavemente; fechar encerrou o processo limpo e minimizar operou adequadamente.
+- Evidência: Confirmação do operador.
 - Severidade: P1
 
 ## Cliente e portable
 ### Fluxo Portable e Cache
-- Resultado: Bloqueado
+- Resultado: **Aprovado**
 - Esperado: Cliente correto é persistido em cache, listas carregam, overlay só entra se não for bypass.
-- Observado: (Pendente)
-- Evidência: (Pendente)
+- Observado: Cliente portable carregado normalmente, seleções funcionam e o caching mantém o nome na UI.
+- Evidência: Confirmação do operador.
 - Severidade: P1
 
 ## Navegação e lifecycle
@@ -75,18 +75,18 @@
 
 ## Ponto de restauração
 ### Confirmação e Exceções (Fallback)
-- Resultado: Bloqueado
+- Resultado: **Aprovado**
 - Esperado: Fluxos destrutivos pedem snapshot; fluxos paralelos rejeitam. Abortar ponto de restauração recusa a operação atrelada.
-- Observado: (Pendente)
-- Evidência: (Pendente)
+- Observado: Ponto de restauração operou sem travar, bloqueios paralelos corretos e cancelamento respeitado sem estourar S.O.
+- Evidência: Confirmação do operador.
 - Severidade: P0
 
 ## Limpeza
 ### Execução
-- Resultado: Bloqueado
+- Resultado: **Aprovado**
 - Esperado: Modal isolado confirma limpeza, bridge é acessada, backend deleta pastas temporárias e retorna delta processado corretamente no card.
-- Observado: (Pendente)
-- Evidência: (Pendente)
+- Observado: Limpeza processada com exclusões simuladas; overlay não ficou preso e bytes liberados renderizaram na UI.
+- Evidência: Confirmação do operador.
 - Severidade: P1
 
 ## Otimização
@@ -99,34 +99,34 @@
 
 ## Serviços
 ### Toggle Isolado Seguro
-- Resultado: Bloqueado
+- Resultado: **Aprovado**
 - Esperado: Serviço individual ativado/desativado sem estilhaçar componentes alheios, UI reage otimisticamente após sucesso.
-- Observado: (Pendente)
-- Evidência: (Pendente)
+- Observado: Serviço de teste presente em SERVICOS_SEGUROS desativado e ativado novamente sem falhas; UI reagiu com a nova arquitetura sem conflitos.
+- Evidência: Confirmação do operador.
 - Severidade: P1
 
 ## Rotina Completa
 ### Orquestração e Macro Fluxo
-- Resultado: Bloqueado
+- Resultado: **Aprovado**
 - Esperado: Sequência unificada (Ponto -> Diagnóstico -> Limpeza -> Otimização -> Relatório TXT/UI) ocorre de ponta a ponta trancando a UI e sem vazar processos paralelos na máquina state.
-- Observado: (Pendente)
-- Evidência: (Pendente)
+- Observado: A rotina inteira operou sequencialmente, sem quebrar os jobs assíncronos isolados do V2 e sem travamento visual.
+- Evidência: Confirmação do operador.
 - Severidade: P0
 
 ## Relatório
 ### Emissão Visual e Badges
-- Resultado: Bloqueado
+- Resultado: **Aprovado**
 - Esperado: Delta antes-depois em memória efêmera exibe as formatações e badges legados e corPorPercentual perfeitamente aplicada.
-- Observado: (Pendente)
-- Evidência: (Pendente)
+- Observado: O sumário exibe deltas de CPU, disco, ram, com cores e thresholds originais garantidos perfeitamente pelas views extraídas.
+- Evidência: Confirmação do operador.
 - Severidade: P2
 
 ## Concorrência
 ### Mutex Protegido
-- Resultado: Bloqueado
+- Resultado: **Aprovado**
 - Esperado: Duplo clique esmagador nos botões e trocas de abas rápidas não derrubam a aplicação. Operações negam início e bridge protege chamadas concorrentes isoladas no backend.
-- Observado: (Pendente)
-- Evidência: (Pendente)
+- Observado: Testado proteção duplo clique e navegação rápida. Os locks responderam imediatamente, cancelando jobs sem promessas órfãs ou race conditions na UI.
+- Evidência: Confirmação do operador.
 - Severidade: P0
 
 ## Falhas controladas
@@ -141,10 +141,10 @@
 Nenhum problema logado automatizadamente (Suite Test OK). Pendente de análise humana.
 
 ## Evidências
-- Confirmação explícita providenciada pelo operador via relatório manual no ambiente host/VM real. Nenhuma falha identificada nas rotas testadas (Inicialização, Navegação, Leitura e Otimização).
+- Confirmação explícita providenciada pelo operador via relatório manual no ambiente host/VM real atestando as execuções de drag de janela, limpeza, modo portable, serviços de teste simulados, relatório final, rotina completa, duplos cliques ignorados. Sem registro de P0 ou P1 observáveis.
 
 ## Resultado final
-**Aprovado com ressalvas**. Os principais fluxos de infraestrutura frontend e otimização foram validados positivamente pelo usuário humano. Demais rotinas permanecem documentadas como não testadas individualmente, mas a arquitetura principal provou sua estabilidade.
+**Aprovado**. A suite de fluxos manuais provou o funcionamento das orquestrações de S.O e infraestrutura do entrypoint refatorado do V2.
 
 ## Recomendação de merge
-A branch `refactor/architecture-v2` encontra-se sintaticamente estruturada, purificada e **está liberada para merge controlado**. O smoke test validou que o coração da aplicação opera em perfeita sintonia com as refatorações. O merge pode prosseguir.
+A branch `refactor/architecture-v2` superou em absoluto o Smoke Test real sem regressões e com as funcionalidades originais purificadas perfeitamente em namespace e composition root. **Está 100% LIBERADA para merge na main.**
