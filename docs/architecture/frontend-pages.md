@@ -63,6 +63,30 @@
 - **Globals necessários**: Nenhum.
 - **Retorno esperado**: void.
 
+## Limpeza (`gui/js/pages/limpeza.js`)
+
+**Rota:** `limpeza`
+**Namespace:** `Phoenix.pages.limpeza`
+
+### Funções
+- `load()`: Adiciona event listener ao botão `btn-executar-limpeza` na primeira renderização, evitando duplicação.
+- `execute()`: Acionado pelo botão. Mostra modal de confirmação. Se confirmado, aciona bridge e aguarda job, mostrando progresso no overlay global de feedback.
+- `renderizarLimpeza()`: Trata o retorno (tanto erro como sucesso) e renderiza no container `conteudo-limpeza`.
+- `formatarBytes()`: Função utilitária para converter os bytes liberados (uso exclusivo desta página por enquanto).
+
+### Contratos e Dependências
+- **Endpoint Utilizado:** `executar_limpeza`
+- **Job ID recebido:** `Phoenix.bridge.call("executar_limpeza")`
+- **Espera:** `Phoenix.jobs.awaitJob(job_id)`
+- **Payload Esperado Final:** `{ok: true, espaco_liberado_mb: 123.45}` ou `{ok: false, erro: "..."}`
+- **Categorias no backend:** Temp do Windows, Temp do usuário, Cache de prefetch, Logs do Windows Update, Relatórios de erro do Windows, Cache de miniaturas, Cache do Chrome, Cache do Edge, Lixo de instaladores, Cache de fontes do Windows, Dumps de memória, Cache do Firefox, Lixeira, Cache de DNS. (Não retornadas detalhadas para o frontend atualmente, mas agrupadas no backend).
+- **Proteção contra concorrência:** Implementada flag `executando` interna no escopo da IIFE e protegida pelo `finally`. 
+- **Confirmação e Overlays:** Utiliza exclusivamente o namespace `Phoenix.ui.feedback` (`confirmarModal`, `mostrarOverlay`, `esconderOverlay`).
+- **Comportamento em Falha de Bridge ou Timeout de Job:** Erros desarmam o overlay, liberam a flag e expõem a mensagem ao usuário.
+- **Cancelamento:** Cancela sem abrir o overlay e sem iniciar job, nem travar flag.
+- **Tamanho atual app.js**: Aproximadamente 974 linhas.
+
+
 ## App.js Tamanho Atual
 Aproximadamente 1651 linhas.
 # Frontend Pages Inventory (Post-Extraction)

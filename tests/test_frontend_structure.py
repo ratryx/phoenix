@@ -16,6 +16,7 @@ def test_arquivos_existem():
     assert (base / "pages/diagnostico.js").exists()
     assert (base / "pages/hardware.js").exists()
     assert (base / "pages/sensores.js").exists()
+    assert (base / "pages/limpeza.js").exists()
 
 def test_ordem_carregamento():
     conteudo = Path("gui/index.html").read_text(encoding="utf-8")
@@ -31,6 +32,7 @@ def test_ordem_carregamento():
         "js/pages/diagnostico.js",
         "js/pages/hardware.js",
         "js/pages/sensores.js",
+        "js/pages/limpeza.js",
         "app.js"
     ]
     
@@ -71,7 +73,9 @@ def test_func_nao_duplicadas():
         "function renderizarDiagnostico",
         "function carregarHardware",
         "function renderizarAbaHardware",
-        "function carregarSensores"
+        "function carregarSensores",
+        "function executarLimpeza",
+        "function renderizarLimpeza"
     ]
     for func in funcs_removidas:
         assert func not in c, f"{func} permaneceu duplicada no app.js"
@@ -95,7 +99,8 @@ def test_funcoes_possuem_implementacao():
 
 def test_paginas_ainda_no_app_js():
     c = Path("gui/app.js").read_text(encoding="utf-8")
-    assert "executarLimpeza" in c, "Limpeza não está mais no app.js"
+    assert "executarLimpeza" not in c, "Limpeza não foi removida do app.js"
+    assert "renderizarLimpeza" not in c, "Limpeza não foi removida do app.js"
     assert "executarOtimizacaoGeral" in c, "Otimização não está mais no app.js"
     assert "carregarServicos" in c, "Serviços não está mais no app.js"
     assert "carregarHistorico" in c, "Histórico não está mais no app.js"
@@ -120,7 +125,7 @@ def test_ids_dom_preservados():
     assert 'id="hw-conteudo"' in html
 
 def test_modulos_usam_phoenix_pages():
-    for f in ["inicio.js", "diagnostico.js", "hardware.js", "sensores.js"]:
+    for f in ["inicio.js", "diagnostico.js", "hardware.js", "sensores.js", "limpeza.js"]:
         c = Path(f"gui/js/pages/{f}").read_text(encoding="utf-8")
         assert "Phoenix.pages." in c or "Phoenix.pages =" in c
 
@@ -133,3 +138,10 @@ def test_globals_documentados():
     doc = Path("docs/architecture/frontend-pages.md").read_text(encoding="utf-8")
     assert "window.renderizarAbaHardware" in doc
     assert "Phoenix.ui.corPorPercentual" in doc or "window.corPorPercentual" in doc
+
+def test_nenhum_alerta_nativo():
+    js_files = list(Path("gui").rglob("*.js"))
+    for js in js_files:
+        c = js.read_text(encoding="utf-8")
+        assert not re.search(r'\balert\(', c), f"alert() nativo encontrado em {js}"
+        assert not re.search(r'\bconfirm\(', c), f"confirm() nativo encontrado em {js}"

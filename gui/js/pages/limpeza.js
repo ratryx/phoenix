@@ -1,0 +1,78 @@
+(function (Phoenix) {
+    "use strict";
+
+    const page = {};
+    let executando = false;
+
+    page.load = function () {
+        const btnLimpeza = document.getElementById("btn-executar-limpeza");
+        if (btnLimpeza) {
+            if (!btnLimpeza.dataset.eventosRegistrados) {
+                btnLimpeza.addEventListener("click", page.execute);
+                btnLimpeza.dataset.eventosRegistrados = "true";
+            }
+        }
+    };
+
+    function formatarBytes(mb) {
+        if (mb >= 1024) return (mb / 1024).toFixed(2) + " GB";
+        return mb.toFixed(1) + " MB";
+    }
+
+    page.execute = async function () {
+        if (executando) return;
+        
+        const confirmado = await Phoenix.ui.feedback.confirmarModal(
+            "Confirmação",
+            "Deseja realmente iniciar a limpeza do sistema?",
+            "⚠️"
+        );
+
+        if (!confirmado) return;
+
+        executando = true;
+        Phoenix.ui.feedback.mostrarOverlay("Limpando arquivos temporários...", true);
+        
+        try {
+            const jobRes = await Phoenix.bridge.call("executar_limpeza");
+            if (!jobRes || !jobRes.job_id) {
+                Phoenix.ui.feedback.esconderOverlay(true, false);
+                executando = false;
+                return;
+            }
+            const resultado = await Phoenix.jobs.awaitJob(jobRes.job_id);
+            Phoenix.ui.feedback.esconderOverlay(true, resultado && resultado.ok);
+            renderizarLimpeza(resultado);
+        } catch (e) {
+            console.error("[ERRO] Limpeza:", e);
+            Phoenix.ui.feedback.esconderOverlay(true, false);
+        } finally {
+            executando = false;
+        }
+    };
+
+    function renderizarLimpeza(resultado) {
+        const container = document.getElementById("conteudo-limpeza");
+        if (!container) return;
+
+        if (!resultado || !resultado.ok) {
+            container.innerHTML =
+                '<div class="card"><span class="badge erro">Erro</span> ' +
+                ((resultado && resultado.erro) || "Erro desconhecido") +
+                "</div>";
+            return;
+        }
+
+        container.innerHTML =
+            '<div class="card">' +
+            '<span class="badge sucesso">Concluído</span>' +
+            '<p style="margin-top:10px">Espaço total liberado: <strong>' +
+            formatarBytes(resultado.espaco_liberado_mb) +
+            "</strong></p>" +
+            "</div>";
+    }
+
+    Phoenix.pages = Phoenix.pages || {};
+    Phoenix.pages.limpeza = page;
+
+})(window.Phoenix);

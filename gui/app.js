@@ -84,7 +84,7 @@
         Phoenix.pages.hardware.load();
         break;
       case "limpeza":
-        // Conteúdo carrega ao clicar no botão dedicado
+        Phoenix.pages.limpeza.load();
         break;
       case "servicos":
         carregarServicos();
@@ -171,48 +171,6 @@
   // ──────────────────────────────────────────────
 
 
-
-  // ──────────────────────────────────────────────
-  //  Limpeza
-  // ──────────────────────────────────────────────
-
-  async function executarLimpeza() {
-    mostrarOverlay("Limpando arquivos temporários...", true);
-    try {
-      var jobRes = await bridge.call("executar_limpeza");
-      if (!jobRes || !jobRes.job_id) {
-        esconderOverlay(true);
-        return;
-      }
-      var resultado = await awaitJob(jobRes.job_id);
-      esconderOverlay(true);
-      renderizarLimpeza(resultado);
-    } catch (e) {
-      console.error("[ERRO] Limpeza:", e);
-      esconderOverlay(true);
-    }
-  }
-
-  function renderizarLimpeza(resultado) {
-    var container = document.getElementById("conteudo-limpeza");
-    if (!container) return;
-
-    if (!resultado || !resultado.ok) {
-      container.innerHTML =
-        '<div class="card"><span class="badge erro">Erro</span> ' +
-        ((resultado && resultado.erro) || "Erro desconhecido") +
-        "</div>";
-      return;
-    }
-
-    container.innerHTML =
-      '<div class="card">' +
-      '<span class="badge sucesso">Concluído</span>' +
-      '<p style="margin-top:10px">Espaço total liberado: <strong>' +
-      formatarBytes(resultado.espaco_liberado_mb) +
-      "</strong></p>" +
-      "</div>";
-  }
 
   // ──────────────────────────────────────────────
   //  Modal de confirmação do ponto de restauração
@@ -704,10 +662,6 @@
     // Diagnóstico
     var btnDiag = document.getElementById("btn-atualizar-diagnostico");
     if (btnDiag) btnDiag.addEventListener("click", () => Phoenix.pages.diagnostico.load());
-
-    // Limpeza
-    var btnLimpeza = document.getElementById("btn-executar-limpeza");
-    if (btnLimpeza) btnLimpeza.addEventListener("click", executarLimpeza);
 
     // Otimização geral
     var btnOtGeral = document.getElementById("btn-otimizacao-geral");
