@@ -17,6 +17,8 @@ Este documento mapeia todos os métodos públicos da classe `PhoenixAPI` acessí
 
 ## Hardware & Ambiente
 
+> **Nota Arquitetural:** Todos os métodos deste escopo (que antes usavam chamadas de bibliotecas do sistema diretamente na bridge) agora delegam integralmente para o `HardwareService`, garantindo abstração completa. Os payloads retornados ao JS são montados por este serviço e os contratos abaixo continuam rigorosamente inalterados.
+
 | Método | Tipo | Parâmetros | Retorno / Estrutura | Efeitos Colaterais / Notas | Risco de Regressão |
 |--------|------|------------|---------------------|----------------------------|--------------------|
 | `obter_hardware` | Síncrono | N/A | `dict` (hardware salvo no estado da API) | Nenhum. | Baixo. |

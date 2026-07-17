@@ -34,12 +34,17 @@ class PhoenixAPI:
     pywebview serializa automaticamente para JSON no lado do JavaScript.
     """
 
-    def __init__(self, hw_info: dict, job_manager=None):
+    def __init__(self, hw_info: dict, job_manager=None, hardware_service=None):
         self._hw_info = hw_info
         self._id_atendimento = None
         self._nome_cliente = ""
         self._janela = None
         self._job_manager = job_manager or JobManager()
+        
+        if hardware_service is None:
+            from modules.core.hardware_service import HardwareService
+            hardware_service = HardwareService(hw_info=hw_info)
+        self._hardware_service = hardware_service
 
     def _iniciar_job(self, target_fn, *args, operation_name="unknown", exclusive_group=None, **kwargs) -> dict:
         """Delega a criação do job para o JobManager e retorna o formato esperado pelo JS."""
@@ -60,14 +65,14 @@ class PhoenixAPI:
 
     def obter_hardware(self) -> dict:
         """Retorna o hardware já detectado pelo launcher (evita reconsultar)."""
-        return self._hw_info
+        return self._hardware_service.obter_hardware()
 
     def obter_nivel_qualidade_visual(self) -> str:
         """
         Retorna 'alto', 'medio' ou 'baixo' para o front-end ajustar automaticamente
         a intensidade dos efeitos visuais (glassmorphism, partículas, blur).
         """
-        return hardware_mod.classificar_capacidade_hardware(self._hw_info)
+        return self._hardware_service.obter_nivel_qualidade_visual()
 
     # ---------- Atendimento ----------
 
@@ -123,161 +128,18 @@ class PhoenixAPI:
         )
 
     def obter_metricas_rapidas(self) -> dict:
-        """Retorna CPU% e RAM% instantâneos sem bloquear (interval=0). Uso: polling de tempo real na GUI."""
-        import psutil
-        cpu = psutil.cpu_percent(interval=0.1)  # bloqueia 100ms mas retorna valor real
-        mem = psutil.virtual_memory()
-        freq = psutil.cpu_freq()
-        return {
-            "ok": True,
-            "cpu_percent": cpu,
-            "ram_percent": round(mem.percent, 1),
-            "ram_disponivel_gb": round(mem.available / (1024**3), 1),
-            "cpu_freq_mhz": round(freq.current, 0) if freq else None
-        }
+        """Retorna CPU% e RAM% instantâneos sem bloquear. Uso: polling de tempo real na GUI."""
+        return self._hardware_service.obter_metricas_rapidas()
+
     def obter_info_sistema_detalhado(self) -> dict:
-        import platform, psutil
-        
-        # CPU
-        freq = psutil.cpu_freq()
-        
-        # Disco por partição
-        discos = []
-        for p in psutil.disk_partitions():
-            try:
-                uso = psutil.disk_usage(p.mountpoint)
-                discos.append({
-                    "unidade": p.device,
-                    "fstype": p.fstype,
-                    "total_gb": round(uso.total / (1024**3), 1),
-                    "usado_gb": round(uso.used / (1024**3), 1),
-                    "livre_gb": round(uso.free / (1024**3), 1),
-                    "percentual": uso.percent
-                })
-            except Exception:
-                continue
-        
-        # RAM detalhada
-        mem = psutil.virtual_memory()
-        try:
-            swap = psutil.swap_memory()
-            swap_total = round(swap.total / (1024**3), 1)
-            swap_usado = round(swap.used / (1024**3), 1)
-        except Exception:
-            swap_total = None
-            swap_usado = None
-        
-        # Sistema
-        boot_time = psutil.boot_time()
-        from datetime import datetime
-        uptime_segundos = (datetime.now() - datetime.fromtimestamp(boot_time)).seconds
-        horas = uptime_segundos // 3600
-        minutos = (uptime_segundos % 3600) // 60
-        
-        return {
-            "ok": True,
-            "sistema": {
-                "os": f"{platform.system()} {platform.release()}",
-                "versao": platform.version()[:50],
-                "arquitetura": platform.machine(),
-                "uptime": f"{horas}h {minutos}m"
-            },
-            "cpu": {
-                "modelo": self._hw_info.get("cpu", {}).get("modelo", "N/A"),
-                "nucleos_fisicos": psutil.cpu_count(logical=False),
-                "nucleos_logicos": psutil.cpu_count(logical=True),
-                "freq_atual": round(freq.current, 0) if freq else None,
-                "freq_max": round(freq.max, 0) if freq and freq.max else None,
-                "freq_min": round(freq.min, 0) if freq and freq.min else None,
-                "arquitetura": platform.machine()
-            },
-            "ram": {
-                "total_gb": round(mem.total / (1024**3), 1),
-                "disponivel_gb": round(mem.available / (1024**3), 1),
-                "usada_gb": round(mem.used / (1024**3), 1),
-                "percentual": round(mem.percent, 1),
-                "swap_total_gb": swap_total,
-                "swap_usado_gb": swap_usado
-            },
-            "discos": discos,
-            "gpus": self._hw_info.get("gpus", [])
-        }
+        return self._hardware_service.obter_info_sistema_detalhado()
 
     def obter_metricas_completas(self) -> dict:
-        import psutil, time
-        
-        # CPU
-        cpu_total = psutil.cpu_percent(interval=0.1)
-        cpu_por_nucleo = psutil.cpu_percent(interval=None, percpu=True)
-        freq = psutil.cpu_freq()
-        
-        # RAM
-        mem = psutil.virtual_memory()
-        
-        # Disco I/O (delta)
-        io1 = psutil.disk_io_counters()
-        time.sleep(0.5)
-        io2 = psutil.disk_io_counters()
-        read_mb = round((io2.read_bytes - io1.read_bytes) / (1024**2) / 0.5, 1) if io1 and io2 else 0
-        write_mb = round((io2.write_bytes - io1.write_bytes) / (1024**2) / 0.5, 1) if io1 and io2 else 0
-        
-        # GPU
-        gpu_data = None
-        try:
-            import GPUtil
-            gpus = GPUtil.getGPUs()
-            if gpus:
-                g = gpus[0]
-                gpu_data = {
-                    "nome": g.name,
-                    "uso": int(g.load * 100),
-                    "temp": int(g.temperature),
-                    "vram_usada": int(g.memoryUsed),
-                    "vram_total": int(g.memoryTotal)
-                }
-        except Exception:
-            pass
-        
-        return {
-            "ok": True,
-            "cpu": {
-                "total": cpu_total,
-                "por_nucleo": cpu_por_nucleo,
-                "freq_mhz": round(freq.current, 0) if freq else None,
-                "nucleos": len(cpu_por_nucleo)
-            },
-            "ram": {
-                "percent": round(mem.percent, 1),
-                "usada_gb": round(mem.used / (1024**3), 1),
-                "total_gb": round(mem.total / (1024**3), 1),
-                "disponivel_gb": round(mem.available / (1024**3), 1)
-            },
-            "disco": {
-                "leitura_mb": read_mb,
-                "escrita_mb": write_mb
-            },
-            "gpu": gpu_data
-        }
+        return self._hardware_service.obter_metricas_completas()
 
     def obter_gpu_rapida(self) -> dict:
         """Retorna métricas rápidas da GPU primária via GPUtil (uso, temp, VRAM)."""
-        try:
-            import GPUtil
-            gpus = GPUtil.getGPUs()
-            if gpus:
-                g = gpus[0]
-                return {
-                    "ok": True,
-                    "gpu": {
-                        "uso": int(g.load * 100),
-                        "temp": int(g.temperature),
-                        "vram_usada": int(g.memoryUsed),
-                        "vram_total": int(g.memoryTotal)
-                    }
-                }
-        except Exception:
-            pass
-        return {"ok": False, "gpu": None}
+        return self._hardware_service.obter_gpu_rapida()
 
     # ---------- Limpeza ----------
 
@@ -302,8 +164,6 @@ class PhoenixAPI:
     def carregar_hardware_cache(self) -> dict:
         """Carrega hardware do cache ou refaz scan (fire-and-forget)."""
         job_id = str(uuid.uuid4())
-        # Inicializa o job com mensagem customizada antes de rodar a thread (para o JS exibir "Iniciando detecção...")
-        # Isso é gerenciado pelo JobManager agora. Submetemos e depois o callback atualiza.
 
         def prog_cb(msg):
             pct = self._job_manager.get_progress(job_id)
@@ -314,9 +174,7 @@ class PhoenixAPI:
             self._job_manager.update_progress(job_id, pct, msg)
 
         def worker():
-            hw = hardware_mod.obter_hardware_com_cache(progress_callback=prog_cb)
-            self._hw_info = hw
-            return {"ok": True, "hardware": hw}
+            return self._hardware_service.carregar_hardware_cache(progress_callback=prog_cb)
 
         self._iniciar_job(worker, job_id=job_id, operation_name="carregar_hardware_cache")
         # Força status inicial de progresso pro front pegar a string imediata
@@ -326,7 +184,7 @@ class PhoenixAPI:
     def forcar_rescan_hardware(self) -> dict:
         """Força um scan completo de hardware (fire-and-forget)."""
         return self._iniciar_job(
-            lambda: {"ok": True, "hardware": hardware_mod.coletar_hardware_completo()},
+            self._hardware_service.forcar_rescan_hardware,
             operation_name="forcar_rescan_hardware"
         )
 

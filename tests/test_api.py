@@ -4,14 +4,21 @@ from modules.gui.jobs import JobManager
 from modules.gui_app import PhoenixAPI
 
 def test_api_injecao_manager():
-    """Valida se a API usa a instância exata de JobManager injetada."""
+    """Valida se a API usa a instância exata de JobManager e HardwareService injetada."""
     manager = JobManager(ttl_seconds=100)
-    api = PhoenixAPI({}, job_manager=manager)
+    
+    class FakeHardwareService:
+        pass
+    
+    hw_service = FakeHardwareService()
+    api = PhoenixAPI({}, job_manager=manager, hardware_service=hw_service)
     assert api._job_manager is manager
+    assert api._hardware_service is hw_service
     
     # E instanciacao padrao funciona
     api_default = PhoenixAPI({})
     assert isinstance(api_default._job_manager, JobManager)
+    assert type(api_default._hardware_service).__name__ == "HardwareService"
 
 def test_api_delegacao_verificar_tarefa():
     """Valida se verificar_tarefa delega de fato para o JobManager."""
@@ -132,3 +139,50 @@ def test_janela_nao_serializada():
     public_attrs = [a for a in dir(api) if not a.startswith('_') and not callable(getattr(api, a))]
     assert "janela" not in public_attrs
     assert hasattr(api, "_janela")
+
+class MockHardwareService:
+    def obter_hardware(self): return {"tipo": "hardware"}
+    def obter_nivel_qualidade_visual(self): return "alto"
+    def obter_metricas_rapidas(self): return {"tipo": "rapida"}
+    def obter_info_sistema_detalhado(self): return {"tipo": "detalhado"}
+    def obter_metricas_completas(self): return {"tipo": "completa"}
+    def obter_gpu_rapida(self): return {"tipo": "gpu"}
+    
+    def carregar_hardware_cache(self, progress_callback=None):
+        if progress_callback: progress_callback("Final")
+        return {"ok": True}
+        
+    def forcar_rescan_hardware(self, progress_callback=None):
+        return {"ok": True}
+
+def test_api_delegacao_hardware_sincrono():
+    """Testa se os métodos síncronos delegam para o HardwareService sem criar jobs."""
+    api = PhoenixAPI({}, hardware_service=MockHardwareService())
+    
+    assert api.obter_hardware() == {"tipo": "hardware"}
+    assert api.obter_nivel_qualidade_visual() == "alto"
+    assert api.obter_metricas_rapidas() == {"tipo": "rapida"}
+    assert api.obter_info_sistema_detalhado() == {"tipo": "detalhado"}
+    assert api.obter_metricas_completas() == {"tipo": "completa"}
+    assert api.obter_gpu_rapida() == {"tipo": "gpu"}
+
+def test_api_delegacao_hardware_assincrono():
+    """Testa se cache e rescan rodam via JobManager mas delegam ao HardwareService."""
+    api = PhoenixAPI({}, hardware_service=MockHardwareService())
+    
+    res_cache = api.carregar_hardware_cache()
+    assert "job_id" in res_cache
+    time.sleep(0.1)
+    
+    payload = api.verificar_tarefa(res_cache["job_id"])
+    assert payload["status"] == "done"
+    assert payload["resultado"]["ok"] is True
+    # Como rodamos o cb "Final", deve ter batido no progress callback:
+    assert payload.get("progresso") == 100
+    
+    res_rescan = api.forcar_rescan_hardware()
+    assert "job_id" in res_rescan
+    time.sleep(0.1)
+    payload_rescan = api.verificar_tarefa(res_rescan["job_id"])
+    assert payload_rescan["status"] == "done"
+    assert payload_rescan["resultado"]["ok"] is True
