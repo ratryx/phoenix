@@ -1,6 +1,7 @@
 # HardwareService
 
-O `HardwareService` (`modules/core/hardware_service.py`) é o responsável por isolar a camada de apresentação (`PhoenixAPI` e a interface gráfica) das bibliotecas e mecanismos diretos de coleta de hardware do sistema operacional (como `psutil`, `platform` e `GPUtil`).
+O `HardwareService` (`modules/core/hardware_service.py`) é o responsável por isolar a camada de apresentação (`PhoenixAPI`, localizada em `modules/gui/api.py`, e a interface gráfica) das bibliotecas e mecanismos diretos de coleta de hardware do sistema operacional (como `psutil`, `platform` e `GPUtil`). 
+Isso unifica o ponto de acesso ao hardware e permite que os dados sejam cacheados, mockados ou preparados antes mesmo da interface estar pronta para ser exibida.
 
 ## Responsabilidades
 - Fornecer métricas rápidas e assíncronas para o frontend de forma centralizada.

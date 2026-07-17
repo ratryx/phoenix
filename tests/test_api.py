@@ -1,7 +1,8 @@
 import time
 import pytest
 from modules.gui.jobs import JobManager
-from modules.gui_app import PhoenixAPI, iniciar
+from modules.gui.api import PhoenixAPI
+from modules.gui_app import iniciar
 
 def test_api_injecao_manager():
     """Valida se a API usa a instância exata de JobManager, HardwareService e WindowController injetada."""
@@ -144,8 +145,23 @@ def test_janela_nao_serializada():
     public_attrs = [a for a in dir(api) if not a.startswith('_') and not callable(getattr(api, a))]
     assert "janela" not in public_attrs
     assert "window_controller" not in public_attrs
-    # Garante que a API sequer guardou a janela
+    
+    # Valida dicionário interno explicitamente
+    dict_api = api.__dict__
+    assert "_janela" not in dict_api
+    assert "_window" not in dict_api
+    assert "_is_dragging" not in dict_api
+    assert "_drag_start_mouse_x" not in dict_api
+    assert "jobs" not in dict_api
+    
+    # E via hasattr
     assert not hasattr(api, "_janela")
+
+def test_compatibilidade_imports():
+    """Valida se o re-export de gui_app.py aponta para a mesma classe de gui.api e sem efeitos colaterais."""
+    from modules.gui.api import PhoenixAPI as NewAPI
+    from modules.gui_app import PhoenixAPI as LegacyAPI
+    assert NewAPI is LegacyAPI
 
 class MockHardwareService:
     def obter_hardware(self): return {"tipo": "hardware"}
