@@ -47,6 +47,18 @@ class HardwareService:
                 gpu_provider = None
         self._gputil = gpu_provider
 
+    def preparar_metricas(self) -> None:
+        """
+        Prepara as métricas do sistema operacional que necessitam de um aquecimento prévio
+        (warm-up) para retornar valores corretos nas consultas subsequentes.
+        Não deve travar a aplicação, tampouco disparar erros fatais para o frontend.
+        """
+        try:
+            # Psutil requer uma chamada não-bloqueante prévia para calcular cpu_percent corretamente
+            self._psutil.cpu_percent(interval=None)
+        except Exception:
+            logger.exception("Falha não-fatal ao preparar as métricas de cpu_percent")
+
     def obter_hardware(self) -> dict:
         return self._hw_info
 

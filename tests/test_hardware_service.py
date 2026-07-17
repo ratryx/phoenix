@@ -19,9 +19,16 @@ class MockGPUtil:
         return self._gpus
 
 class MockPsutil:
-    def __init__(self):
+    def __init__(self, fail_warmup=False):
         self.cpu_count_val = 4
+        self.warmup_calls = []
+        self._fail_warmup = fail_warmup
     def cpu_percent(self, interval=None, percpu=False):
+        if interval is None and not percpu:
+            self.warmup_calls.append("warmup")
+            if self._fail_warmup:
+                raise RuntimeError("Warmup failed")
+            return 0.0
         if percpu:
             return [10.0, 20.0, 30.0, 40.0]
         return 25.0
@@ -81,6 +88,25 @@ class MockHardwareMod:
     def coletar_hardware_completo(self, progress_callback=None):
         if progress_callback: progress_callback("Fake scan")
         return {"fake": "scan"}
+
+
+def test_hardware_service_preparar_metricas():
+    mock_ps = MockPsutil()
+    svc = HardwareService(psutil_module=mock_ps)
+    svc.preparar_metricas()
+    assert "warmup" in mock_ps.warmup_calls
+
+def test_hardware_service_preparar_metricas_falha_segura():
+    mock_ps = MockPsutil(fail_warmup=True)
+    svc = HardwareService(psutil_module=mock_ps)
+    # Nao deve levantar excecao
+    svc.preparar_metricas()
+    assert "warmup" in mock_ps.warmup_calls
+
+def test_hardware_service_nivel_visual():
+    svc = HardwareService(hardware_mod=MockHardwareMod())
+    res = svc.obter_nivel_qualidade_visual()
+    assert res == "alto"
 
 def test_hardware_service_metricas_rapidas():
     svc = HardwareService(

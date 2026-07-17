@@ -138,7 +138,7 @@ class PhoenixAPI:
         return self._hardware_service.obter_metricas_completas()
 
     def obter_gpu_rapida(self) -> dict:
-        """Retorna métricas rápidas da GPU primária via GPUtil (uso, temp, VRAM)."""
+        """Retorna métricas rápidas da GPU primária (uso, temp, VRAM)."""
         return self._hardware_service.obter_gpu_rapida()
 
     # ---------- Limpeza ----------
@@ -363,7 +363,11 @@ def iniciar(hw_info: dict = None):
             "gpus": []
         }
 
-    api = PhoenixAPI(hw_info)
+    from modules.core.hardware_service import HardwareService
+    hardware_service = HardwareService(hw_info=hw_info)
+    hardware_service.preparar_metricas()
+
+    api = PhoenixAPI(hw_info, hardware_service=hardware_service)
     caminho_html = _caminho_recurso(os.path.join("gui", "index.html"))
 
     janela = webview.create_window(
@@ -379,9 +383,6 @@ def iniciar(hw_info: dict = None):
     )
 
     api._janela = janela
-
-    import psutil as _psutil
-    _psutil.cpu_percent(interval=None)  # chamada de aquecimento
 
     webview.start(debug=False)
 

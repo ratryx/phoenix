@@ -18,7 +18,8 @@ O serviço foi desenhado para aceitar injeção de dependências. Em tempo de ex
 - `time.sleep`: Utilizado em escopos confinados para calcular o delta de bytes lidos e escritos no disco (`obter_metricas_completas`).
 
 ## Métodos Disponíveis
-**Fluxos Síncronos:**
+**Fluxos Síncronos (Acesso de Leitura):**
+- `preparar_metricas()`: Realiza chamadas de warm-up (como inicializar a medição de porcentagem de CPU do `psutil` que precisa de uma invocação para calibrar o start time). Não retorna nada e encapsula qualquer erro com log warning seguro. A mesma instância é criada em `gui_app.iniciar()`, executa esse método e depois é passada limpa para a `PhoenixAPI`.
 - `obter_hardware()`: Retorna as infos pesadas base que foram guardadas internamente durante a injeção do objeto (vindo do launcher/inicialização).
 - `obter_nivel_qualidade_visual()`: Repassa as infos pesadas para o módulo calcular se o setup é fraco ou forte (determina blur e partículas).
 - `obter_metricas_rapidas()`: Rápido e instantâneo, captura apenas `%` da CPU, RAM e freq, sendo essencial para o topo do software (polling do loop de hardware a cada segundo).

@@ -1,7 +1,7 @@
 import time
 import pytest
 from modules.gui.jobs import JobManager
-from modules.gui_app import PhoenixAPI
+from modules.gui_app import PhoenixAPI, iniciar
 
 def test_api_injecao_manager():
     """Valida se a API usa a instância exata de JobManager e HardwareService injetada."""
@@ -186,3 +186,41 @@ def test_api_delegacao_hardware_assincrono():
     payload_rescan = api.verificar_tarefa(res_rescan["job_id"])
     assert payload_rescan["status"] == "done"
     assert payload_rescan["resultado"]["ok"] is True
+
+def test_iniciar_gui_app(monkeypatch):
+    """
+    Testa que a inicialização não abre janela real, usa a mesma instância de HardwareService,
+    e chama preparar_metricas uma vez.
+    """
+    import modules.gui_app
+    import webview
+    
+    # Previne que a janela abra
+    class DummyWindow:
+        pass
+    monkeypatch.setattr(webview, "create_window", lambda **kw: DummyWindow())
+    monkeypatch.setattr(webview, "start", lambda **kw: None)
+    
+    # Rastreador de HardwareService
+    historico_criacoes = []
+    
+    # Precisamos interceptar a criacao do HardwareService para ver se preparar_metricas foi chamado.
+    # Em vez de interceptar a classe original globalmente (o que poderia ser complexo pela injeção interna),
+    # podemos mockar o proprio HardwareService importado dentro de gui_app.
+    class FakeHardwareService:
+        def __init__(self, hw_info=None):
+            self.hw_info = hw_info
+            self.preparado = False
+            historico_criacoes.append(self)
+
+        def preparar_metricas(self):
+            self.preparado = True
+
+    import modules.core.hardware_service
+    monkeypatch.setattr(modules.core.hardware_service, "HardwareService", FakeHardwareService)
+
+    iniciar()
+
+    assert len(historico_criacoes) == 1
+    instancia = historico_criacoes[0]
+    assert instancia.preparado is True
