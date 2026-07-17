@@ -1,6 +1,6 @@
 # Contratos da Bridge (Python -> JavaScript)
 
-Este documento mapeia todos os métodos públicos da classe `PhoenixAPI` acessíveis pelo JavaScript através do objeto `pywebview.api`. Estes contratos são críticos para o funcionamento do frontend e não devem ser quebrados durante refatorações.
+Este documento mapeia todos os métodos públicos da classe `PhoenixAPI` (localizada em `modules/gui/api.py`) acessíveis pelo JavaScript através do objeto `pywebview.api`. Estes contratos são críticos para o funcionamento do frontend e não devem ser quebrados durante refatorações.
 
 > **Nota sobre Tratamento de Erros:** O contrato para operações assíncronas garante que exceções internas do Python nunca vazem tracebacks, caminhos locais ou variáveis de ambiente para a interface. O frontend recebe apenas uma estrutura sanitizada como `{"ok": false, "erro": "Mensagem amigável", "detalhe": "Detalhe seguro"}`, enquanto as informações técnicas ficam restritas aos logs nativos. O mesmo contrato sanitizado se aplica para erros de serialização JSON e conflitos de concorrência. Jobs expirados e inexistentes possuem um contrato próprio unificado: `{"status": "not_found"}`.
 
@@ -65,3 +65,34 @@ Este documento mapeia todos os métodos públicos da classe `PhoenixAPI` acessí
 | `remover_cliente_portable`| Síncrono | `id_cliente: str`| `{"ok": bool, "erro": str}` | Apaga cliente do pen drive. | Baixo. Destrutivo em portable. |
 | `obter_modo_portable` | Síncrono | N/A | `{"portable": bool, "cliente_ativo": str}` | Lê estado global `IS_PORTABLE`. | Baixo. |
 | `obter_historico` | Síncrono | N/A | `{"ok": bool, "atendimentos": list}` | Lê a pasta de logs. | Baixo. |
+
+## Contrato Específico: executar_rotina_completa
+
+A rotina completa é a operação mais complexa do Phoenix Optimizer e possui um contrato rígido que deve ser preservado.
+
+*   **Método:** `PhoenixAPI.executar_rotina_completa(nome_cliente: str = "")`
+*   **Parâmetros:**
+    *   `nome_cliente` (str): Nome do cliente para registro no relatório. Opcional (string vazia por padrão).
+*   **Retorno Inicial (Síncrono):**
+    *   `{"job_id": str}`
+*   **Payload Final (Assíncrono via `verificar_tarefa`):**
+    *   `ok` (bool): `True` se a rotina foi concluída com sucesso.
+    *   `id_atendimento` (str): UUID do atendimento gerado (`logs.gerar_id_atendimento()`).
+    *   `antes` (dict): Dados do diagnóstico obtidos *antes* da limpeza/otimização via `diagnostico.coletar_diagnostico_silencioso()`.
+    *   `depois` (dict): Dados do diagnóstico obtidos *após* a limpeza/otimização via `diagnostico.coletar_diagnostico_silencioso()`.
+    *   `espaco_liberado_mb` (float): Quantidade de espaço em disco liberado, convertido para Megabytes (duas casas decimais).
+    *   `relatorio_txt` (str): Caminho absoluto para o arquivo de texto gerado contendo o sumário do atendimento.
+*   **Mensagens de Erro (em caso de falha capturada pelo JobManager):**
+    *   Retorna `{"ok": False, "erro": str, "detalhe": str}` padronizado pelo job.
+*   **Progresso:**
+    *   Não há e nunca houve emissão de callbacks de progresso granular. O frontend exibe apenas um spinner de progresso global neutro ("Executando rotina completa...").
+*   **Efeitos Colaterais Esperados (Ordem Estrita):**
+    1.  Criação de `id_atendimento`.
+    2.  Leitura de diagnóstico prévio.
+    3.  Salvar snapshot JSON do diagnóstico prévio e registro de log inicial.
+    4.  Execução da limpeza destrutiva de disco.
+    5.  Execução de otimizações de performance em registro/configurações.
+    6.  Leitura de diagnóstico posterior.
+    7.  Salvar snapshot JSON do diagnóstico posterior e registro de log final.
+    8.  Exportação de arquivo de texto TXT.
+*   **Nota sobre Ponto de Restauração:** Na arquitetura atual, o *frontend* (`app.js`) invoca e aguarda `criar_ponto_restauracao` explicitamente *antes* de invocar `executar_rotina_completa`. O fluxo contido no backend *não* engatilha o rollback por conta própria.

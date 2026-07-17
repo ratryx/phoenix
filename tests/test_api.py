@@ -1,7 +1,8 @@
 import time
 import pytest
 from modules.gui.jobs import JobManager
-from modules.gui_app import PhoenixAPI, iniciar
+from modules.gui.api import PhoenixAPI
+from modules.gui_app import iniciar
 
 def test_api_injecao_manager():
     """Valida se a API usa a instância exata de JobManager, HardwareService e WindowController injetada."""
@@ -20,11 +21,46 @@ def test_api_injecao_manager():
     assert api._hardware_service is hw_service
     assert api._window_controller is win_ctrl
     
-    # E instanciacao padrao funciona
     api_default = PhoenixAPI({})
     assert isinstance(api_default._job_manager, JobManager)
     assert type(api_default._hardware_service).__name__ == "HardwareService"
     assert type(api_default._window_controller).__name__ == "WindowController"
+    assert type(api_default._routine_service).__name__ == "RoutineService"
+
+def test_api_delegacao_routine_service(monkeypatch):
+    """Valida se a API injeta e aciona o RoutineService corretamente sem chamar módulos diretos."""
+    class MockRoutineService:
+        def __init__(self):
+            self.chamadas = []
+        def executar(self, id_atendimento, nome_cliente):
+            self.chamadas.append((id_atendimento, nome_cliente))
+            return {"ok": True, "res": "mockado"}
+
+    mock_routine = MockRoutineService()
+    manager = JobManager()
+    
+    api = PhoenixAPI({}, job_manager=manager, routine_service=mock_routine)
+    
+    # Chama o endpoint
+    res = api.executar_rotina_completa(nome_cliente="Fulano")
+    assert "job_id" in res
+    
+    import time
+    time.sleep(0.1)
+    
+    payload = api.verificar_tarefa(res["job_id"])
+    assert payload["status"] == "done"
+    assert payload["resultado"] == {"ok": True, "res": "mockado"}
+    
+    # Valida parâmetros passados pro serviço
+    assert len(mock_routine.chamadas) == 1
+    chamada = mock_routine.chamadas[0]
+    
+    assert chamada[0] == api._id_atendimento
+    assert chamada[1] == "Fulano"
+    
+    job_interno = manager._jobs[res["job_id"]]
+    assert job_interno["exclusive_group"] == "system_mutation"
 
 def test_api_delegacao_verificar_tarefa():
     """Valida se verificar_tarefa delega de fato para o JobManager."""
@@ -144,8 +180,23 @@ def test_janela_nao_serializada():
     public_attrs = [a for a in dir(api) if not a.startswith('_') and not callable(getattr(api, a))]
     assert "janela" not in public_attrs
     assert "window_controller" not in public_attrs
-    # Garante que a API sequer guardou a janela
+    
+    # Valida dicionário interno explicitamente
+    dict_api = api.__dict__
+    assert "_janela" not in dict_api
+    assert "_window" not in dict_api
+    assert "_is_dragging" not in dict_api
+    assert "_drag_start_mouse_x" not in dict_api
+    assert "jobs" not in dict_api
+    
+    # E via hasattr
     assert not hasattr(api, "_janela")
+
+def test_compatibilidade_imports():
+    """Valida se o re-export de gui_app.py aponta para a mesma classe de gui.api e sem efeitos colaterais."""
+    from modules.gui.api import PhoenixAPI as NewAPI
+    from modules.gui_app import PhoenixAPI as LegacyAPI
+    assert NewAPI is LegacyAPI
 
 class MockHardwareService:
     def obter_hardware(self): return {"tipo": "hardware"}

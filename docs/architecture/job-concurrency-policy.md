@@ -16,7 +16,7 @@ Operações que realizam alterações no sistema do usuário (mutações) compar
 | `desativar_servico` | Mutação | `system_mutation` | Não | Altera o estado e inicialização de um serviço de sistema. |
 | `ativar_servico` | Mutação | `system_mutation` | Não | Inicia e altera um serviço do Windows. |
 | `liberar_memoria_standby` | Mutação | `system_mutation` | Não | Chama API nativa profunda do Windows, esvaziando cache em RAM. |
-| `executar_rotina_completa` | Mutação | `system_mutation` | Não | Encapsula Limpeza, Otimização e Logs em um pacote só. |
+| `executar_rotina_completa` | Mutação | `system_mutation` | Não | Encapsula Limpeza, Otimização e Logs, delegando a execução orquestrada ao `RoutineService`. |
 
 ## Operações Somente Leitura (Sem Grupo Exclusivo)
 
