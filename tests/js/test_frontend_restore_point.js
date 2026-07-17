@@ -134,25 +134,45 @@ async function runTests() {
 
         // 11. duas solicitações não criam dois pontos
         sandbox.Phoenix.state.restorePointCreatedThisSession = false;
-        acaoChamada = 0;
         let chamadasBridge = 0;
         sandbox.Phoenix.bridge.call = async () => {
             chamadasBridge++;
             return { job_id: 'def' };
         };
         sandbox.Phoenix.jobs.awaitJob = async () => {
-            // delay
-            await new Promise(r => setTimeout(r, 10));
+            await new Promise(r => setTimeout(r, 10)); // delay real simulando processo
             return { ok: true };
         };
-        // O `setTimeout` do mock de window agora não é mais assíncrono real, 
-        // então a promessa do awaitJob com delay real (`new Promise` nativo) vai fazer a operação pendurar 
-        // o tempo suficiente pra testar duplo clique.
-        const p1 = operation.runProtected(mockAction);
-        const p2 = operation.runProtected(mockAction); // Deve retornar undefined/ignorar imediatamente
-        await Promise.all([p1, p2]);
+        
+        let acoesExecutadas = [];
+        const actionA = async () => { acoesExecutadas.push("A"); return "RetornoA"; };
+        const actionB = async () => { acoesExecutadas.push("B"); return "RetornoB"; };
+
+        const promiseA = operation.runProtected(actionA);
+        const promiseB = operation.runProtected(actionB); // Deve ser rejeitada/ignorada
+        
+        const [resA, resB] = await Promise.all([promiseA, promiseB]);
+        
         assert(chamadasBridge === 1, "duas solicitações não criam dois pontos"); // 11
-        assert(acaoChamada === 1, "ação pendente não é executada duas vezes"); // 14
+        assert(acoesExecutadas.length === 1 && acoesExecutadas[0] === "A", "ação pendente não é substituída nem duplicada"); // 14
+        assert(resA === "RetornoA", "retorno A preservado");
+        assert(resB === undefined, "action B explícita e controladamente ignorada"); // Opção B atendida (rejeitada/ignorada)
+
+        // 18. segunda ação durante modal
+        sandbox.Phoenix.state.restorePointCreatedThisSession = false;
+        sandbox.Phoenix.jobs.awaitJob = async () => ({ ok: false }); // forçar falha para abrir modal
+        
+        let promessaModalA = operation.runProtected(actionA);
+        await new Promise(r => setImmediate(r)); // yield para abrir modal
+        assert(sandbox.modalAberto, "modal aberto para A");
+        
+        let promessaModalB = operation.runProtected(actionB); // segunda ação enquanto modal está aberto
+        const resModalB = await promessaModalB;
+        assert(resModalB === undefined, "segunda ação ignorada durante modal");
+        
+        sandbox.mockCancelarClick(); // fecha modal da A
+        const resModalA = await promessaModalA;
+        assert(resModalA === undefined, "A foi cancelada");
 
         // 16. erro da ação é preservado
         sandbox.Phoenix.state.restorePointCreatedThisSession = true;

@@ -9,8 +9,7 @@
         intervalos: {
             tempoReal: null,
         },
-        restorePointCreatedThisSession: false,
-        acaoPendenteAposRestauracao: null,
+        restorePointCreatedThisSession: false
     };
 
 })(window.Phoenix);
