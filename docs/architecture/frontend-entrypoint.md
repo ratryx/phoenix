@@ -1,35 +1,19 @@
-# Inventário do Entrypoint (`gui/app.js`)
+# Entrypoint e Composition Root (`gui/app.js`)
 
-## 1. Composition root / Bootstrap
-* `bootstrap`: Inicializa a aplicação (sequência de carregamento).
-* `registrarBotoesAcao`: Associa botões fixos aos métodos extraídos (diagnóstico, rotina completa).
-* `aplicarQualidadeVisual`: Determina via bridge e aplica a classe no `document.body`.
-* `aplicarNivelQualidade`: Aplica classes e gerencia chamadas de efeitos visuais.
-* `gerarParticulas`: Renderiza visual estético baseado na qualidade.
+O `app.js` atua estritamente como *composition root* e inicializador da arquitetura modular do frontend do Phoenix Optimizer.
 
-## 2. Rotina Completa
-* `executarRotinaCompleta`: Coordena a operação (proteção, feedback visual, await do job de backend, modal de erro, navegação e delegação para o Relatório).
+## Responsabilidades Principais
+1. **Configuração do Router**: Associa os IDs de página aos `pageLoaders` injetados pelos módulos de páginas (`Phoenix.pages.*`).
+2. **Qualidade Visual**: Obtém o `nivelQualidadeVisual` do backend, atualiza o CSS root e injeta as partículas caso necessário, salvando em `Phoenix.state.nivelQualidadeVisual`.
+3. **Helpers Globais de Efeitos**: Mantém a implementação da utilidade `Phoenix.ui.corPorPercentual`.
+4. **Bootstrapping**: Coordena a inicialização da aplicação:
+   - Aguarda a `bridge` ficar pronta.
+   - Inicializa as _features_ (sessão portable) e _ui_ (controles da janela).
+   - Resolve os estados visuais.
+   - Dispara requisições iniciais (hardware estático).
+   - Registra os botões de macro/app (Diagnóstico superior, botão gigante da Rotina Completa).
+   - Inicia o loop de tempo real.
+   - Ativa o `router` inicializando a navegação (que consumirá hash ou roteará para `inicio`).
 
-## 3. Cliente e Sessão Portable
-* `exibirSelecaoCliente`: Obtém a lista via pywebview e renderiza o painel customizado.
-* `selecionarCliente`: Avisa o pywebview, manipula o header e a visibilidade da tela de seleção.
-* `window.removerCliente`: Interage com modals de confirmação e avisa deleção ao backend.
-* `window.confirmarNovoCliente`: Trata validação do input e encaminha para `selecionarCliente`.
-
-## 4. Controles de Janela
-* `registrarBotoesJanela`: Associa métodos nativos (`minimizar`, `fechar`) à `bridge.call`.
-* `registrarDrag`: Inicia listener de arrastar na Titlebar e cabeçalhos.
-* `processarMovimento` (interna a `registrarDrag`): Aplica o loop de `requestAnimationFrame` para `mover_janela`.
-
-## 5. Sidebar / Router
-* `carregarConteudoPagina`: O mapa de páginas / switch central do loader de conteúdo.
-* `registrarSidebar`: Delega listeners do data-pagina para invocação do router.
-
-## 6. Compatibilidade Global
-* `corPorPercentual` (`Phoenix.ui.corPorPercentual`): Helper visual usado por outras páginas (sensores/hardware) para formatar badgets baseados em limite de porcentagem.
-
-## 7. Código Morto
-* Nenhum código estritamente morto detectado (funções órfãs). Todas são consumidas pelo bootstrap, botões nativos HTML ou router.
-
-## 8. Responsabilidade Ambígua
-* `aplicarNivelQualidade` e `gerarParticulas` tangenciam o bootstrap visual. Poderiam ir para um submódulo de "ui-visual" ou "effects", mas para não fragmentar em excesso (conforme restrição "Não crie módulos apenas para reduzir linhas"), serão mantidas no app.js como parte da aplicação/tema raiz da `window`.
+## O que NÃO pertence ao `app.js`
+Nenhuma lógica de domínio ou fluxo de renderização profunda (`innerHTML`) pertence ao `app.js`. Operações assíncronas complexas (como a Rotina Completa), o próprio controle do Router e do Lifecycle, e os controladores de estado da Window foram todos isolados para submódulos nas pastas `core/`, `operations/`, `ui/` e `features/`.
