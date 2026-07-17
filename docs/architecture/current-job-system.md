@@ -51,11 +51,13 @@ Para impedir que dois jobs destrutivos executem ao mesmo tempo (como duas Limpez
 3. Se um novo job do mesmo grupo for disparado e o detentor ainda estiver `"running"`, o job secundário é criado, mas terminado *imediatamente* com status `"done"` e `resultado.ok = False`, contendo a mensagem de erro controlada para o frontend.
 4. Jobs de "somente leitura" (diagnóstico, hardware) não entram neste grupo, podendo rodar normalmente em paralelo (vide `job-concurrency-policy.md`).
 
-## 6. Tratamento de Exceções
+## 6. Tratamento de Exceções e Proteção de Dados
 - Exceções ocorridas dentro da `daemon-thread` Python são capturadas (`try...except`) e impedidas de quebrar toda a base.
-- O traceback é registrado no arquivo de logs local do usuário (`logger.exception()`).
-- O erro é encapsulado no contrato limpo e serializável `{ "ok": False, "erro": str(e), "detalhe": ... }` que o JavaScript lida desenhando um overlay na tela e não matando o fluxo.
-- Há validação estrita embutida no worker que tenta aplicar `json.dumps()` para testar se o resultado pode ser convertido no `pywebview`. Caso falhe, retorna falha de serialização antes que trave a bridge nativa C/C++ do Windows.
+- O traceback completo e informações sensíveis (como caminhos de arquivos e mensagens internas) são registrados EXCLUSIVAMENTE no arquivo de logs local do usuário (`logger.exception()`).
+- O erro é encapsulado no contrato limpo, seguro e serializável que não expõe a stack trace ao frontend, usando textos amigáveis.
+- Exemplo de falha interna:
+  `{ "ok": False, "erro": "Não foi possível concluir a operação.", "detalhe": "Um erro inesperado ocorreu. Os detalhes foram registrados nos logs." }`
+- Há validação estrita embutida no worker que tenta aplicar `json.dumps()` para testar se o resultado pode ser convertido no `pywebview`. Caso falhe, retorna um erro de serialização sanitizado (sem vazar objetos Python na memória) antes que trave a bridge nativa C/C++ do Windows.
 
 ## 7. Limitações (Ausência de Cancelamento Forçado)
 Em Python padrão, não é recomendável ou trivial interromper uma thread de sistema rodando de maneira arbitrária por fora, especialmente se estiver engatada numa API externa pesada como WMI/PowerShell. Sendo assim:

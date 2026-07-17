@@ -35,7 +35,7 @@ class JobManager:
                         "resultado": {
                             "ok": False,
                             "erro": "Outra operação do sistema já está em execução.",
-                            "detalhe": f"Conflito no grupo exclusivo: {exclusive_group}"
+                            "detalhe": "Por favor, aguarde a conclusão da tarefa atual."
                         },
                         "created_at": time.time(),
                         "started_at": time.time(),
@@ -70,18 +70,18 @@ class JobManager:
                 try:
                     json.dumps(res)
                 except Exception as serial_err:
-                    logger.error(f"Erro de serialização no job {job_id} ({operation_name}): {serial_err}")
+                    logger.exception(f"Erro de serialização no job {job_id} ({operation_name}): {serial_err}")
                     res = {
                         "ok": False, 
-                        "erro": "Erro interno: Resultado não serializável", 
-                        "detalhe": str(serial_err)
+                        "erro": "Erro interno do aplicativo. O resultado gerado é inválido.", 
+                        "detalhe": "Não foi possível exibir o resultado."
                     }
             except Exception as e:
-                logger.exception(f"Erro na execução do job {job_id} ({operation_name})")
+                logger.exception(f"Falha durante execução do job {job_id} ({operation_name})")
                 res = {
                     "ok": False, 
-                    "erro": str(e), 
-                    "detalhe": traceback.format_exc()
+                    "erro": "Não foi possível concluir a operação.", 
+                    "detalhe": "Um erro inesperado ocorreu. Os detalhes foram registrados nos logs."
                 }
             finally:
                 with self._lock:

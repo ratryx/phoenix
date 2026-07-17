@@ -2,6 +2,8 @@
 
 Este documento mapeia todos os métodos públicos da classe `PhoenixAPI` acessíveis pelo JavaScript através do objeto `pywebview.api`. Estes contratos são críticos para o funcionamento do frontend e não devem ser quebrados durante refatorações.
 
+> **Nota sobre Tratamento de Erros:** O contrato para operações assíncronas garante que exceções internas do Python nunca vazem tracebacks, caminhos locais ou variáveis de ambiente para a interface. O frontend recebe apenas uma estrutura sanitizada como `{"ok": false, "erro": "Mensagem amigável", "detalhe": "Detalhe seguro"}`, enquanto as informações técnicas ficam restritas aos logs nativos. O mesmo contrato sanitizado se aplica para erros de serialização JSON e conflitos de concorrência. Jobs expirados e inexistentes possuem um contrato próprio unificado: `{"status": "not_found"}`.
+
 ## Sistema Base & Janela
 
 | Método | Tipo | Parâmetros | Retorno / Estrutura | Efeitos Colaterais / Notas | Risco de Regressão |
