@@ -14,4 +14,4 @@ A camada core do Phoenix Optimizer encapsula a lógica estrutural, delegando int
 ## Integração Adicional (UI, Features, Operations)
 - `gui/js/features/client-session.js`: Mantém estados e endpoints do histórico unificado do cliente portable.
 - `gui/js/operations/`: Funções exclusivas que controlam fluxos maiores com múltiplas interações inter-processos e proteção de concorrência (`routine.js` e `restore-point.js`).
-- `gui/js/ui/`: Ferramentas visuais reaproveitáveis que controlam propriedades globais (`window-controls.js` para manipulação de janelas no frameless, e `feedback.js` para os overlays bloqueantes, modals customizados e o utilitário `Phoenix.ui.corPorPercentual`).
+- `gui/js/ui/`: Ferramentas visuais reaproveitáveis que controlam propriedades globais (`window-controls.js` para manipulação de janelas no frameless, `feedback.js` para os overlays bloqueantes e `visual-effects.js` isolando efeitos de background interativos atrelados à qualidade estipulada via bridge).

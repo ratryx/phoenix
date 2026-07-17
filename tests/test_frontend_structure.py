@@ -14,6 +14,7 @@ def test_arquivos_existem():
     assert (base / "operations/restore-point.js").exists()
     assert (base / "features/client-session.js").exists()
     assert (base / "ui/window-controls.js").exists()
+    assert (base / "ui/visual-effects.js").exists()
     assert (base / "operations/routine.js").exists()
     assert (base / "operations/restore-point.js").exists()
     assert (base / "pages/inicio.js").exists()
@@ -42,6 +43,7 @@ def test_ordem_carregamento():
         "js/core/lifecycle.js",
         "js/core/router.js",
         "js/ui/window-controls.js",
+        "js/ui/visual-effects.js",
         "js/operations/restore-point.js",
         "js/operations/routine.js",
         "js/features/client-session.js",
@@ -150,10 +152,17 @@ def test_corPorPercentual():
 
 def test_app_js_composition_root():
     app = Path("gui/app.js").read_text(encoding="utf-8")
-    # endpoints de negócio (exceção para obter_nivel_qualidade_visual que faz parte do tema global)
     assert "executar_rotina_completa" not in app
     assert "carregar_cliente" not in app
     assert "setInterval" not in app, "Polling não deve ocorrer no app.js"
+    assert "gerarParticulas" not in app
+    assert "innerHTML" not in app
+    assert "createElement" not in app
+    assert "appendChild" not in app
+    assert "document.body" not in app
+    assert "Math.random" not in app
+    assert "bootstrap()" in app or "bootstrap();" in app
+    
     import glob
     assert len(glob.glob("gui/**/*.tmp", recursive=True)) == 0
     assert len(glob.glob("gui/**/*.bak", recursive=True)) == 0

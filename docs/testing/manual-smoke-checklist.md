@@ -43,6 +43,13 @@ Este checklist deve ser executado por um operador real no Windows antes de aprov
 | Grupo                    | Resultado Esperado / Status  | Evidência | Observações | Aprovação |
 |--------------------------|------------------------------|-----------|-------------|-----------|
 | Inicialização            | Passagem Total                |           |             | [ ]       |
+| Efeitos Visuais (Novo)   | Partículas e qualidade        |           |             | [ ]       |
 | Somente leitura          | Componentes carregam          |           |             | [ ]       |
 | Operações controladas    | Efeitos Reais + Overlays      |           |             | [ ]       |
 | Concorrência e falhas    | Sobrevivência e Tratamento    |           |             | [ ]       |
+
+## Atualização Arquitetural
+- O módulo estrito `gui/js/ui/visual-effects.js` assumiu 100% da reponsabilidade de manipulação animada de fundo (`gerarParticulas`) orientada pela API `obter_nivel_qualidade_visual`.
+- Assegure-se de que a quantidade de partículas varia adequadamente (nulos em baixo/médio, 14 flutuantes em alto) e que os efeitos não acumulam sobre eles mesmos em repetidos bootstraps.
+- **Atenção:** O `app.js` (Composition Root) já não contém nenhuma rotina de formatação, manipulação visual pura ou `document.body`.
+- A suite Node `test_frontend_visual_effects.js` foi integrada à automação nativa validando essa isolação; o smoke-test manual desta branch ainda aguarda homologação humana.

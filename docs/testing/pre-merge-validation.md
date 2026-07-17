@@ -9,10 +9,10 @@
   - Em `a243460`: 395 linhas
   - Em `c445cd1`: 117 linhas (após extração final)
   - Em `23a19b4`: 117 linhas reais 
-  - Status Final: 136 linhas limpas (sem nenhum helper de UI, apenas composition root puro). A diferença de 117 para 136 ocorreu devido à quebras de linhas cosméticas e documentação em comentários.
+  - Status Final: 104 linhas (sem partículas, document.body ou helpers). O Composition Root é puramente orquestração assíncrona.
   Foi particionado com rigor modular em `gui/js/`:
   - `core/` (namespace, router, state, lifecycle, jobs, bridge)
-  - `ui/` (window-controls, feedback) - Contendo agora o helper `corPorPercentual`.
+  - `ui/` (window-controls, feedback, visual-effects)
   - `features/` (client-session)
   - `operations/` (routine, restore-point)
   - `pages/` (relatorio, historico, servicos, sensores, otimizacao, limpeza, inicio, hardware, diagnostico)
@@ -24,8 +24,8 @@
 ## Suítes Automatizadas Executadas
 As seguintes validações ocorreram na base automatizada antes de declarar a *branch* estável.
 - **Node.js**:
-  Foram escritas e passadas *3x sem oscilações* (100% de sucesso) as 13 suítes que isolam o escopo global mockando dependências:
-  - Read-only pages, sensores, limpeza, ponto de restauração, otimização, serviços, histórico, relatório, routine (operations), client_session, window_controls, e bootstrap (core `app.js`).
+  Foram escritas e passadas *3x sem oscilações* (100% de sucesso) as 14 suítes que isolam o escopo global mockando dependências (incluindo o recém-extraído `visual-effects`):
+  - Read-only pages, sensores, limpeza, ponto de restauração, otimização, serviços, histórico, relatório, routine (operations), client_session, window_controls, visual_effects, e bootstrap (core `app.js`).
   - Todas as suítes registraram "Exit code 0", com mensagens confirmando passagem total, nenhum timer residual, nenhuma promise bloqueada.
 - **Python**:
   A suíte completa obteve sucesso *3x consecutivas*: 70 testes coletados, 70 passed em ~4s de duração, atestando isolamento sintático do helper `corPorPercentual` extraído do `app.js`.

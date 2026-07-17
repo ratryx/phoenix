@@ -37,6 +37,9 @@ function setupEnvironment() {
             ui: {
                 windowControls: {
                     initialize: function() { context.metrics.windowControlsInitialized = true; }
+                },
+                visualEffects: {
+                    initialize: async function() { context.metrics.visualEffectsInitialized = true; }
                 }
             },
             features: {
@@ -81,7 +84,8 @@ function setupEnvironment() {
         routerInitialized: false,
         endpoints: [],
         routineExecuted: false,
-        inicioLoad: false
+        inicioLoad: false,
+        visualEffectsInitialized: false
     };
 
     vm.createContext(context);
@@ -106,7 +110,7 @@ async function runTests() {
         assert.ok(ctx.metrics.hardwareCarregado, "Deve carregar hardware inicial");
         assert.ok(ctx.metrics.tempoReal, "Deve iniciar att tempo real");
         assert.ok(ctx.metrics.routerInitialized, "Deve inicializar o router");
-        assert.ok(ctx.metrics.endpoints.includes("obter_nivel_qualidade_visual"), "Deve checar qualidade");
+        assert.ok(ctx.metrics.visualEffectsInitialized, "Deve inicializar efeitos visuais");
         
         assert.ok(!ctx.metrics.routineExecuted, "Não deve executar rotina na inicialização");
     }
