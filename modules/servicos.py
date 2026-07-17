@@ -11,13 +11,12 @@ incluídos aqui de propósito, para não travar o PC do cliente.
 """
 
 import subprocess
-from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.prompt import Confirm
 from rich import box
 
-console = Console()
+from modules.shared import console
 
 
 # Serviços que geralmente podem ser desativados com segurança em PCs domésticos/escritório.
@@ -88,8 +87,16 @@ def exibir_servicos():
     return servicos
 
 
+def _validar_nome_servico(nome_servico: str) -> bool:
+    """Verifica se o nome do serviço está na lista de serviços seguros."""
+    return nome_servico in SERVICOS_SEGUROS
+
+
 def desativar_servico(nome_servico: str) -> bool:
     """Para e desativa a inicialização automática de um serviço específico."""
+    if not _validar_nome_servico(nome_servico):
+        console.print(f"  [red]✗[/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
+        return False
     try:
         subprocess.run(["sc", "stop", nome_servico], capture_output=True, timeout=15)
         subprocess.run(["sc", "config", nome_servico, "start=", "disabled"], capture_output=True, timeout=15)
@@ -100,6 +107,9 @@ def desativar_servico(nome_servico: str) -> bool:
 
 def ativar_servico(nome_servico: str) -> bool:
     """Reativa um serviço (volta para início automático e inicia o serviço)."""
+    if not _validar_nome_servico(nome_servico):
+        console.print(f"  [red]✗[/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
+        return False
     try:
         subprocess.run(["sc", "config", nome_servico, "start=", "auto"], capture_output=True, timeout=15)
         subprocess.run(["sc", "start", nome_servico], capture_output=True, timeout=15)

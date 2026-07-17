@@ -11,14 +11,13 @@ e um painel estruturado de status, no estilo de CLIs corporativas
 """
 
 import pyfiglet
-from rich.console import Console
 from rich.text import Text
 from rich.align import Align
 from rich.panel import Panel
 from rich.table import Table
 from rich import box
 
-console = Console()
+from modules.shared import console
 
 # Paleta corporativa: dourado/âmbar contido, sem vermelho vivo.
 # Usa cores nomeadas do Rich em vez de gradiente "fogo", para um efeito
