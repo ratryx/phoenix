@@ -6,6 +6,8 @@ Este documento mapeia todos os métodos públicos da classe `PhoenixAPI` acessí
 
 ## Sistema Base & Janela
 
+> **Nota Arquitetural:** Os métodos de controle de janela (arrasto, minimizar e fechar) estão isolados no `WindowController`. A `PhoenixAPI` apenas roteia as chamadas para este controlador interno sem manter estado visual nativo.
+
 | Método | Tipo | Parâmetros | Retorno / Estrutura | Efeitos Colaterais / Notas | Risco de Regressão |
 |--------|------|------------|---------------------|----------------------------|--------------------|
 | `verificar_tarefa` | Síncrono | `job_id: str` | `{"status": str, "resultado": any, "progresso": int, "mensagem": str}` ou `{"status": "not_found"}` | Acesso apenas em memória (`_tarefas`). | **Crítico**. Base do polling do frontend. |

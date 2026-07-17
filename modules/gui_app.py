@@ -34,17 +34,21 @@ class PhoenixAPI:
     pywebview serializa automaticamente para JSON no lado do JavaScript.
     """
 
-    def __init__(self, hw_info: dict, job_manager=None, hardware_service=None):
+    def __init__(self, hw_info: dict, job_manager=None, hardware_service=None, window_controller=None):
         self._hw_info = hw_info
         self._id_atendimento = None
         self._nome_cliente = ""
-        self._janela = None
         self._job_manager = job_manager or JobManager()
         
         if hardware_service is None:
             from modules.core.hardware_service import HardwareService
             hardware_service = HardwareService(hw_info=hw_info)
         self._hardware_service = hardware_service
+
+        if window_controller is None:
+            from modules.gui.window_controller import WindowController
+            window_controller = WindowController()
+        self._window_controller = window_controller
 
     def _iniciar_job(self, target_fn, *args, operation_name="unknown", exclusive_group=None, **kwargs) -> dict:
         """Delega a criação do job para o JobManager e retorna o formato esperado pelo JS."""
@@ -310,32 +314,21 @@ class PhoenixAPI:
     # ---------- Arrastar Janela Frameless ----------
 
     def iniciar_drag(self, start_mouse_x: int, start_mouse_y: int, start_win_x: int, start_win_y: int):
-        self._drag_start_mouse_x = start_mouse_x
-        self._drag_start_mouse_y = start_mouse_y
-        self._drag_start_win_x = start_win_x
-        self._drag_start_win_y = start_win_y
-        self._is_dragging = True
+        self._window_controller.iniciar_drag(start_mouse_x, start_mouse_y, start_win_x, start_win_y)
 
     def mover_janela(self, current_mouse_x: int, current_mouse_y: int):
-        if hasattr(self, "_is_dragging") and self._is_dragging and self._janela:
-            delta_x = current_mouse_x - self._drag_start_mouse_x
-            delta_y = current_mouse_y - self._drag_start_mouse_y
-            new_x = self._drag_start_win_x + delta_x
-            new_y = self._drag_start_win_y + delta_y
-            self._janela.move(new_x, new_y)
+        self._window_controller.mover_janela(current_mouse_x, current_mouse_y)
 
     def parar_drag(self):
-        self._is_dragging = False
+        self._window_controller.parar_drag()
 
     # ---------- Janela ----------
 
     def minimizar_janela(self):
-        for janela in webview.windows:
-            janela.minimize()
+        self._window_controller.minimizar()
 
     def fechar_janela(self):
-        for janela in webview.windows:
-            janela.destroy()
+        self._window_controller.fechar()
 
 
 def _caminho_recurso(caminho_relativo: str) -> str:
@@ -364,10 +357,14 @@ def iniciar(hw_info: dict = None):
         }
 
     from modules.core.hardware_service import HardwareService
+    from modules.gui.window_controller import WindowController
+    
     hardware_service = HardwareService(hw_info=hw_info)
     hardware_service.preparar_metricas()
 
-    api = PhoenixAPI(hw_info, hardware_service=hardware_service)
+    window_controller = WindowController()
+
+    api = PhoenixAPI(hw_info, hardware_service=hardware_service, window_controller=window_controller)
     caminho_html = _caminho_recurso(os.path.join("gui", "index.html"))
 
     janela = webview.create_window(
@@ -382,7 +379,7 @@ def iniciar(hw_info: dict = None):
         background_color="#15120F",
     )
 
-    api._janela = janela
+    window_controller.set_window(janela)
 
     webview.start(debug=False)
 

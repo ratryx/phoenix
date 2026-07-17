@@ -4,21 +4,27 @@ from modules.gui.jobs import JobManager
 from modules.gui_app import PhoenixAPI, iniciar
 
 def test_api_injecao_manager():
-    """Valida se a API usa a instância exata de JobManager e HardwareService injetada."""
+    """Valida se a API usa a instância exata de JobManager, HardwareService e WindowController injetada."""
     manager = JobManager(ttl_seconds=100)
     
     class FakeHardwareService:
         pass
+    class FakeWindowController:
+        pass
     
     hw_service = FakeHardwareService()
-    api = PhoenixAPI({}, job_manager=manager, hardware_service=hw_service)
+    win_ctrl = FakeWindowController()
+    
+    api = PhoenixAPI({}, job_manager=manager, hardware_service=hw_service, window_controller=win_ctrl)
     assert api._job_manager is manager
     assert api._hardware_service is hw_service
+    assert api._window_controller is win_ctrl
     
     # E instanciacao padrao funciona
     api_default = PhoenixAPI({})
     assert isinstance(api_default._job_manager, JobManager)
     assert type(api_default._hardware_service).__name__ == "HardwareService"
+    assert type(api_default._window_controller).__name__ == "WindowController"
 
 def test_api_delegacao_verificar_tarefa():
     """Valida se verificar_tarefa delega de fato para o JobManager."""
@@ -91,7 +97,6 @@ def test_api_metodo_com_progresso(monkeypatch):
     
     # Testa se a mensagem pre-worker "Iniciando detecção..." entrou em vigor rápido (antes do worker)
     payload_inicio = api.verificar_tarefa(job_id)
-    # the worker might be so fast it finishes immediately, but let's just check the final
     
     time.sleep(0.1)
     payload_fim = api.verificar_tarefa(job_id)
@@ -138,7 +143,9 @@ def test_janela_nao_serializada():
     import inspect
     public_attrs = [a for a in dir(api) if not a.startswith('_') and not callable(getattr(api, a))]
     assert "janela" not in public_attrs
-    assert hasattr(api, "_janela")
+    assert "window_controller" not in public_attrs
+    # Garante que a API sequer guardou a janela
+    assert not hasattr(api, "_janela")
 
 class MockHardwareService:
     def obter_hardware(self): return {"tipo": "hardware"}
@@ -187,40 +194,75 @@ def test_api_delegacao_hardware_assincrono():
     assert payload_rescan["status"] == "done"
     assert payload_rescan["resultado"]["ok"] is True
 
+def test_api_delegacao_janela():
+    """Testa se os métodos da janela são delegados pro WindowController."""
+    class FakeWindowController:
+        def __init__(self):
+            self.calls = []
+        def iniciar_drag(self, a, b, c, d): self.calls.append(("iniciar_drag", a, b, c, d))
+        def mover_janela(self, a, b): self.calls.append(("mover_janela", a, b))
+        def parar_drag(self): self.calls.append(("parar_drag",))
+        def minimizar(self): self.calls.append(("minimizar",))
+        def fechar(self): self.calls.append(("fechar",))
+
+    win_ctrl = FakeWindowController()
+    api = PhoenixAPI({}, window_controller=win_ctrl)
+    
+    api.iniciar_drag(1, 2, 3, 4)
+    api.mover_janela(5, 6)
+    api.parar_drag()
+    api.minimizar_janela()
+    api.fechar_janela()
+    
+    assert win_ctrl.calls == [
+        ("iniciar_drag", 1, 2, 3, 4),
+        ("mover_janela", 5, 6),
+        ("parar_drag",),
+        ("minimizar",),
+        ("fechar",)
+    ]
+
 def test_iniciar_gui_app(monkeypatch):
     """
-    Testa que a inicialização não abre janela real, usa a mesma instância de HardwareService,
-    e chama preparar_metricas uma vez.
+    Testa que a inicialização não abre janela real, usa a mesma instância de HardwareService
+    e WindowController, e chama set_window() com a janela criada pelo webview.
     """
     import modules.gui_app
     import webview
     
-    # Previne que a janela abra
     class DummyWindow:
         pass
-    monkeypatch.setattr(webview, "create_window", lambda **kw: DummyWindow())
+    
+    fake_janela = DummyWindow()
+    monkeypatch.setattr(webview, "create_window", lambda **kw: fake_janela)
     monkeypatch.setattr(webview, "start", lambda **kw: None)
     
-    # Rastreador de HardwareService
-    historico_criacoes = []
-    
-    # Precisamos interceptar a criacao do HardwareService para ver se preparar_metricas foi chamado.
-    # Em vez de interceptar a classe original globalmente (o que poderia ser complexo pela injeção interna),
-    # podemos mockar o proprio HardwareService importado dentro de gui_app.
+    historico_criacoes_hw = []
     class FakeHardwareService:
         def __init__(self, hw_info=None):
             self.hw_info = hw_info
             self.preparado = False
-            historico_criacoes.append(self)
-
+            historico_criacoes_hw.append(self)
         def preparar_metricas(self):
             self.preparado = True
 
+    historico_criacoes_win = []
+    class FakeWindowController:
+        def __init__(self):
+            self.janela_setada = None
+            historico_criacoes_win.append(self)
+        def set_window(self, win):
+            self.janela_setada = win
+            
     import modules.core.hardware_service
+    import modules.gui.window_controller
     monkeypatch.setattr(modules.core.hardware_service, "HardwareService", FakeHardwareService)
+    monkeypatch.setattr(modules.gui.window_controller, "WindowController", FakeWindowController)
 
     iniciar()
 
-    assert len(historico_criacoes) == 1
-    instancia = historico_criacoes[0]
-    assert instancia.preparado is True
+    assert len(historico_criacoes_hw) == 1
+    assert historico_criacoes_hw[0].preparado is True
+    
+    assert len(historico_criacoes_win) == 1
+    assert historico_criacoes_win[0].janela_setada is fake_janela
