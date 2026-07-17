@@ -183,3 +183,26 @@ gui/js/pages/
 - **Overlay/Feedback:** Usa `Phoenix.ui.feedback.mostrarOverlay()` indicando a mudança e o encerra no finally.
 - **Estados de Serviço:** "Rodando" (sucesso), "Parado" / "Não encontrado" / "Desconhecido" / "Erro ao consultar" (neutro). A renderização checa estritamente `status === "Rodando"` para setar a variável de interface `ativo = true`.
 - **Globals/Dependências Restantes:** Nenhuma global específica. Necessita de `Phoenix.bridge`, `Phoenix.jobs`, `Phoenix.operations.restorePoint`, `Phoenix.ui.feedback`.
+
+## Histórico (`gui/js/pages/historico.js`)
+
+**Rota:** `historico`
+**Namespace:** `Phoenix.pages.historico`
+
+### Funções Atuais (antes da extração)
+- `carregarHistorico`: Busca a lista estática e a renderiza na tela através do overlay.
+
+### Contratos e Dependências
+- **Endpoints Utilizados:**
+  - `obter_historico` (Assíncrono com job `awaitJob`). Payload das entradas: `{ok: true, atendimentos: [{id_atendimento, cliente, data_hora}]}`
+- **IDs do DOM:** `#conteudo-historico`
+- **Classes/Elementos:** `.card`, `.tabela-dados`, `.texto-secundario`, `.badge`, `.erro`
+- **Listeners:** Nenhum. A tabela de listagem de atendimentos atual é estritamente de exibição em tabela estática (não possui clicks, links, rolagem infinita nem botões expansíveis).
+- **Estado Local:** O histórico recarrega inteiramente toda vez que a página é visitada pela rota do aplicativo. Não cacheia client-side e não altera flags isoladas.
+- **Filtros/Ordenação:** Não existem implementações de filtros ou buscas.
+- **Detalhes / Snapshots:** Funcionalidades de visualização do histórico como comparação Antes/Depois, expansão de detalhes completos com labels não são realizadas ou processadas aqui (são geradas e exibidas no endpoint de "Relatório" da Rotina Completa, ou ausentes no baseline do Histórico puro).
+- **Rollback / Limpeza:** Não estão presentes no código original deste commit. Inexistente exclusão ou restauração pontual via histórico do atendimentos.
+- **Proteções / Concorrência:** O carregamento da página apenas utiliza o job de feedback assíncrono.
+- **Overlay:** Usa o `Phoenix.ui.feedback.mostrarOverlay("Consultando histórico...")` no request.
+- **Fronteira com Relatório:** A geração do relatório e sua visualização comparativa estão restritas a `app.js` (`renderizarRelatorio`) através da função de "Rotina Completa". A página do Histórico é um leitor primitivo do log.
+- **Globals/Dependências Restantes:** Nenhuma exposta. Necessita das instâncias `Phoenix.bridge`, `Phoenix.jobs` e `Phoenix.ui.feedback`.
