@@ -16,4 +16,4 @@ O `app.js` atua estritamente como *composition root* e inicializador da arquitet
    - Ativa o `router` inicializando a navegação (que consumirá hash ou roteará para `inicio`).
 
 ## O que NÃO pertence ao `app.js`
-Nenhuma lógica de domínio ou fluxo de renderização profunda (`innerHTML`) pertence ao `app.js`. Operações assíncronas complexas (como a Rotina Completa), o próprio controle do Router e do Lifecycle, e os controladores de estado da Window foram todos isolados para submódulos nas pastas `core/`, `operations/`, `ui/` e `features/`.
+Nenhuma lógica de domínio, utilitários visuais (`corPorPercentual`), ou fluxo de renderização profunda (`innerHTML` em cards de negócio) pertence ao `app.js`. Utilitários visuais foram movidos para `gui/js/ui/feedback.js`. Operações assíncronas complexas (como a Rotina Completa), o próprio controle do Router e do Lifecycle, e os controladores de estado da Window foram todos isolados para submódulos nas pastas `core/`, `operations/`, `ui/` e `features/`.

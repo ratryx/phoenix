@@ -9,6 +9,8 @@ const scriptCode = fs.readFileSync(scriptPath, 'utf8');
 function setupEnvironment() {
     const context = {
         window: { setTimeout: (fn, ms) => fn() },
+        setTimeout: setTimeout,
+        clearTimeout: clearTimeout,
         document: {
             getElementById: function(id) {
                 if (id === 'tela-selecao-cliente') return context.dom.telaSelecao;

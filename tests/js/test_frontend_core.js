@@ -233,6 +233,14 @@ setTimeout(() => {
     console.log("All native JS tests passed!");
 }, 1500);
 
+// Feedback e utilitários visuais
+assert.strictEqual(window.Phoenix.ui.corPorPercentual(90), 'erro');
+assert.strictEqual(window.Phoenix.ui.corPorPercentual(95), 'erro');
+assert.strictEqual(window.Phoenix.ui.corPorPercentual(70), 'alerta');
+assert.strictEqual(window.Phoenix.ui.corPorPercentual(89), 'alerta');
+assert.strictEqual(window.Phoenix.ui.corPorPercentual(50), '');
+assert.strictEqual(window.Phoenix.ui.corPorPercentual(-10), '');
+
 // Modal
 let modalPromise = window.Phoenix.ui.feedback.confirmarModal('T', 'M');
 setTimeout(() => {

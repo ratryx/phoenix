@@ -4,21 +4,31 @@
 - **Branch:** `refactor/architecture-v2`
 - **Commit Auditado:** `c445cd1 - refactor: finalize frontend architecture extracting core and UI`
 - **Estrutura Final:**
-  O arquivo base `app.js` (outrora 1821 linhas) foi estabilizado em 142 linhas.
+  O arquivo base `app.js` teve as seguintes contagens ao longo da refatoração:
+  - Base inicial da arquitetura v2 original: 1821 linhas
+  - Em `a243460`: 395 linhas
+  - Em `c445cd1`: 117 linhas (após extração final)
+  - Em `23a19b4`: 117 linhas reais 
+  - Status Final: 136 linhas limpas (sem nenhum helper de UI, apenas composition root puro). A diferença de 117 para 136 ocorreu devido à quebras de linhas cosméticas e documentação em comentários.
   Foi particionado com rigor modular em `gui/js/`:
   - `core/` (namespace, router, state, lifecycle, jobs, bridge)
-  - `ui/` (window-controls, feedback)
+  - `ui/` (window-controls, feedback) - Contendo agora o helper `corPorPercentual`.
   - `features/` (client-session)
   - `operations/` (routine, restore-point)
   - `pages/` (relatorio, historico, servicos, sensores, otimizacao, limpeza, inicio, hardware, diagnostico)
 
+## Histórico Recente de Commits Auditados
+- O commit `c445cd1` agrupou corretamente os arquivos funcionais finais da refatoração v2.
+- O commit `23a19b4` conteve estritamente 5 arquivos: `docs/architecture/frontend-core.md`, `docs/architecture/frontend-entrypoint.md`, `docs/architecture/frontend-pages.md`, `docs/testing/manual-smoke-checklist.md`, e `docs/testing/pre-merge-validation.md`. A deleção massiva ocorreu nas 259 remoções em `frontend-pages.md` para condensar a documentação.
+
 ## Suítes Automatizadas Executadas
 As seguintes validações ocorreram na base automatizada antes de declarar a *branch* estável.
 - **Node.js**:
-  Foram escritas e passadas *3x sem oscilações* (100% de sucesso) 13 suítes que isolam o escopo global mockando dependências:
+  Foram escritas e passadas *3x sem oscilações* (100% de sucesso) as 13 suítes que isolam o escopo global mockando dependências:
   - Read-only pages, sensores, limpeza, ponto de restauração, otimização, serviços, histórico, relatório, routine (operations), client_session, window_controls, e bootstrap (core `app.js`).
+  - Todas as suítes registraram "Exit code 0", com mensagens confirmando passagem total, nenhum timer residual, nenhuma promise bloqueada.
 - **Python**:
-  A suíte completa (`python -m pytest tests/`) envolvendo infraestrutura de API, Jobs e Controladores obteve sucesso *3x consecutivas sem vazamentos laterais*. Os testes estruturais foram ampliados para evitar o retorno de ES Modules e globals inflados.
+  A suíte completa obteve sucesso *3x consecutivas*: 70 testes coletados, 70 passed em ~4s de duração, atestando isolamento sintático do helper `corPorPercentual` extraído do `app.js`.
 
 ## Resultados e Conclusão de Escopo Técnico
 A migração técnica modular foi inteiramente bem sucedida. O projeto provou isolamento limpo através de injeção de dependências e do framework estrito do IIFE sem introduzir complexidade algorítmica ou novos frameworks front-end (`React`, `Vue`, etc), atendendo ao plano arquitetural restrito do Phoenix.

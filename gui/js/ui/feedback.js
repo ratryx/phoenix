@@ -129,6 +129,12 @@
         });
     };
 
+    Phoenix.ui.corPorPercentual = function(pct) {
+        if (pct >= 90) return "erro";
+        if (pct >= 70) return "alerta";
+        return "";
+    };
+
     // Globais temporários 
     window.mostrarOverlay = Phoenix.ui.feedback.mostrarOverlay;
     window.esconderOverlay = Phoenix.ui.feedback.esconderOverlay;

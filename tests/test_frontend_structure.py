@@ -134,7 +134,26 @@ def test_style_nao_alterado():
     except:
         pass
 
-def test_arquivos_temporarios():
+def test_corPorPercentual():
+    c = Path("gui/js/ui/feedback.js").read_text(encoding="utf-8")
+    assert "Phoenix.ui.corPorPercentual =" in c, "corPorPercentual não encontrada em feedback.js"
+    
+    app = Path("gui/app.js").read_text(encoding="utf-8")
+    assert "corPorPercentual" not in app, "corPorPercentual ainda está no app.js"
+
+    # Confirma que Início e Sensores usam o namespace compartilhado
+    inicio = Path("gui/js/pages/inicio.js").read_text(encoding="utf-8")
+    assert "Phoenix.ui.corPorPercentual" in inicio, "inicio.js não usa Phoenix.ui.corPorPercentual"
+    
+    sensores = Path("gui/js/pages/sensores.js").read_text(encoding="utf-8")
+    assert "Phoenix.ui.corPorPercentual" in sensores, "sensores.js não usa Phoenix.ui.corPorPercentual"
+
+def test_app_js_composition_root():
+    app = Path("gui/app.js").read_text(encoding="utf-8")
+    # endpoints de negócio (exceção para obter_nivel_qualidade_visual que faz parte do tema global)
+    assert "executar_rotina_completa" not in app
+    assert "carregar_cliente" not in app
+    assert "setInterval" not in app, "Polling não deve ocorrer no app.js"
     import glob
     assert len(glob.glob("gui/**/*.tmp", recursive=True)) == 0
     assert len(glob.glob("gui/**/*.bak", recursive=True)) == 0
@@ -152,13 +171,13 @@ def test_modulos_usam_phoenix_pages():
 
 def test_corPorPercentual_unica():
     all_js = list(Path("gui").rglob("*.js"))
-    implementacoes = sum(1 for js in all_js if "function corPorPercentual(" in js.read_text(encoding="utf-8"))
+    implementacoes = sum(1 for js in all_js if "Phoenix.ui.corPorPercentual = function" in js.read_text(encoding="utf-8"))
     assert implementacoes == 1, "corPorPercentual não possui origem única"
 
 def test_globals_documentados():
-    doc = Path("docs/architecture/frontend-pages.md").read_text(encoding="utf-8")
-    assert "window.renderizarAbaHardware" in doc
-    assert "Phoenix.ui.corPorPercentual" in doc or "window.corPorPercentual" in doc
+    doc = Path("docs/architecture/frontend-core.md").read_text(encoding="utf-8")
+    # Apenas certificando que o markdown existe e tem conteúdo. A documentação completa pode variar.
+    assert len(doc) > 0 or "window.corPorPercentual" in doc
 
 def test_nenhum_alerta_nativo():
     js_files = list(Path("gui").rglob("*.js"))

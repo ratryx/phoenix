@@ -36,13 +36,6 @@
   //  Compatibilidade Global e Visual
   // ──────────────────────────────────────────────
 
-  function corPorPercentual(pct) {
-    if (pct >= 90) return "erro";
-    if (pct >= 70) return "alerta";
-    return "";
-  }
-  Phoenix.ui = Phoenix.ui || {};
-  Phoenix.ui.corPorPercentual = corPorPercentual;
 
   function aplicarNivelQualidade(nivel) {
     STATE.nivelQualidadeVisual = nivel;
