@@ -1,37 +1,62 @@
-# Sistema de Jobs Atual (Python -> JavaScript)
+# Sistema Atual de Jobs Assíncronos (Refatorado - v2)
 
-O sistema de jobs é o coração assíncrono do projeto Phoenix Optimizer, permitindo que a interface web permaneça responsiva enquanto operações lentas ocorrem no backend Python.
+Este documento descreve como a comunicação assíncrona entre o front-end (HTML/JS via `pywebview`) e o back-end (Python) acontece, utilizando o novo componente `JobManager` (`modules/gui/jobs.py`).
 
-## Estrutura Básica e Funcionamento
+## 1. O Problema Original
+O `pywebview` não permite facilmente que a renderização da interface continue enquanto o Python executa uma tarefa pesada (como varrer o disco) caso a chamada ocorra na thread principal, congelando o aplicativo.
 
-1. **Estado em Memória (`_tarefas`)**:
-   No arquivo `gui_app.py`, existe um dicionário global chamado `_tarefas` que age como um registro em memória.
-   Sua estrutura é: `job_id -> {"status": str, "resultado": any, "progresso": int, "mensagem": str}`.
+## 2. A Solução: `JobManager`
+Ao invés de processar o comando no ato e travar a GUI, o backend (através de `PhoenixAPI._iniciar_job`) submete a tarefa ao `JobManager`.
 
-2. **Criação do Job ID e Thread**:
-   Quando o frontend (JS) chama um método que requer execução prolongada, o Python aciona o utilitário `_iniciar_job`. 
-   Ele cria um UUID4 exclusivo para identificar a operação e o adiciona ao dicionário `_tarefas` com status `"running"`. Em seguida, inicia uma thread (`threading.Thread(target=worker, daemon=True).start()`) que executará a função alvo. A função principal da API então retorna imediatamente `{"job_id": "..."}` para o JS.
+A classe gerencia as execuções de forma thread-safe usando `threading.RLock`, aloca um UUID único (o `job_id`), e inicia uma daemon-thread.
 
-3. **Polling no Frontend**:
-   A função global JS `awaitJob(jobId)` consulta `verificar_tarefa(job_id)` a cada **500 ms**.
-   Ela continua verificando repetidamente até o status da resposta mudar de `"running"` para `"done"` ou `"not_found"`.
+1. **JS chama:** `pywebview.api.executar_limpeza()`
+2. **Python:** Submete a operação ao `JobManager`, recebe `job_id` e retorna imediatamente `{"job_id": "123"}`.
+3. **JS recebe:** O `job_id`. Inicia um *polling* `setInterval`.
+4. **JS faz Polling:** Chama `pywebview.api.verificar_tarefa("123")` a cada ~500ms.
+5. **Python (`JobManager.consultar`):** Retorna o dicionário interno do job protegido por lock.
+6. **Fim do processo:** Quando o status muda de `"running"` para `"done"`, o frontend recebe o resultado final, interrompe o polling e avisa o usuário.
 
-## Estados Possíveis
+## 3. Estrutura do Dicionário de Job
 
-- `"running"`: A tarefa está em andamento.
-- `"done"`: A tarefa concluiu, com sucesso ou falha, e contém a propriedade `resultado`.
-- `"not_found"`: O Job ID não existe ou o dicionário não o contém. (Retornado preventivamente pela função `verificar_tarefa`).
+Internamente, o `JobManager` armazena e consulta cada job sob o formato:
+```python
+{
+    "status": "running" | "done",
+    "resultado": None | { ... JSON serializável ... },
+    "progresso": 50,              # Opcional
+    "mensagem": "Verificando...", # Opcional
+    "created_at": 169000000.0,
+    "started_at": 169000000.1,
+    "completed_at": 169000010.5,
+    "operation_name": "executar_limpeza",
+    "exclusive_group": "system_mutation"
+}
+```
 
-## Formato dos Resultados (Payload final)
+O payload devolvido pela função `consultar(job_id)` mascara chaves internas, devolvendo apenas as chaves originais que o front-end espera:
+`status`, `resultado`, `progresso`, `mensagem`.
 
-Quando o status é `"done"`, o worker atualiza o job e salva a resposta em `resultado`:
-- **Sucesso (Padrão Geral)**: `{"ok": True, ... (demais dados da resposta)}`.
-- **Erro**: Se houver exceção na thread, é capturada por um bloco try/except genérico no worker e salva em `resultado` como: `{"ok": False, "erro": str(e), "detalhe": traceback.format_exc()}`. A thread não morre sem avisar.
+## 4. Política de TTL (Time To Live) e Memory Leak
+Anteriormente os jobs rodavam eternamente e acumulavam no dicionário `_tarefas` gerando vazamento de memória.
+Agora o `JobManager` implementa **Expiração (TTL)**:
+- Jobs concluídos (`"status": "done"`) ficam visíveis no estado do dicionário por, no padrão, 900 segundos (15 minutos).
+- Ao realizar nova leitura ou criar novos jobs (`submit` ou `consultar`), o método oportunístico `_cleanup_expired()` remove jobs velhos para limpar memória.
+- Jobs em `"running"` nunca expiram, protegendo tarefas legítimas e demoradas.
 
-## Limitações e Riscos na Implementação Atual
+## 5. Proteção de Concorrência e Race Conditions
+Para impedir que dois jobs destrutivos executem ao mesmo tempo (como duas Limpezas simultâneas ou Limpeza e Otimização juntas), há o controle de **Grupos Exclusivos**:
+1. Se uma função destrutiva é chamada, ela entra no `exclusive_group="system_mutation"`.
+2. O lock salva quem detém o grupo.
+3. Se um novo job do mesmo grupo for disparado e o detentor ainda estiver `"running"`, o job secundário é criado, mas terminado *imediatamente* com status `"done"` e `resultado.ok = False`, contendo a mensagem de erro controlada para o frontend.
+4. Jobs de "somente leitura" (diagnóstico, hardware) não entram neste grupo, podendo rodar normalmente em paralelo (vide `job-concurrency-policy.md`).
 
-* **Expiração e Limpeza (Memory Leak)**: **Inexistente.** Não há expiração ou mecanismo de limpeza no `_tarefas`. Todo job gerado durante uma sessão da aplicação permanecerá carregado na memória do dicionário até que o aplicativo seja fechado.
-* **Timeout**: O frontend possui um timeout de 60 segundos (120 consultas de 500ms). Porém, o backend Python **não possui timeout**. A thread continuará rodando indeterminadamente e presa caso a chamada que a originou trave.
-* **Cancelamento (Kill / Abort)**: **Inexistente.** Uma vez que o job é iniciado no Python, a thread roda até sua natural conclusão. O frontend não possui mecanismo de aviso para abortar a thread caso o usuário saia da página ou feche a interface de carregamento.
-* **Jobs Destrutivos Simultâneos**: **Possível (Risco Alto).** Não há Mutex ou flag global (Lock) no backend que impeça que duas otimizações ou limpezas sejam chamadas sequencialmente ou paralelamente pela interface gráfica, o que poderia corromper o sistema.
-* **Abandono do Frontend**: Se o frontend inicia um job, e a página for trocada (cancelando o aguardo via erro de escopo de JS se houvesse, ou se o usuário reiniciar a página caso houvesse F5), o job continuará em processamento silencioso no Python.
+## 6. Tratamento de Exceções
+- Exceções ocorridas dentro da `daemon-thread` Python são capturadas (`try...except`) e impedidas de quebrar toda a base.
+- O traceback é registrado no arquivo de logs local do usuário (`logger.exception()`).
+- O erro é encapsulado no contrato limpo e serializável `{ "ok": False, "erro": str(e), "detalhe": ... }` que o JavaScript lida desenhando um overlay na tela e não matando o fluxo.
+- Há validação estrita embutida no worker que tenta aplicar `json.dumps()` para testar se o resultado pode ser convertido no `pywebview`. Caso falhe, retorna falha de serialização antes que trave a bridge nativa C/C++ do Windows.
+
+## 7. Limitações (Ausência de Cancelamento Forçado)
+Em Python padrão, não é recomendável ou trivial interromper uma thread de sistema rodando de maneira arbitrária por fora, especialmente se estiver engatada numa API externa pesada como WMI/PowerShell. Sendo assim:
+- **Não há aborto forçado:** O Cancelamento pela interface do Phoenix atualmente desiste do polling, fechando o modal para o usuário, mas o backend concluirá a rotina até o fim (ela é "fire-and-forget"). O front-end simplesmente para de perguntar. 

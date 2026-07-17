@@ -24,10 +24,7 @@ from modules import servicos
 from modules import logs
 from modules import relatorio
 from modules import hardware as hardware_mod
-
-# Dicionário global para controle de tarefas em segundo plano (fire-and-forget)
-# job_id -> {"status": "running" | "done", "resultado": ...}
-_tarefas = {}
+from modules.gui.jobs import JobManager
 
 
 class PhoenixAPI:
@@ -37,31 +34,27 @@ class PhoenixAPI:
     pywebview serializa automaticamente para JSON no lado do JavaScript.
     """
 
-    def __init__(self, hw_info: dict):
+    def __init__(self, hw_info: dict, job_manager=None):
         self._hw_info = hw_info
         self._id_atendimento = None
         self._nome_cliente = ""
         self._janela = None
+        self._job_manager = job_manager or JobManager()
 
-    def _iniciar_job(self, target_fn, *args, **kwargs) -> dict:
-        """Inicia um job em segundo plano, retornando o job_id imediatamente."""
-        job_id = str(uuid.uuid4())
-        _tarefas[job_id] = {"status": "running", "resultado": None}
-
-        def worker():
-            try:
-                res = target_fn(*args, **kwargs)
-            except Exception as e:
-                import traceback
-                res = {"ok": False, "erro": str(e), "detalhe": traceback.format_exc()}
-            _tarefas[job_id] = {"status": "done", "resultado": res}
-
-        threading.Thread(target=worker, daemon=True).start()
+    def _iniciar_job(self, target_fn, *args, operation_name="unknown", exclusive_group=None, **kwargs) -> dict:
+        """Delega a criação do job para o JobManager e retorna o formato esperado pelo JS."""
+        job_id = self._job_manager.submit(
+            target_fn, 
+            *args, 
+            operation_name=operation_name, 
+            exclusive_group=exclusive_group, 
+            **kwargs
+        )
         return {"job_id": job_id}
 
     def verificar_tarefa(self, job_id: str) -> dict:
-        """Retorna o status atual de uma tarefa."""
-        return _tarefas.get(job_id, {"status": "not_found"})
+        """Retorna o status atual de uma tarefa a partir do JobManager."""
+        return self._job_manager.consultar(job_id)
 
     # ---------- Hardware / contexto inicial ----------
 
@@ -124,7 +117,10 @@ class PhoenixAPI:
 
     def obter_diagnostico(self) -> dict:
         """Coleta diagnóstico completo em segundo plano para exibir na GUI (fire-and-forget)."""
-        return self._iniciar_job(lambda: {"ok": True, "dados": diagnostico.coletar_diagnostico_silencioso()})
+        return self._iniciar_job(
+            lambda: {"ok": True, "dados": diagnostico.coletar_diagnostico_silencioso()},
+            operation_name="obter_diagnostico"
+        )
 
     def obter_metricas_rapidas(self) -> dict:
         """Retorna CPU% e RAM% instantâneos sem bloquear (interval=0). Uso: polling de tempo real na GUI."""
@@ -288,51 +284,58 @@ class PhoenixAPI:
     def executar_limpeza(self) -> dict:
         """Executa limpeza completa em segundo plano (fire-and-forget)."""
         return self._iniciar_job(
-            lambda: {"ok": True, "espaco_liberado_mb": round(limpeza.executar_limpeza_completa(self._id_atendimento) / (1024 ** 2), 2)}
+            lambda: {"ok": True, "espaco_liberado_mb": round(limpeza.executar_limpeza_completa(self._id_atendimento) / (1024 ** 2), 2)},
+            operation_name="executar_limpeza",
+            exclusive_group="system_mutation"
         )
 
     # ---------- Otimização ----------
 
     def criar_ponto_restauracao(self) -> dict:
         """Cria um ponto de restauração em segundo plano (fire-and-forget)."""
-        return self._iniciar_job(otimizacao.criar_ponto_restauracao)
+        return self._iniciar_job(
+            otimizacao.criar_ponto_restauracao,
+            operation_name="criar_ponto_restauracao",
+            exclusive_group="system_mutation"
+        )
 
     def carregar_hardware_cache(self) -> dict:
         """Carrega hardware do cache ou refaz scan (fire-and-forget)."""
         job_id = str(uuid.uuid4())
-        _tarefas[job_id] = {"status": "running", "resultado": None, "progresso": 0, "mensagem": "Iniciando detecção..."}
+        # Inicializa o job com mensagem customizada antes de rodar a thread (para o JS exibir "Iniciando detecção...")
+        # Isso é gerenciado pelo JobManager agora. Submetemos e depois o callback atualiza.
 
         def prog_cb(msg):
-            pct = _tarefas[job_id].get("progresso", 0)
+            pct = self._job_manager.get_progress(job_id)
             if "CPU" in msg: pct = 33
             elif "RAM" in msg: pct = 66
             elif "GPU" in msg: pct = 90
             elif "Final" in msg: pct = 100
-            _tarefas[job_id] = {"status": "running", "resultado": None, "progresso": pct, "mensagem": msg}
+            self._job_manager.update_progress(job_id, pct, msg)
 
         def worker():
-            try:
-                hw = hardware_mod.obter_hardware_com_cache(progress_callback=prog_cb)
-                self._hw_info = hw
-                res = {"ok": True, "hardware": hw}
-            except Exception as e:
-                import traceback
-                res = {"ok": False, "erro": str(e), "detalhe": traceback.format_exc()}
-            _tarefas[job_id] = {"status": "done", "resultado": res}
+            hw = hardware_mod.obter_hardware_com_cache(progress_callback=prog_cb)
+            self._hw_info = hw
+            return {"ok": True, "hardware": hw}
 
-        threading.Thread(target=worker, daemon=True).start()
+        self._iniciar_job(worker, job_id=job_id, operation_name="carregar_hardware_cache")
+        # Força status inicial de progresso pro front pegar a string imediata
+        self._job_manager.update_progress(job_id, 0, "Iniciando detecção...")
         return {"job_id": job_id}
 
     def forcar_rescan_hardware(self) -> dict:
         """Força um scan completo de hardware (fire-and-forget)."""
-        return self._iniciar_job(lambda: {"ok": True, "hardware": hardware_mod.coletar_hardware_completo()})
+        return self._iniciar_job(
+            lambda: {"ok": True, "hardware": hardware_mod.coletar_hardware_completo()},
+            operation_name="forcar_rescan_hardware"
+        )
 
     def executar_otimizacao_geral(self) -> dict:
         """Aplica otimizações gerais em segundo plano (fire-and-forget)."""
         def acao():
             otimizacao.executar_otimizacao_geral(self._id_atendimento)
             return {"ok": True}
-        return self._iniciar_job(acao)
+        return self._iniciar_job(acao, operation_name="otimizacao_geral", exclusive_group="system_mutation")
 
     def executar_otimizacao_gaming(self, resetar_rede: bool = False) -> dict:
         """Aplica otimizações para jogos em segundo plano (fire-and-forget)."""
@@ -346,11 +349,15 @@ class PhoenixAPI:
             if self._id_atendimento:
                 logs.registrar_acao(self._id_atendimento, "Otimização para jogos aplicada")
             return {"ok": True}
-        return self._iniciar_job(acao)
+        return self._iniciar_job(acao, operation_name="otimizacao_gaming", exclusive_group="system_mutation")
 
     def otimizar_disco(self) -> dict:
         """Otimiza o disco em segundo plano (fire-and-forget)."""
-        return self._iniciar_job(lambda: {"ok": True, "saida": otimizacao.otimizar_disco_principal()})
+        return self._iniciar_job(
+            lambda: {"ok": True, "saida": otimizacao.otimizar_disco_principal()},
+            operation_name="otimizar_disco", 
+            exclusive_group="system_mutation"
+        )
 
     def listar_inicializacao(self) -> dict:
         try:
@@ -363,16 +370,25 @@ class PhoenixAPI:
 
     def listar_servicos(self) -> dict:
         return self._iniciar_job(
-            lambda: {"ok": True, "servicos": servicos.listar_status_servicos()}
+            lambda: {"ok": True, "servicos": servicos.listar_status_servicos()},
+            operation_name="listar_servicos"
         )
 
     def desativar_servico(self, nome_servico: str) -> dict:
         """Desativa um serviço em segundo plano (fire-and-forget)."""
-        return self._iniciar_job(lambda: {"ok": servicos.desativar_servico(nome_servico)})
+        return self._iniciar_job(
+            lambda: {"ok": servicos.desativar_servico(nome_servico)},
+            operation_name="desativar_servico",
+            exclusive_group="system_mutation"
+        )
 
     def ativar_servico(self, nome_servico: str) -> dict:
         """Ativa um serviço em segundo plano (fire-and-forget)."""
-        return self._iniciar_job(lambda: {"ok": servicos.ativar_servico(nome_servico)})
+        return self._iniciar_job(
+            lambda: {"ok": servicos.ativar_servico(nome_servico)},
+            operation_name="ativar_servico",
+            exclusive_group="system_mutation"
+        )
 
     # ---------- Logs / relatório ----------
 
@@ -416,18 +432,21 @@ class PhoenixAPI:
                 "espaco_liberado_mb": espaco_liberado_mb,
                 "relatorio_txt": str(caminho_txt),
             }
-        return self._iniciar_job(rotina)
+        return self._iniciar_job(rotina, operation_name="rotina_completa", exclusive_group="system_mutation")
 
     def liberar_memoria_standby(self) -> dict:
         return self._iniciar_job(
             lambda: {"ok": otimizacao.liberar_memoria_standby(), 
-                     "mensagem": "Memória standby liberada com sucesso"}
+                     "mensagem": "Memória standby liberada com sucesso"},
+            operation_name="liberar_memoria",
+            exclusive_group="system_mutation"
         )
 
     def analisar_startup(self) -> dict:
         return self._iniciar_job(
             lambda: {"ok": True, 
-                     "entradas": otimizacao.analisar_startup()}
+                     "entradas": otimizacao.analisar_startup()},
+            operation_name="analisar_startup"
         )
 
     # ---------- Arrastar Janela Frameless ----------
