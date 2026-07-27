@@ -165,11 +165,11 @@ def test_api_portable_mode_required(mock_portable, monkeypatch):
     
     res = api.selecionar_cliente("algum-id")
     assert res["ok"] is False
-    assert res["erro"] == "PORTABLE_MODE_REQUIRED"
+    assert res["codigo"] == "PORTABLE_MODE_REQUIRED"
     
     res2 = api.remover_cliente_portable("algum-id")
     assert res2["ok"] is False
-    assert res2["erro"] == "PORTABLE_MODE_REQUIRED"
+    assert res2["codigo"] == "PORTABLE_MODE_REQUIRED"
 
 def test_active_client_state(mock_portable):
     api = PhoenixAPI(hw_info={})

@@ -66,6 +66,24 @@ class PhoenixAPI:
 
     # ---------- Atendimento ----------
 
+    def _make_error(self, codigo: str) -> dict:
+        mensagens = {
+            "INVALID_CLIENT_NAME": "O nome do cliente é inválido ou está vazio.",
+            "INVALID_CLIENT_ID": "O ID do cliente fornecido é inválido.",
+            "CLIENT_NOT_FOUND": "O cliente especificado não pôde ser encontrado.",
+            "CLIENT_CREATE_FAILED": "Falha ao criar o diretório do cliente portátil.",
+            "CLIENT_SELECT_FAILED": "Falha ao selecionar e definir o cliente ativo.",
+            "CLIENT_DELETE_FAILED": "Falha ao remover os dados do cliente.",
+            "CLIENT_DELETE_FAILED_PERMISSION": "Permissão negada ao tentar remover o cliente.",
+            "PORTABLE_MODE_REQUIRED": "Esta ação exige que o modo Portable esteja ativo.",
+            "PERSISTENCE_WRITE_FAILED": "Falha ao salvar de forma segura os metadados do cliente."
+        }
+        return {
+            "ok": False,
+            "codigo": codigo,
+            "erro": mensagens.get(codigo, f"Erro desconhecido: {codigo}")
+        }
+
     def iniciar_atendimento(self, nome_cliente: str = "") -> dict:
         self._nome_cliente = nome_cliente or ""
         self._id_atendimento = logs.gerar_id_atendimento()
@@ -85,21 +103,27 @@ class PhoenixAPI:
     def criar_cliente_portable(self, nome: str) -> dict:
         from modules.shared import criar_cliente_portable, IS_PORTABLE
         if not IS_PORTABLE:
-            return {"ok": False, "erro": "PORTABLE_MODE_REQUIRED"}
+            return self._make_error("PORTABLE_MODE_REQUIRED")
         if not nome or not nome.strip():
-            return {"ok": False, "erro": "INVALID_CLIENT_NAME"}
-        meta = criar_cliente_portable(nome)
-        return {"ok": True, "cliente": meta}
+            return self._make_error("INVALID_CLIENT_NAME")
+            
+        try:
+            meta = criar_cliente_portable(nome)
+            if isinstance(meta, dict) and not meta.get("ok", True):
+                return self._make_error(meta.get("erro", "CLIENT_CREATE_FAILED"))
+            return {"ok": True, "cliente": meta}
+        except Exception:
+            return self._make_error("CLIENT_CREATE_FAILED")
 
     def selecionar_cliente(self, id_cliente: str) -> dict:
         """Define o cliente ativo da sessão."""
         from modules.shared import (definir_cliente_ativo, 
                                     salvar_meta_cliente, listar_clientes_portable, IS_PORTABLE)
         if not IS_PORTABLE:
-            return {"ok": False, "erro": "PORTABLE_MODE_REQUIRED"}
+            return self._make_error("PORTABLE_MODE_REQUIRED")
             
         if not id_cliente or not id_cliente.strip():
-            return {"ok": False, "erro": "INVALID_CLIENT_ID"}
+            return self._make_error("INVALID_CLIENT_ID")
             
         id_cliente = id_cliente.strip()
         
@@ -107,7 +131,7 @@ class PhoenixAPI:
         clientes = listar_clientes_portable()
         encontrado = next((c for c in clientes if c['id'] == id_cliente), None)
         if not encontrado:
-            return {"ok": False, "erro": "CLIENT_NOT_FOUND"}
+            return self._make_error("CLIENT_NOT_FOUND")
         nome_cliente = encontrado['nome']
             
         try:
@@ -115,14 +139,17 @@ class PhoenixAPI:
             salvar_meta_cliente(id_cliente, nome_cliente)
             return {"ok": True, "cliente": {"id": id_cliente, "nome": nome_cliente}}
         except ValueError:
-            return {"ok": False, "erro": "CLIENT_SELECT_FAILED"}
+            return self._make_error("CLIENT_SELECT_FAILED")
 
     def remover_cliente_portable(self, id_cliente: str) -> dict:
         """Remove um cliente do pen drive."""
         from modules.shared import remover_cliente_portable, IS_PORTABLE
         if not IS_PORTABLE:
-            return {"ok": False, "erro": "PORTABLE_MODE_REQUIRED"}
-        return remover_cliente_portable(id_cliente)
+            return self._make_error("PORTABLE_MODE_REQUIRED")
+        res = remover_cliente_portable(id_cliente)
+        if not res.get("ok"):
+            return self._make_error(res.get("erro", "CLIENT_DELETE_FAILED"))
+        return {"ok": True}
 
     def obter_modo_portable(self) -> dict:
         from modules.shared import IS_PORTABLE, CLIENTE_ATIVO_ID, CLIENTE_ATIVO_NOME
