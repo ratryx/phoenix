@@ -95,31 +95,33 @@ class PhoenixAPI:
         """Define o cliente ativo da sessão."""
         from modules.shared import (definir_cliente_ativo, 
                                     salvar_meta_cliente, listar_clientes_portable, IS_PORTABLE)
+        if not IS_PORTABLE:
+            return {"ok": False, "erro": "PORTABLE_MODE_REQUIRED"}
+            
         if not id_cliente or not id_cliente.strip():
             return {"ok": False, "erro": "INVALID_CLIENT_ID"}
             
         id_cliente = id_cliente.strip()
-        nome_cliente = "Desconhecido"
         
         # Encontrar nome display
-        if IS_PORTABLE:
-            clientes = listar_clientes_portable()
-            encontrado = next((c for c in clientes if c['id'] == id_cliente), None)
-            if not encontrado:
-                return {"ok": False, "erro": "CLIENT_NOT_FOUND"}
-            nome_cliente = encontrado['nome']
+        clientes = listar_clientes_portable()
+        encontrado = next((c for c in clientes if c['id'] == id_cliente), None)
+        if not encontrado:
+            return {"ok": False, "erro": "CLIENT_NOT_FOUND"}
+        nome_cliente = encontrado['nome']
             
         try:
             definir_cliente_ativo(id_cliente, nome_cliente)
-            if IS_PORTABLE:
-                salvar_meta_cliente(id_cliente, nome_cliente)
+            salvar_meta_cliente(id_cliente, nome_cliente)
             return {"ok": True, "cliente": {"id": id_cliente, "nome": nome_cliente}}
         except ValueError:
             return {"ok": False, "erro": "CLIENT_SELECT_FAILED"}
 
     def remover_cliente_portable(self, id_cliente: str) -> dict:
         """Remove um cliente do pen drive."""
-        from modules.shared import remover_cliente_portable
+        from modules.shared import remover_cliente_portable, IS_PORTABLE
+        if not IS_PORTABLE:
+            return {"ok": False, "erro": "PORTABLE_MODE_REQUIRED"}
         return remover_cliente_portable(id_cliente)
 
     def obter_modo_portable(self) -> dict:

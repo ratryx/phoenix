@@ -181,6 +181,8 @@ def listar_clientes_portable() -> list:
 
 def remover_cliente_portable(id_cliente: str) -> dict:
     """Remove a pasta do cliente do pen drive. Retorna dict estruturado."""
+    if not IS_PORTABLE:
+        return {"ok": False, "erro": "PORTABLE_MODE_REQUIRED"}
     if not _validar_id_cliente(id_cliente):
         return {"ok": False, "erro": "INVALID_CLIENT_ID"}
         
