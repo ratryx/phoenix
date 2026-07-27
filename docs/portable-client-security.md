@@ -21,17 +21,24 @@ Folders created prior to the ID/Name separation are safely recognized as legacy 
 - Legacy folders without a `meta.json` are assigned their exact folder name as their ID.
 - Legacy clients are never destructively renamed.
 
-## 5. Deletion Boundaries
+## 5. Authoritative Identity vs Metadata ID
+The validated direct-child directory name is ALWAYS the authoritative client ID.
+- The `id` property stored in `meta.json` never controls paths, selection, deletion, or logging.
+- If `meta.json.id` differs from the physical directory name, the physical directory name remains the authoritative ID, a sanitized local warning is recorded, and the backend continues using the safe directory name.
+- If the metadata ID is missing or contains traversal/invalid characters, the system still relies purely on the physical directory name as the authoritative ID.
+
+## 6. Deletion Boundaries
 Deletion strictly requires Portable Mode. The endpoint refuses any deletion requests against missing clients, malformed IDs, absolute paths, or paths breaking containment. Only the backend ID may be passed.
 
-## 6. Atomic `meta.json` Writes
+## 7. Atomic `meta.json` Writes & Selection Rollback
 Writing metadata (`meta.json`) uses an atomic strategy:
 - Writes to a temporary file (`mkstemp`).
 - Flushes and forces a disk sync (`os.fsync`).
 - Atomically replaces the old file using `os.replace`.
-- If a write fails, the original data remains intact, returning `PERSISTENCE_WRITE_FAILED`.
+- If a write fails during client creation, the newly created empty candidate directory is safely removed to prevent leaving a visible orphan client. Pre-existing directories are never deleted upon write failure.
+- Client selection explicitly persists required metadata atomically *before* setting the active in-memory client state. If persistence fails, the selection is aborted, returning `PERSISTENCE_WRITE_FAILED`, and the active memory state remains entirely unchanged (rolled back to previous).
 
-## 7. API Error Codes
+## 8. API Error Codes
 The API bridge enforces a stable, sanitized error contract. Tracebacks, exceptions, absolute paths, and user data are never leaked in error messages.
 Supported codes:
 - `INVALID_CLIENT_NAME`
@@ -42,10 +49,12 @@ Supported codes:
 - `CLIENT_SELECT_FAILED`
 - `PORTABLE_MODE_REQUIRED`
 - `PERSISTENCE_WRITE_FAILED`
+- `CLIENT_CREATE_FAILED`
+- `UNKNOWN_ERROR` (Fallback for unexpected exceptions without leaking untrusted backend codes or tracebacks)
 
-## 8. Frontend Text-Only Rendering
+## 9. Frontend Text-Only Rendering
 All UI updates for the portable client session operate using strict DOM generation APIs (`document.createElement`, `textContent`) instead of `innerHTML`. This mitigates XSS by ensuring that malicious display names (e.g., `<script>alert(1)</script>`) are rendered purely as text nodes. Inline events (`onclick`, `onkeydown`) have been eliminated in favor of dynamically bound event listeners.
 
-## 9. Remaining Unverified Behavior & Risks
+## 10. Remaining Unverified Behavior & Risks
 - **Real Windows Junction Behavior**: While `os.path.isjunction()` is implemented and verified through mocks, real-world creation of junctions for test automation was skipped due to administrative privilege limitations in standard CI environments. This requires controlled manual validation.
 - **XSS Risks Outside Selector**: The mitigation strategy was explicitly applied to the Portable Client Selection screen. If user-controlled client names leak into historical reports or logs rendered with unsafe string templates later in the application flow, XSS remains a risk there. Those boundaries remain out of scope for this specific task.
