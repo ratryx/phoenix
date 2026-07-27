@@ -41,6 +41,8 @@
   - Delete default → `DEFAULT_PROFILE_IMMUTABLE`.
   - Duplicate default → creates new custom profile.
   - Unknown ID → `PROFILE_NOT_FOUND`.
+- **Elevation**:
+  - Profile CRUD as a standard user → works successfully (writing to `%LOCALAPPDATA%`).
 
 ### 3. Persistence and Recovery Tests (`test_profile_persistence.py`)
 - **Installed mode** (mock `IS_PORTABLE=False`):
@@ -66,8 +68,9 @@
 - `executar_profile` with unknown ID → sanitized error.
 - Concurrent `executar_profile` → second rejected by `system_mutation`.
 - `resolve_profile_decision(job_id, decision_id, action)` → validated.
-- Duplicate decision → `DECISION_ALREADY_RESOLVED`.
+- Duplicate decision submission → `DECISION_ALREADY_RESOLVED`.
 - Invalid decision ID → `DECISION_NOT_FOUND`.
+- Late decision submission (after timeout) → `DECISION_NOT_FOUND` (or expired equivalent).
 
 ## Windows-Specific Tests (pytest, requires Windows)
 
@@ -79,8 +82,20 @@
   - Steps before the RP-requiring step (e.g., `diagnostic_before`, `cleanup`) run first.
   - RP failure → job enters `decision_required` state.
   - `continue_without_restore_point` → execution resumes from pending step.
-  - `abort` → execution terminates, no further steps run.
+  - `abort` → execution terminates, no further steps run, status indicates `PROFILE_EXECUTION_ABORTED`.
   - No completed steps are repeated after continuation.
+- **Timeouts and Lock Behavior**:
+  - Decision resolved before timeout → execution resumes.
+  - Decision expires (15 min MVP timeout) → execution terminates as `PROFILE_DECISION_EXPIRED`, no pending steps run.
+  - Lock release after `continue` → `system_mutation` released when job ends.
+  - Lock release after `abort` → `system_mutation` released.
+  - Lock release after expiration → `system_mutation` released.
+  - Lock release after internal exception → `system_mutation` released via `finally`.
+- **Closures**:
+  - Frontend closure while backend remains running → execution remains alive until resolved or timeout.
+  - Application restart after an interrupted execution → old job is invalid, decision IDs are invalid.
+- **Privilege execution**:
+  - Privileged step failure as a standard user → sanitized privilege failure recorded.
 - **Progress**:
   - Progress updates deterministically: `(completed / total) * 100`.
   - During `decision_required`, progress does not reset.
@@ -106,10 +121,11 @@
 
 - [ ] Navigate to "Profiles". Default profiles are visible and immutable.
 - [ ] Create "Test Smoke" with steps: `cleanup`, `standby_memory`.
-- [ ] Run "Test Smoke". Progress bar updates. No restore point created.
-- [ ] Create a profile with `optimize_general`. Run it.
+- [ ] Run "Test Smoke" as a standard user. Progress bar updates. No restore point created.
+- [ ] Create a profile with `optimize_general`. Run it as admin.
 - [ ] Verify restore point created before optimization.
 - [ ] Close and reopen the app. Verify "Test Smoke" persists.
 - [ ] Check `%LOCALAPPDATA%\PhoenixOptimizer\profiles.json` exists and is readable.
 - [ ] Simulate RP failure. Verify decision modal appears. Verify continue works.
+- [ ] Verify timeout correctly aborts after a configured (shortened for test) period.
 - [ ] Run `default-complete`. Verify behavior matches legacy Complete Routine.

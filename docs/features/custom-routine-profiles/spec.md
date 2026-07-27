@@ -16,12 +16,19 @@ Technicians need to automate repetitive tasks based on specific scenarios (e.g.,
 - Complex per-step parameters (e.g., selecting specific registry keys or choosing network reset).
 - Technician permission levels or external telemetry.
 
-## Profile Ownership
+## Profile Ownership and Elevation
 Routine profiles are **technician preferences**, not customer or attendance records.
 - **Installed mode**: Windows-user-specific. Stored under `%LOCALAPPDATA%`.
 - **Portable mode**: Portable-instance-specific. Stored in the portable data directory.
 
 Profiles are never stored inside customer or attendance directories.
+
+**Runtime Elevation**:
+The application does not enforce global runtime elevation. While the installer uses `PrivilegesRequired=admin`, there is no application manifest (`requestedExecutionLevel`) or PyInstaller spec enforcing elevation on every launch. Individual mutable operations perform runtime privilege checks (e.g., `ctypes.windll.shell32.IsUserAnAdmin()`).
+Because standard-user execution is possible:
+- `%LOCALAPPDATA%\PhoenixOptimizer\profiles.json` remains writable without administrator rights.
+- Profile CRUD operations do not require elevation.
+- Profile execution must report sanitized privilege failures if a step requiring administrator rights is executed by a standard user.
 
 ## User Workflow
 1. The technician accesses the "Routine Profiles" page.
@@ -158,32 +165,48 @@ When restore-point creation fails:
 1. The current profile execution pauses. Previously completed steps remain completed.
 2. The executor generates an opaque `decision_id` (UUID) tied to the current job, the pending step, and the restore-point failure.
 3. The job transitions to `status: "decision_required"`.
-4. The frontend presents two options: abort or continue without restore point.
-5. The frontend submits the decision via:
+4. A **15-minute backend timeout** begins.
+5. The frontend presents two options: abort or continue without restore point.
+6. The frontend submits the decision via:
    ```python
    resolve_profile_decision(job_id: str, decision_id: str, action: str) -> dict
    ```
    Allowed `action` values are backend-controlled: `"abort"` or `"continue_without_restore_point"`.
-6. The backend validates:
+7. The backend validates:
    - The `job_id` references an active paused job.
    - The `decision_id` matches the pending decision.
    - The token has not already been consumed.
+   - The decision has not expired.
    - The pending step has not already started.
-7. If `continue_without_restore_point`: execution resumes from the pending step. No completed steps are repeated.
-8. If `abort`: execution terminates and the job completes with `ok: false`.
-9. Duplicate submissions are rejected idempotently.
+8. If `continue_without_restore_point`: execution resumes from the pending step. No completed steps are repeated.
+9. If `abort`: execution terminates, the job completes with `ok: false`, and the status indicates `PROFILE_EXECUTION_ABORTED`.
+10. If the **15-minute timeout expires**:
+    - The pending decision becomes invalid.
+    - Execution terminates as aborted (`PROFILE_DECISION_EXPIRED`).
+    - The pending mutable step is not started.
+    - Later submissions using the decision ID return an expired-decision error.
+11. Duplicate submissions are rejected idempotently (`DECISION_ALREADY_RESOLVED`).
 
-### Decision Pause State Ownership
-The paused state (decision context, pending step, continuation callback) is owned by `ProfileExecutor`, not by the generic `JobManager`. `JobManager` does not currently support paused decisions. The executor thread blocks on a `threading.Event` while awaiting the decision, and the `resolve_profile_decision` API signals the event.
+### Decision Pause State Ownership and UI Closure
+The paused state (decision context, pending step, continuation event) is owned by `ProfileExecutor`, not by the generic `JobManager`. `JobManager` does not currently support paused decisions. The executor thread blocks on a `threading.Event` with a timeout, while awaiting the decision. The `resolve_profile_decision` API signals the event.
 
-### Progress During Decision Pause
-- Percentage does not reset.
-- Completed steps remain completed.
-- The pending step is not reported as completed.
-- The `decision_id` is single-use.
-- If the application restarts while awaiting a decision, the job is lost and must be restarted manually.
-- While a job is paused in `decision_required`, the `system_mutation` exclusive group remains locked. No other mutable operation can begin.
-- If the same button is clicked twice, the second submission is rejected with `DECISION_ALREADY_RESOLVED`.
+- **Frontend Closure (UI Window closes, but Python process is alive)**: The backend execution context remains alive until resolved or expired. Reopening the interface may recover the current job state through existing `JobManager.consultar(job_id)` polling (if the frontend implements state recovery via local storage of active `job_id`s, though this may be limited by MVP frontend design).
+- **Process Termination (Python process closes)**: The in-memory paused execution is lost. Operating-system locks disappear with the process. The next application launch must not treat the old execution as active. An old decision ID must never become valid after restart. Durable execution state recovery across restarts is out of scope for MVP.
+
+### Lock Behavior (`system_mutation`)
+- **Acquisition**: The `system_mutation` exclusive group lock is acquired by the `JobManager` when the execution begins.
+- **Holding**: It remains held while the restore-point decision is pending to prevent concurrent mutable operations from modifying the system state while the user is deciding.
+- **Guaranteed Release**: The lock is released in a guaranteed cleanup path (`finally` block) when the job finishes. This release occurs securely after `continue`, `abort`, `timeout`, internal failure, or process termination.
+- **Safety**: A duplicate decision cannot release the lock twice. Read-only operations may continue concurrently only if current `JobManager` policy permits them.
+
+### Partial Execution and History
+When an execution terminates early (user aborts, decision expires, Python process terminates, or a step fails):
+- The final result preserves the list of `completed_steps` IDs.
+- The `failed_step` or pending step ID is recorded.
+- Start and end timestamps are preserved.
+- The sanitized failure code is returned (e.g. `PROFILE_DECISION_EXPIRED`, `PROFILE_EXECUTION_ABORTED`).
+- The `report` path is included *only* if the report was successfully generated.
+- *Note on Process Termination*: If the Python process forcefully terminates, durable history relies on existing `logs.py` which currently writes snapshots sequentially but does not persist incomplete generic job objects. The history tab will show whatever actions were completed and registered via `logs.registrar_acao()`. Generating a durable "interrupted profile" status record is out of MVP scope unless the existing `JobManager`/`logs.py` already handles it.
 
 ## Report and History Contracts
 
@@ -212,7 +235,7 @@ The paused state (decision context, pending step, continuation callback) is owne
 
 ### Installed Mode
 - **Path**: `%LOCALAPPDATA%\PhoenixOptimizer\profiles.json`.
-- **Rationale**: Profiles are technician preferences. `%LOCALAPPDATA%` is always writable by the current Windows user without administrator privileges. The existing codebase uses `%PROGRAMDATA%` for logs and rollback data (shared machine-wide records), but profiles are personal configuration.
+- **Rationale**: Profiles are technician preferences. `%LOCALAPPDATA%` is always writable by the current Windows user without administrator privileges. The existing codebase uses `%PROGRAMDATA%` for logs and rollback data (shared machine-wide records), but profiles are personal configuration. Standard users can create, edit, and save custom profiles.
 - **Missing environment variable**: Falls back to `Path.home() / "PhoenixOptimizer"`.
 
 ### Portable Mode
@@ -239,4 +262,4 @@ All errors returned to the frontend are sanitized. They must not contain:
 - Python function or module names.
 - Internal exception class names.
 
-Error codes use stable string identifiers (e.g., `PROFILE_NOT_FOUND`, `DEFAULT_PROFILE_IMMUTABLE`, `RESTORE_POINT_FAILED`, `PERSISTENCE_WRITE_FAILED`, `DECISION_ALREADY_RESOLVED`).
+Error codes use stable string identifiers (e.g., `PROFILE_NOT_FOUND`, `DEFAULT_PROFILE_IMMUTABLE`, `RESTORE_POINT_FAILED`, `PERSISTENCE_WRITE_FAILED`, `DECISION_ALREADY_RESOLVED`, `PROFILE_DECISION_EXPIRED`, `PROFILE_EXECUTION_ABORTED`).

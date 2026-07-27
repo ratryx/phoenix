@@ -22,14 +22,14 @@ Profiles use a **different** path because they are technician preferences, not m
 - **Installed**: `%LOCALAPPDATA%/PhoenixOptimizer/profiles.json`.
 - **Portable**: `<exe_dir>/dados/profiles.json`.
 
-### Installer Evidence
-The Inno Setup script (`phoenix_setup.iss`) specifies:
-- `PrivilegesRequired=admin` (line 45): The installer runs as admin.
-- `DefaultDirName={autopf}\Phoenix Optimizer` (line 40): Installs to Program Files.
-- No `[Dirs]` section exists. No explicit `%PROGRAMDATA%` directory creation or DACL configuration.
-- The `[UninstallDelete]` comment (lines 85-89) mentions `%PROGRAMDATA%\PhoenixOptimizer` for logs but does not create it.
-- The application itself creates `%PROGRAMDATA%\PhoenixOptimizer` directories on first use via `mkdir(parents=True, exist_ok=True)` calls in `logs.py` and `shared.py`.
-- **Risk**: Since the app requires admin (`PrivilegesRequired=admin`), the current `%PROGRAMDATA%` usage works because the app always runs elevated. However, if the app is ever run without elevation, `%PROGRAMDATA%` writes would fail. Profiles using `%LOCALAPPDATA%` avoid this risk entirely.
+### Runtime Elevation Evidence
+The Inno Setup script (`phoenix_setup.iss`) specifies `PrivilegesRequired=admin`, which only guarantees the *installer* runs elevated.
+A thorough inspection of runtime elevation mechanisms reveals:
+- **PyInstaller**: The build spec (`phoenix.spec`) has no `uac_admin=True` and no `requestedExecutionLevel` application manifest injected.
+- **Source Code**: No global `ShellExecute` elevation restarts or `runas` verbs are used on startup.
+- **Administrator Checks**: The codebase contains operation-specific checks. For example, `modules/otimizacao.py` line 168 explicitly checks `ctypes.windll.shell32.IsUserAnAdmin() != 0`.
+
+**Conclusion**: Runtime elevation is **not** globally enforced. Installer elevation and application runtime elevation are separate. Standard-user execution remains possible. Mutable operations may individually require elevation, but profile CRUD operations should not require elevation. Profile persistence under `%LOCALAPPDATA%` is accessible by standard users.
 
 ### Restore Point
 Implemented in `modules/otimizacao.py` via `criar_ponto_restauracao()` (line 173). Uses fixed PowerShell commands hardcoded in the backend. Returns structured error codes: `NO_ADMIN`, `LIMIT_EXCEEDED`, `RESTORE_DISABLED`, `TIMEOUT`, `UNKNOWN`.
@@ -43,7 +43,7 @@ Implemented in `modules/otimizacao.py` via `criar_ponto_restauracao()` (line 173
 | 2 | Same | PASSED | 0.57s |
 | 3 | Same | PASSED | 0.57s |
 
-**Conclusion**: The intermittent failure was not reproduced in 3 executions. The static `time.sleep(0.1)` remains a potential synchronization risk under heavy system load or slower hardware. The root cause of the previously reported `running` observation is unconfirmed. Production `JobManager` stability is not proven by these executions alone. Phase 1 must investigate both the test synchronization and production state publication without assuming which one is defective.
+**Conclusion**: The intermittent failure was not reproduced in 3 executions. The static `time.sleep(0.1)` remains a potential synchronization risk under heavy system load or slower hardware. The root cause of the previously reported `running` state is unconfirmed. Production `JobManager` stability is not proven by these executions alone. Phase 1 must investigate both the test synchronization and production state publication without assuming which one is defective.
 
 ## Operation Mapping
 
@@ -94,17 +94,18 @@ This sequence is verified against the current `RoutineService.executar()` (lines
 The generic `JobManager` does not support paused decisions. Continuation state is owned by `ProfileExecutor`.
 
 ### Implementation Concept
-1. The executor thread runs inside a `JobManager` job.
+1. The executor thread runs inside a `JobManager` job, holding the `system_mutation` exclusive lock.
 2. When a restore-point failure occurs, the executor:
    - Generates an opaque `decision_id` (UUID).
    - Stores the decision context (pending step, allowed actions) in a thread-safe structure.
    - Updates the job's progress fields to expose `decision_required` status.
-   - Blocks on a `threading.Event`.
+   - Blocks on a `threading.Event` with a **15-minute timeout**.
 3. The frontend polls and sees `status: "decision_required"`.
 4. The frontend calls `resolve_profile_decision(job_id, decision_id, action)`.
 5. The API validates the decision and signals the `threading.Event`.
 6. The executor thread resumes from the pending step (or aborts).
-7. While paused, `system_mutation` remains locked. No other mutable job can start.
+7. If the timeout expires before a decision, the execution safely aborts (`PROFILE_DECISION_EXPIRED`).
+8. The `system_mutation` lock is guaranteed to be released in a `finally` block when the executor completes (normally, aborted, timed out, or crashed). A duplicate decision request cannot release the lock twice.
 
 ### API Contract
 ```python
@@ -113,7 +114,11 @@ resolve_profile_decision(job_id: str, decision_id: str, action: str) -> dict
 - `action` is an enum: `"abort"` or `"continue_without_restore_point"`.
 - Returns `{"ok": true}` on success.
 - Returns `{"ok": false, "erro": "...", "codigo": "DECISION_ALREADY_RESOLVED"}` on duplicate.
-- Returns `{"ok": false, "erro": "...", "codigo": "DECISION_NOT_FOUND"}` if invalid.
+- Returns `{"ok": false, "erro": "...", "codigo": "DECISION_NOT_FOUND"}` if invalid or expired.
+
+## Application Closure Lifecycle
+- **Frontend UI Closure**: If the user closes the frontend window but the Python process continues, the execution context remains alive until the decision timeout expires. If the frontend is reopened, it may recover the active job if local storage tracks the `job_id` (limited by MVP design).
+- **Process Termination**: If the entire Python process terminates, the in-memory execution state is lost. OS locks are released. Upon restart, the old execution is not active, and old decision IDs are invalid. Generating a durable "interrupted profile" status record is out of MVP scope unless the existing `JobManager`/`logs.py` natively handles it.
 
 ## File Placement and Dependencies
 

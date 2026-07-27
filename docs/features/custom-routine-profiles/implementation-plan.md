@@ -6,11 +6,11 @@
 - **Review Gate**: Stop and present findings before applying any fix.
 - **Commit**: `test: investigate JobManager serialization test stability`
 
-## Stage 2: Resolve Installed-Mode Profile Storage
-- **Scope**: Introduce a `obter_pasta_perfis()` utility for profile-specific storage. Installed mode uses `%LOCALAPPDATA%\PhoenixOptimizer`. Portable mode uses `<exe_dir>/dados`. Verify directory creation, write permissions, and missing-variable fallback.
+## Stage 2: Resolve Profile Storage Path
+- **Scope**: Introduce a `obter_pasta_perfis()` utility for profile-specific storage. Installed mode uses `%LOCALAPPDATA%\PhoenixOptimizer` (accessible without admin rights). Portable mode uses `<exe_dir>/dados`. Verify directory creation, write permissions, and missing-variable fallback.
 - **Expected Files**:
   - `modules/shared.py` [MODIFIED]: Add `obter_pasta_perfis()`.
-- **Tests**: Unit test confirming path resolution under both modes.
+- **Tests**: Unit test confirming path resolution under both modes and standard-user write availability.
 - **Review Gate**: Code review before proceeding.
 - **Commit**: `feat(shared): add profile-specific storage path`
 
@@ -23,7 +23,7 @@
 - **Commit**: `feat(core): establish immutable default profile registry`
 
 ## Stage 4: Implement Profile Persistence and CRUD
-- **Scope**: Create `ProfileService` handling CRUD, validation, atomic JSON persistence, and corruption recovery. Uses `obter_pasta_perfis()` for storage and `profile_registry` for defaults.
+- **Scope**: Create `ProfileService` handling CRUD, validation, atomic JSON persistence, and corruption recovery. Uses `obter_pasta_perfis()` for storage and `profile_registry` for defaults. Ensure CRUD works seamlessly for standard users.
 - **Expected Files**:
   - `modules/core/profile_service.py` [NEW]
   - `tests/test_profile_service.py` [NEW]
@@ -44,8 +44,11 @@
   - Runs steps sequentially using module-level functions (not API endpoints).
   - Calculates and emits deterministic progress.
   - Triggers `criar_ponto_restauracao()` before the first `requires_rp` step.
-  - On RP failure, pauses via `threading.Event` and exposes `decision_required` state.
+  - On RP failure, pauses via `threading.Event` with a **15-minute timeout** and exposes `decision_required` state.
   - Accepts `resolve_profile_decision()` to resume or abort.
+  - Releases the `system_mutation` lock safely in a `finally` block on completion, abort, or timeout.
+  - Handles process termination gracefully (active job is lost, next launch won't resume).
+  - Emits sanitized privilege failure codes if privileged steps are executed by a standard user.
   - Does not create nested jobs.
   - Does not depend on `RoutineService`.
   - Receives `id_atendimento` from caller.
@@ -53,8 +56,8 @@
 - **Expected Files**:
   - `modules/core/profile_executor.py` [NEW]
   - `tests/test_profile_executor.py` [NEW]
-- **Review Gate**: Code review of continuation logic and error handling.
-- **Commit**: `feat(core): implement profile executor with RP continuation`
+- **Review Gate**: Code review of continuation logic, timeout, lock release, and error handling.
+- **Commit**: `feat(core): implement profile executor with RP continuation and timeouts`
 
 ## Stage 7: Expose Execution and Decision API
 - **Scope**: Add `executar_profile(profile_id)` and `resolve_profile_decision(job_id, decision_id, action)` to `PhoenixAPI`. Execution uses `exclusive_group="system_mutation"`.
@@ -64,7 +67,7 @@
 - **Commit**: `feat(api): expose profile execution and decision endpoints`
 
 ## Stage 8: Frontend Profile Management Page
-- **Scope**: Build the vanilla HTML/CSS/JS page for listing, creating, editing, duplicating, and deleting profiles.
+- **Scope**: Build the vanilla HTML/CSS/JS page for listing, creating, editing, duplicating, and deleting profiles. Ensure standard users can perform these actions.
 - **Expected Files**:
   - `gui/index.html` [MODIFIED]
   - `gui/js/pages/page_routine_profiles.js` [NEW]
@@ -73,20 +76,20 @@
 - **Commit**: `feat(ui): implement routine profiles management page`
 
 ## Stage 9: Frontend Execution, Progress, and Decision UI
-- **Scope**: Build the execution flow: progress bar, `decision_required` modal with abort/continue options, and report display on completion.
+- **Scope**: Build the execution flow: progress bar, `decision_required` modal with abort/continue options, timeout handling, and report display on completion.
 - **Expected Files**:
   - `gui/js/operations/profile_executor.js` [NEW]
 - **Review Gate**: Visual and functional review.
 - **Commit**: `feat(ui): implement profile execution UI with decision modal`
 
 ## Stage 10: Integration Tests
-- **Scope**: End-to-end tests combining `PhoenixAPI`, `ProfileExecutor`, `ProfileService`, and `JobManager`.
+- **Scope**: End-to-end tests combining `PhoenixAPI`, `ProfileExecutor`, `ProfileService`, and `JobManager`. Includes testing the 15-minute timeout expiration and lock releases.
 - **Expected Files**:
   - `tests/test_profile_integration.py` [NEW]
 - **Commit**: `test: complete integration testing for routine profiles`
 
 ## Stage 11: Windows Smoke Testing
-- **Scope**: Execute manual smoke-test checklist from `test-plan.md` on Windows 10/11.
+- **Scope**: Execute manual smoke-test checklist from `test-plan.md` on Windows 10/11. Ensure tests explicitly cover standard-user execution behavior and timeout/lock scenarios.
 - **Review Gate**: All manual checks pass.
 
 ## Stage 12: Controlled Merge
@@ -97,4 +100,4 @@
 ## Unresolved Risks Tracked for Implementation
 1. **JobManager test intermittency**: Root cause unconfirmed. Must be investigated in Stage 1 without assuming the defect location.
 2. **API gaming duplication**: `PhoenixAPI.executar_otimizacao_gaming()` duplicates `otimizacao.executar_otimizacao_gaming()` inline. Pre-existing inconsistency outside the scope of this feature but relevant if the API method is ever refactored.
-3. **Application restart during decision pause**: The paused job and its decision context are lost. The user must restart the profile manually.
+3. **Application restart during decision pause**: The paused job and its decision context are lost. The user must restart the profile manually. Out of scope for MVP to persist active running states across process terminations.
