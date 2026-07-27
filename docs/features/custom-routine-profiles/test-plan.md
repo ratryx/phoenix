@@ -1,84 +1,115 @@
 # Test Plan: Custom Routine Profiles
 
-## Evidence of Baseline Stability
-- **JobManager Flakiness Test (`test_6_7_resultado_serializavel`)**: Tested once using `python -m pytest tests/test_jobs.py::test_6_7_resultado_serializavel -v`. Passed in 0.57s. The issue is confirmed as a test synchronization flaw (`time.sleep(0.1)`) under varying thread load, rather than a production code flaw.
+## Baseline: JobManager Test Evidence
 
-## Cross-Platform Tests (pytest, native environments)
+### Test: `test_6_7_resultado_serializavel`
+**Command**: `python -m pytest tests/test_jobs.py::test_6_7_resultado_serializavel -v`
 
-### 1. Domain and Validation Tests (`test_profile_service.py`)
-- **Validation Tests**:
-  - Test profile creation with an empty name (must fail).
-  - Test name normalization (stripping spaces).
-  - Test creation with an empty step list (must fail).
-  - Test maximum profile step count (>20 must fail).
-  - Test unknown/unmapped step identifiers (must fail).
-- **CRUD Tests**:
-  - Create a valid custom profile.
-  - Read profiles to ensure it exists alongside `default-quick` and `default-complete`.
-  - Update a custom profile's sequence.
-  - Delete a custom profile.
-  - Attempt to update or delete a Default ID (must raise error `INVALID_OPERATION`).
-- **Duplicate Protection**: Test adding a profile with a name that already exists (case-insensitive check, must fail gracefully).
+| Run | Result | Duration | Observed Final State |
+| --- | --- | --- | --- |
+| 1 (prior session) | PASSED | 0.57s | `status: "done"` |
+| 2 (this session) | PASSED | 0.57s | `status: "done"` |
+| 3 (this session) | PASSED | 0.57s | `status: "done"` |
 
-### 2. Persistence and Recovery Tests (`test_profile_persistence.py`)
-- **Persistence Tests**:
-  - Verify JSON saves to the global application base directory.
-  - Verify atomic write operations (using a mocked temp file rename).
-- **Corruption & Migration Tests**:
-  - Write invalid JSON text to `profiles.json`.
-  - Assert the service creates `profiles.corrupt.json` and loads empty custom profiles cleanly.
-- **Installed vs Portable**:
-  - Mock `IS_PORTABLE = True` and ensure paths resolve to `exe_dir/dados`.
-  - Mock `IS_PORTABLE = False` and ensure paths resolve to `%PROGRAMDATA%\PhoenixOptimizer`.
+**Conclusion**: The intermittent failure was not reproduced in 3 executions. The static `time.sleep(0.1)` at lines 54 and 67 of `test_jobs.py` remains a potential synchronization risk. The root cause of the previously reported `running` state is unconfirmed. Production `JobManager` stability is not proven by these executions. Phase 1 must investigate both test synchronization and production state publication without assuming which is defective.
 
-### 3. API Contract and JobManager Tests (`test_profile_api.py`)
-- **API Tests**:
-  - Ensure the API exposes `obter_profiles()` returning valid schema.
-  - Ensure `executar_profile(profile_id="default-complete")` accepts the ID and returns a `job_id`.
-- **Job Polling Tests**:
-  - Mock an executor. Polling the `job_id` should return `{"status": "running", "progresso": 50, "mensagem": "..."}`.
-- **Concurrency & Privilege Tests**:
-  - Trigger `executar_profile` twice rapidly. Ensure `JobManager` rejects the second one due to `exclusive_group="system_mutation"`.
-- **Failure Injection**:
-  - Force an exception inside the executor and assert `JobManager` catches it and returns a sanitized error payload.
+## Cross-Platform Tests (pytest)
 
----
+### 1. Profile Registry Tests (`test_profile_registry.py`)
+- Default profiles (`default-quick`, `default-standard`, `default-gaming`, `default-complete`) are all present and immutable.
+- `default-complete` sequence matches `RoutineService.executar()` order.
+- Default registry does not import GUI or API modules.
 
-## Windows-Specific Tests (pytest, requiring Windows OS)
+### 2. Domain and Validation Tests (`test_profile_service.py`)
+- **Validation**:
+  - Empty name → rejected.
+  - Name > 50 chars → rejected.
+  - Name normalization (strip whitespace).
+  - Duplicate name (case-insensitive) → rejected.
+  - Empty step list → rejected.
+  - Step count > 20 → rejected.
+  - Unknown step ID → rejected.
+  - `report` not final → rejected.
+  - `report` without `diagnostic_before` and `diagnostic_after` → rejected.
+  - Custom ID with `default-` prefix → rejected.
+- **CRUD**:
+  - Create a valid custom profile → UUID assigned.
+  - Read profiles → defaults + custom combined.
+  - Update custom profile steps → success.
+  - Delete custom profile → success.
+  - Update default → `DEFAULT_PROFILE_IMMUTABLE`.
+  - Delete default → `DEFAULT_PROFILE_IMMUTABLE`.
+  - Duplicate default → creates new custom profile.
+  - Unknown ID → `PROFILE_NOT_FOUND`.
 
-### 4. Executor and Restore-Point Tests (`test_profile_executor.py`)
-- **Restore-Point Tests**:
-  - Profile without mutable steps (e.g., `diagnostic_before` only) should *not* call `criar_ponto_restauracao`.
-  - Profile with `optimize_general` *must* call `criar_ponto_restauracao` once before the optimization.
-  - Inject a failure into `criar_ponto_restauracao`. Ensure the executor aborts execution with `RESTORE_POINT_FAILED`.
-  - Trigger execution with `{skip_restore_point: true}` option. Assert `criar_ponto_restauracao` is bypassed correctly.
-- **Step-Order Tests**:
-  - Run a mock profile. Verify modules are called in the exact expected order.
-- **Report and History Integration**:
-  - Execute a profile with `diagnostic_before`, `cleanup`, `diagnostic_after`, and `report`. Ensure the snapshots are saved successfully and `exportar_relatorio_txt` generates the file.
+### 3. Persistence and Recovery Tests (`test_profile_persistence.py`)
+- **Installed mode** (mock `IS_PORTABLE=False`):
+  - Profiles saved to `%LOCALAPPDATA%/PhoenixOptimizer/profiles.json`.
+  - Atomic write: `profiles.tmp.json` → rename to `profiles.json`.
+- **Portable mode** (mock `IS_PORTABLE=True`):
+  - Profiles saved to `<exe_dir>/dados/profiles.json`.
+  - Read-only drive → `PERSISTENCE_WRITE_FAILED`.
+  - No silent fallback to installed storage.
+- **Corruption**:
+  - Invalid JSON → moved to `profiles.corrupt.json`, empty list loaded.
+  - Backup rename failure → empty list loaded, error logged.
+  - ID with `default-` prefix in file → silently ignored.
+- **Directory creation failure** → sanitized error returned.
+- **Missing `%LOCALAPPDATA%`** → falls back to `Path.home() / "PhoenixOptimizer"`.
 
----
+### 4. API Contract Tests (`test_profile_api.py`)
+- `obter_profiles()` → returns valid JSON with defaults and customs.
+- `criar_profile(name, steps)` → returns new profile with UUID.
+- `editar_profile(id, name, steps)` → updates custom profile.
+- `deletar_profile(id)` → removes custom profile.
+- `executar_profile(profile_id)` → returns `{"job_id": "..."}`.
+- `executar_profile` with unknown ID → sanitized error.
+- Concurrent `executar_profile` → second rejected by `system_mutation`.
+- `resolve_profile_decision(job_id, decision_id, action)` → validated.
+- Duplicate decision → `DECISION_ALREADY_RESOLVED`.
+- Invalid decision ID → `DECISION_NOT_FOUND`.
 
-## UI and Frontend Tests (Node.js/Jest/Vanilla JS Checks)
+## Windows-Specific Tests (pytest, requires Windows)
 
-### 5. Frontend Integration
-- **Page Tests**:
-  - Ensure the "Custom Profiles" UI renders the list correctly.
-  - Ensure editing forms restrict lengths (1-50 chars).
-- **Option B Restore-Point Loop**:
-  - If execution fails with `RESTORE_POINT_FAILED`, assert the "Continuar mesmo assim" legacy modal appears.
-  - Assert clicking "Continuar" triggers a second API call to `executar_profile` passing `skip_restore_point=true`.
+### 5. Executor Tests (`test_profile_executor.py`)
+- **Step Order**: Steps execute in profile-defined order.
+- **Restore Point**:
+  - Profile without RP-requiring steps → `criar_ponto_restauracao` not called.
+  - Profile with `optimize_general` → `criar_ponto_restauracao` called once before it.
+  - Steps before the RP-requiring step (e.g., `diagnostic_before`, `cleanup`) run first.
+  - RP failure → job enters `decision_required` state.
+  - `continue_without_restore_point` → execution resumes from pending step.
+  - `abort` → execution terminates, no further steps run.
+  - No completed steps are repeated after continuation.
+- **Progress**:
+  - Progress updates deterministically: `(completed / total) * 100`.
+  - During `decision_required`, progress does not reset.
+- **Report**:
+  - Profile with `diagnostic_before`, `cleanup`, `diagnostic_after`, `report` → TXT file generated.
+  - Report failure after mutable steps → `ok: false` with `completed_steps` listed.
+- **Attendance**: Executor receives `id_atendimento` from API. Does not create its own.
+- **Gaming**: `optimize_gaming` calls `executar_otimizacao_gaming(id, resetar_rede=False)`.
 
----
+## Frontend Tests (Vanilla JS)
+
+### 6. Profile Management Page
+- Default profiles listed and not editable/deletable.
+- Custom profile CRUD forms enforce name length and step limits.
+- Execute button disabled during active execution.
+
+### 7. Decision Modal
+- `decision_required` status → modal shown with abort/continue options.
+- Clicking the same option twice → only one request sent.
+- After decision → polling resumes normally.
 
 ## Manual Smoke-Test Checklist (Windows 10/11)
 
-- [ ] Open the app, navigate to "Profiles". Verify default profiles are visible.
-- [ ] Create a profile named "Test Smoke", add "Cleanup", and "Standby Memory".
-- [ ] Run "Test Smoke". Ensure progress bar updates fluidly.
-- [ ] Verify that no Restore Point was created.
-- [ ] Create a profile adding "General Optimization". Run it. 
-- [ ] Verify Windows shows a new Restore Point created.
-- [ ] Verify the report tab contains a populated text file containing valid space cleanup metrics.
-- [ ] Close the application and reopen it. Verify "Test Smoke" persists.
-- [ ] Check `%PROGRAMDATA%\PhoenixOptimizer\profiles.json` without Admin permissions. Note if Windows UAC disrupts saving (addressing the unresolved permissions risk).
+- [ ] Navigate to "Profiles". Default profiles are visible and immutable.
+- [ ] Create "Test Smoke" with steps: `cleanup`, `standby_memory`.
+- [ ] Run "Test Smoke". Progress bar updates. No restore point created.
+- [ ] Create a profile with `optimize_general`. Run it.
+- [ ] Verify restore point created before optimization.
+- [ ] Close and reopen the app. Verify "Test Smoke" persists.
+- [ ] Check `%LOCALAPPDATA%\PhoenixOptimizer\profiles.json` exists and is readable.
+- [ ] Simulate RP failure. Verify decision modal appears. Verify continue works.
+- [ ] Run `default-complete`. Verify behavior matches legacy Complete Routine.
