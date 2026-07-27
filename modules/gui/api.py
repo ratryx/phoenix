@@ -82,30 +82,51 @@ class PhoenixAPI:
             "clientes": listar_clientes_portable()
         }
 
-    def selecionar_cliente(self, nome: str) -> dict:
+    def criar_cliente_portable(self, nome: str) -> dict:
+        from modules.shared import criar_cliente_portable, IS_PORTABLE
+        if not IS_PORTABLE:
+            return {"ok": False, "erro": "PORTABLE_MODE_REQUIRED"}
+        if not nome or not nome.strip():
+            return {"ok": False, "erro": "INVALID_CLIENT_NAME"}
+        meta = criar_cliente_portable(nome)
+        return {"ok": True, "cliente": meta}
+
+    def selecionar_cliente(self, id_cliente: str) -> dict:
         """Define o cliente ativo da sessão."""
         from modules.shared import (definir_cliente_ativo, 
-                                    salvar_meta_cliente, IS_PORTABLE)
-        if not nome or not nome.strip():
-            return {"ok": False, "erro": "Nome inválido"}
-        nome = nome.strip()
-        definir_cliente_ativo(nome)
+                                    salvar_meta_cliente, listar_clientes_portable, IS_PORTABLE)
+        if not id_cliente or not id_cliente.strip():
+            return {"ok": False, "erro": "INVALID_CLIENT_ID"}
+            
+        id_cliente = id_cliente.strip()
+        nome_cliente = "Desconhecido"
+        
+        # Encontrar nome display
         if IS_PORTABLE:
-            salvar_meta_cliente(nome)
-        return {"ok": True, "cliente": nome}
+            clientes = listar_clientes_portable()
+            encontrado = next((c for c in clientes if c['id'] == id_cliente), None)
+            if not encontrado:
+                return {"ok": False, "erro": "CLIENT_NOT_FOUND"}
+            nome_cliente = encontrado['nome']
+            
+        try:
+            definir_cliente_ativo(id_cliente, nome_cliente)
+            if IS_PORTABLE:
+                salvar_meta_cliente(id_cliente, nome_cliente)
+            return {"ok": True, "cliente": {"id": id_cliente, "nome": nome_cliente}}
+        except ValueError:
+            return {"ok": False, "erro": "CLIENT_SELECT_FAILED"}
 
     def remover_cliente_portable(self, id_cliente: str) -> dict:
         """Remove um cliente do pen drive."""
         from modules.shared import remover_cliente_portable
-        if remover_cliente_portable(id_cliente):
-            return {"ok": True}
-        return {"ok": False, "erro": "Não foi possível remover o cliente"}
+        return remover_cliente_portable(id_cliente)
 
     def obter_modo_portable(self) -> dict:
-        from modules.shared import IS_PORTABLE, CLIENTE_ATIVO
+        from modules.shared import IS_PORTABLE, CLIENTE_ATIVO_ID, CLIENTE_ATIVO_NOME
         return {
             "portable": IS_PORTABLE,
-            "cliente_ativo": CLIENTE_ATIVO
+            "cliente_ativo": {"id": CLIENTE_ATIVO_ID, "nome": CLIENTE_ATIVO_NOME} if CLIENTE_ATIVO_ID else None
         }
 
     # ---------- Diagnóstico ----------
