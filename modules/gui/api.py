@@ -20,7 +20,7 @@ class PhoenixAPI:
         self._id_atendimento = None
         self._nome_cliente = ""
         self._job_manager = job_manager or JobManager()
-        
+
         if hardware_service is None:
             from modules.core.hardware_service import HardwareService
             hardware_service = HardwareService(hw_info=hw_info)
@@ -39,10 +39,10 @@ class PhoenixAPI:
     def _iniciar_job(self, target_fn, *args, operation_name="unknown", exclusive_group=None, **kwargs) -> dict:
         """Delega a criação do job para o JobManager e retorna o formato esperado pelo JS."""
         job_id = self._job_manager.submit(
-            target_fn, 
-            *args, 
-            operation_name=operation_name, 
-            exclusive_group=exclusive_group, 
+            target_fn,
+            *args,
+            operation_name=operation_name,
+            exclusive_group=exclusive_group,
             **kwargs
         )
         return {"job_id": job_id}
@@ -78,10 +78,17 @@ class PhoenixAPI:
             "PORTABLE_MODE_REQUIRED": "Esta ação exige que o modo Portable esteja ativo.",
             "PERSISTENCE_WRITE_FAILED": "Falha ao salvar de forma segura os metadados do cliente."
         }
+        erro_str = mensagens.get(codigo)
+        if not erro_str:
+            import logging
+            logging.warning(f"Unknown portable API error code intercepted: {codigo}")
+            codigo = "UNKNOWN_ERROR"
+            erro_str = "Ocorreu um erro interno desconhecido na operação do cliente portátil."
+
         return {
             "ok": False,
             "codigo": codigo,
-            "erro": mensagens.get(codigo, f"Erro desconhecido: {codigo}")
+            "erro": erro_str
         }
 
     def iniciar_atendimento(self, nome_cliente: str = "") -> dict:
@@ -106,7 +113,7 @@ class PhoenixAPI:
             return self._make_error("PORTABLE_MODE_REQUIRED")
         if not nome or not nome.strip():
             return self._make_error("INVALID_CLIENT_NAME")
-            
+
         try:
             meta = criar_cliente_portable(nome)
             if isinstance(meta, dict) and not meta.get("ok", True):
@@ -117,26 +124,30 @@ class PhoenixAPI:
 
     def selecionar_cliente(self, id_cliente: str) -> dict:
         """Define o cliente ativo da sessão."""
-        from modules.shared import (definir_cliente_ativo, 
+        from modules.shared import (definir_cliente_ativo,
                                     salvar_meta_cliente, listar_clientes_portable, IS_PORTABLE)
         if not IS_PORTABLE:
             return self._make_error("PORTABLE_MODE_REQUIRED")
-            
+
         if not id_cliente or not id_cliente.strip():
             return self._make_error("INVALID_CLIENT_ID")
-            
+
         id_cliente = id_cliente.strip()
-        
+
         # Encontrar nome display
         clientes = listar_clientes_portable()
         encontrado = next((c for c in clientes if c['id'] == id_cliente), None)
         if not encontrado:
             return self._make_error("CLIENT_NOT_FOUND")
         nome_cliente = encontrado['nome']
-            
+
+        # Persistir estado primeiro
+        res = salvar_meta_cliente(id_cliente, nome_cliente)
+        if not (res and res.get("ok")):
+            return self._make_error("PERSISTENCE_WRITE_FAILED")
+
         try:
             definir_cliente_ativo(id_cliente, nome_cliente)
-            salvar_meta_cliente(id_cliente, nome_cliente)
             return {"ok": True, "cliente": {"id": id_cliente, "nome": nome_cliente}}
         except ValueError:
             return self._make_error("CLIENT_SELECT_FAILED")
@@ -253,7 +264,7 @@ class PhoenixAPI:
         """Otimiza o disco em segundo plano (fire-and-forget)."""
         return self._iniciar_job(
             lambda: {"ok": True, "saida": otimizacao.otimizar_disco_principal()},
-            operation_name="otimizar_disco", 
+            operation_name="otimizar_disco",
             exclusive_group="system_mutation"
         )
 
@@ -300,18 +311,18 @@ class PhoenixAPI:
     def executar_rotina_completa(self, nome_cliente: str = "") -> dict:
         """Executa a rotina completa em segundo plano (fire-and-forget)."""
         self.iniciar_atendimento(nome_cliente)
-        
+
         def rotina():
             return self._routine_service.executar(
                 id_atendimento=self._id_atendimento,
                 nome_cliente=self._nome_cliente
             )
-            
+
         return self._iniciar_job(rotina, operation_name="rotina_completa", exclusive_group="system_mutation")
 
     def liberar_memoria_standby(self) -> dict:
         return self._iniciar_job(
-            lambda: {"ok": otimizacao.liberar_memoria_standby(), 
+            lambda: {"ok": otimizacao.liberar_memoria_standby(),
                      "mensagem": "Memória standby liberada com sucesso"},
             operation_name="liberar_memoria",
             exclusive_group="system_mutation"
@@ -319,7 +330,7 @@ class PhoenixAPI:
 
     def analisar_startup(self) -> dict:
         return self._iniciar_job(
-            lambda: {"ok": True, 
+            lambda: {"ok": True,
                      "entradas": otimizacao.analisar_startup()},
             operation_name="analisar_startup"
         )

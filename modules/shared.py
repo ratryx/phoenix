@@ -79,7 +79,10 @@ def criar_cliente_portable(nome: str) -> dict:
     id_cliente = f"{slug}-{uuid.uuid4().hex[:8]}"
     
     pasta = obter_pasta_clientes() / id_cliente
-    pasta.mkdir(parents=True, exist_ok=True)
+    criada_agora = False
+    if not pasta.exists():
+        pasta.mkdir(parents=True, exist_ok=True)
+        criada_agora = True
     
     meta_file = pasta / 'meta.json'
     meta = {
@@ -89,6 +92,11 @@ def criar_cliente_portable(nome: str) -> dict:
         'total_atendimentos': 0
     }
     if not _write_json_atomic(meta_file, meta):
+        if criada_agora:
+            try:
+                pasta.rmdir()
+            except Exception:
+                pass
         return {"ok": False, "erro": "PERSISTENCE_WRITE_FAILED"}
         
     return meta
@@ -157,7 +165,10 @@ def listar_clientes_portable() -> list:
             try:
                 with open(meta_file, 'r', encoding='utf-8') as f:
                     meta = json.load(f)
-                meta_id = meta.get('id', id_pasta)
+                leaked_id = meta.get('id')
+                if leaked_id and leaked_id != id_pasta:
+                    import logging
+                    logging.warning(f"Metadata ID mismatch in client {id_pasta}. The directory name will remain the authoritative ID.")
                 nome_display = meta.get('nome_display', nome_display)
                 ultimo_atendimento = meta.get('ultimo_atendimento')
                 total_atendimentos = meta.get('total_atendimentos', 0)
@@ -208,10 +219,10 @@ def remover_cliente_portable(id_cliente: str) -> dict:
     except Exception:
         return {"ok": False, "erro": "CLIENT_DELETE_FAILED"}
 
-def salvar_meta_cliente(id_cliente: str, nome: str):
-    """Salva/atualiza os metadados do cliente ativo."""
+def salvar_meta_cliente(id_cliente: str, nome: str) -> dict:
+    """Salva/atualiza os metadados do cliente ativo. Retorna o status da operação."""
     if not _validar_id_cliente(id_cliente):
-        return
+        return {"ok": False, "erro": "INVALID_CLIENT_ID"}
         
     pasta = obter_pasta_base(id_cliente)
     pasta.mkdir(parents=True, exist_ok=True)
@@ -229,6 +240,8 @@ def salvar_meta_cliente(id_cliente: str, nome: str):
     meta['nome_display'] = nome
     meta['ultimo_atendimento'] = datetime.now().strftime('%d/%m/%Y %H:%M')
     
-    _write_json_atomic(meta_file, meta)
+    if not _write_json_atomic(meta_file, meta):
+        return {"ok": False, "erro": "PERSISTENCE_WRITE_FAILED"}
+    return {"ok": True}
 
 CACHE_DIR = obter_pasta_base() / "cache"
