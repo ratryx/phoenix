@@ -124,33 +124,16 @@ class PhoenixAPI:
 
     def selecionar_cliente(self, id_cliente: str) -> dict:
         """Define o cliente ativo da sessão."""
-        from modules.shared import (definir_cliente_ativo,
-                                    salvar_meta_cliente, listar_clientes_portable, IS_PORTABLE)
-        if not IS_PORTABLE:
-            return self._make_error("PORTABLE_MODE_REQUIRED")
-
+        from modules.shared import selecionar_cliente_portable, IS_PORTABLE
+        
         if not id_cliente or not id_cliente.strip():
             return self._make_error("INVALID_CLIENT_ID")
-
-        id_cliente = id_cliente.strip()
-
-        # Encontrar nome display
-        clientes = listar_clientes_portable()
-        encontrado = next((c for c in clientes if c['id'] == id_cliente), None)
-        if not encontrado:
-            return self._make_error("CLIENT_NOT_FOUND")
-        nome_cliente = encontrado['nome']
-
-        # Persistir estado primeiro
-        res = salvar_meta_cliente(id_cliente, nome_cliente)
-        if not (res and res.get("ok")):
-            return self._make_error("PERSISTENCE_WRITE_FAILED")
-
-        try:
-            definir_cliente_ativo(id_cliente, nome_cliente)
-            return {"ok": True, "cliente": {"id": id_cliente, "nome": nome_cliente}}
-        except ValueError:
-            return self._make_error("CLIENT_SELECT_FAILED")
+            
+        res = selecionar_cliente_portable(id_cliente.strip())
+        if not res.get("ok"):
+            return self._make_error(res.get("erro", "CLIENT_SELECT_FAILED"))
+            
+        return res
 
     def remover_cliente_portable(self, id_cliente: str) -> dict:
         """Remove um cliente do pen drive."""

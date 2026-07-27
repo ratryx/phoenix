@@ -142,9 +142,12 @@ def main():
         cliente_escolhido = selecao_cliente.exibir_selecao_cli()
         if not cliente_escolhido:
             sys.exit(0)
-        from modules.shared import definir_cliente_ativo, salvar_meta_cliente
-        definir_cliente_ativo(cliente_escolhido)
-        salvar_meta_cliente(cliente_escolhido)
+        from modules.shared import selecionar_cliente_portable
+        res = selecionar_cliente_portable(cliente_escolhido["id"])
+        if not res.get("ok"):
+            console.print(f"\n[bold red]Erro ao selecionar o cliente: {res.get('erro')}[/bold red]")
+            console.print("[dim]O programa será encerrado.[/dim]")
+            sys.exit(1)
 
     escolha = exibir_tela_escolha_modo(hw_info, recomendacao)
 

@@ -11,10 +11,10 @@ from modules.shared import console, listar_clientes_portable
 from modules import banner
 
 
-def exibir_selecao_cli() -> str | None:
+def exibir_selecao_cli() -> dict | None:
     """
     Exibe a tela de seleção de cliente no modo CLI.
-    Retorna o nome do cliente selecionado ou None se cancelado.
+    Retorna um dicionário do cliente (id, nome) ou None se cancelado.
     """
     console.clear()
     banner.exibir_banner(modo="Portable")
@@ -56,7 +56,7 @@ def exibir_selecao_cli() -> str | None:
             if 1 <= idx <= len(clientes):
                 cliente = clientes[idx - 1]
                 console.print(f"\n[green]✓[/green] Cliente selecionado: [bold]{cliente['nome']}[/bold]")
-                return cliente['nome']
+                return {"id": cliente["id"], "nome": cliente["nome"]}
     else:
         console.print(Panel(
             "[bold]Primeiro atendimento![/bold]\n"
@@ -66,18 +66,29 @@ def exibir_selecao_cli() -> str | None:
     
     # Criar novo cliente
     console.print()
-    nome = Prompt.ask(
-        "[bold white]Nome do cliente ou PC[/bold white]",
-        default=""
-    ).strip()
+    while True:
+        nome = Prompt.ask(
+            "[bold white]Nome do cliente ou PC[/bold white]",
+            default=""
+        ).strip()
+        
+        if not nome:
+            if not Confirm.ask("Continuar sem identificar o cliente?", default=False):
+                return None
+            nome = "Cliente sem nome"
+            break
+        else:
+            break
+            
+    from modules.shared import criar_cliente_portable
+    res = criar_cliente_portable(nome)
     
-    if not nome:
-        if not Confirm.ask("Continuar sem identificar o cliente?", default=False):
-            return None
-        nome = "Cliente sem nome"
-    
-    console.print(f"\n[green]✓[/green] Novo cliente: [bold]{nome}[/bold]")
-    return nome
+    if not res.get("ok", True):  # If ok is False
+        console.print(f"\n[red]✗ Erro ao criar cliente: {res.get('erro')}[/red]")
+        return None
+        
+    console.print(f"\n[green]✓[/green] Novo cliente: [bold]{res['nome_display']}[/bold]")
+    return {"id": res["id"], "nome": res["nome_display"]}
 
 
 def exibir_selecao_gui() -> str | None:

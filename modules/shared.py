@@ -43,6 +43,28 @@ def _is_safe_dir(pasta: Path) -> bool:
         return False
     return True
 
+def _resolver_pasta_cliente(id_cliente: str, must_exist: bool = False) -> Path | None:
+    if not _validar_id_cliente(id_cliente):
+        return None
+        
+    raiz = obter_pasta_clientes().resolve()
+    candidato = (obter_pasta_clientes() / id_cliente).resolve()
+    
+    if not candidato.is_relative_to(raiz):
+        return None
+        
+    if candidato == raiz:
+        return None
+        
+    if candidato.parent != raiz:
+        return None
+        
+    if must_exist:
+        if not candidato.exists() or not _is_safe_dir(candidato):
+            return None
+            
+    return candidato
+
 def _write_json_atomic(filepath: Path, data: dict) -> bool:
     import tempfile
     try:
@@ -64,8 +86,14 @@ def _write_json_atomic(filepath: Path, data: dict) -> bool:
 def criar_cliente_portable(nome: str) -> dict:
     import unicodedata
     import re
-    nome = nome.strip() if nome else "Cliente Sem Nome"
-    
+    import uuid
+    if not isinstance(nome, str) or not nome.strip():
+        return {"ok": False, "erro": "INVALID_CLIENT_NAME"}
+        
+    nome = nome.strip()
+    if len(nome) > 100 or any(ord(c) < 32 for c in nome):
+        return {"ok": False, "erro": "INVALID_CLIENT_NAME"}
+        
     # Strip accents
     n_acc = unicodedata.normalize('NFKD', nome).encode('ASCII', 'ignore').decode('utf-8')
     # Keep only alphanumeric and spaces
@@ -76,16 +104,26 @@ def criar_cliente_portable(nome: str) -> dict:
     if not slug:
         slug = "cliente"
     slug = slug[:50]
-    id_cliente = f"{slug}-{uuid.uuid4().hex[:8]}"
     
-    pasta = obter_pasta_clientes() / id_cliente
-    criada_agora = False
-    if not pasta.exists():
-        pasta.mkdir(parents=True, exist_ok=True)
-        criada_agora = True
+    pasta = None
+    id_cliente = None
+    for _ in range(5):
+        tentativa_id = f"{slug}-{uuid.uuid4().hex[:8]}"
+        tentativa_pasta = obter_pasta_clientes() / tentativa_id
+        if not tentativa_pasta.exists():
+            pasta = tentativa_pasta
+            id_cliente = tentativa_id
+            break
+            
+    if not pasta:
+        return {"ok": False, "erro": "CLIENT_CREATE_FAILED"}
+        
+    pasta.mkdir(parents=True, exist_ok=False)
+    criada_agora = True
     
     meta_file = pasta / 'meta.json'
     meta = {
+        'ok': True,
         'id': id_cliente,
         'nome_display': nome,
         'ultimo_atendimento': datetime.now().strftime('%d/%m/%Y %H:%M'),
@@ -105,13 +143,9 @@ def obter_pasta_base(id_cliente: str = None) -> Path:
     if IS_PORTABLE:
         base = obter_pasta_exe() / 'dados'
         if id_cliente:
-            if not _validar_id_cliente(id_cliente):
-                raise ValueError("ID de cliente inválido")
-            pasta = base / 'clientes' / id_cliente
-            pasta_absoluta = pasta.resolve()
-            raiz_absoluta = (base / 'clientes').resolve()
-            if not str(pasta_absoluta).startswith(str(raiz_absoluta)) or pasta_absoluta == raiz_absoluta:
-                raise ValueError("Path traversal detectado")
+            pasta = _resolver_pasta_cliente(id_cliente, must_exist=False)
+            if not pasta:
+                raise ValueError("Path traversal detectado ou ID inválido")
             return pasta
         return base
     
@@ -140,8 +174,35 @@ def obter_pasta_logs_atual() -> Path:
     pasta.mkdir(parents=True, exist_ok=True)
     return pasta
 
-def listar_clientes_portable() -> list:
+def selecionar_cliente_portable(id_cliente: str) -> dict:
+    if not IS_PORTABLE:
+        return {"ok": False, "erro": "PORTABLE_MODE_REQUIRED"}
+        
+    pasta = _resolver_pasta_cliente(id_cliente, must_exist=True)
+    if not pasta:
+        return {"ok": False, "erro": "CLIENT_NOT_FOUND"}
+        
+    clientes = listar_clientes_portable()
+    encontrado = next((c for c in clientes if isinstance(c, dict) and c.get('id') == id_cliente), None)
+    if not encontrado:
+        return {"ok": False, "erro": "CLIENT_NOT_FOUND"}
+        
+    nome_cliente = encontrado['nome']
+    
+    res = salvar_meta_cliente(id_cliente, nome_cliente)
+    if not (res and res.get("ok")):
+        return {"ok": False, "erro": "PERSISTENCE_WRITE_FAILED"}
+        
+    try:
+        definir_cliente_ativo(id_cliente, nome_cliente)
+        return {"ok": True, "cliente": {"id": id_cliente, "nome": nome_cliente}}
+    except ValueError:
+        return {"ok": False, "erro": "CLIENT_SELECT_FAILED"}
+
+def listar_clientes_portable() -> list | dict:
     """Lista todos os clientes salvos no pen drive."""
+    if not IS_PORTABLE:
+        return {"ok": False, "codigo": "PORTABLE_MODE_REQUIRED", "erro": "Esta ação exige que o modo Portable esteja ativo."}
     pasta_clientes = obter_pasta_clientes()
     if not pasta_clientes.exists():
         return []
@@ -194,21 +255,9 @@ def remover_cliente_portable(id_cliente: str) -> dict:
     """Remove a pasta do cliente do pen drive. Retorna dict estruturado."""
     if not IS_PORTABLE:
         return {"ok": False, "erro": "PORTABLE_MODE_REQUIRED"}
-    if not _validar_id_cliente(id_cliente):
-        return {"ok": False, "erro": "INVALID_CLIENT_ID"}
         
-    pasta_clientes = obter_pasta_clientes()
-    pasta = pasta_clientes / id_cliente
-    
-    try:
-        pasta_absoluta = pasta.resolve()
-        raiz_absoluta = pasta_clientes.resolve()
-        if not str(pasta_absoluta).startswith(str(raiz_absoluta)) or pasta_absoluta == raiz_absoluta:
-            return {"ok": False, "erro": "CLIENT_DELETE_FAILED"}
-    except Exception:
-        return {"ok": False, "erro": "CLIENT_DELETE_FAILED"}
-        
-    if not pasta.exists() or not _is_safe_dir(pasta):
+    pasta = _resolver_pasta_cliente(id_cliente, must_exist=True)
+    if not pasta:
         return {"ok": False, "erro": "CLIENT_NOT_FOUND"}
         
     try:

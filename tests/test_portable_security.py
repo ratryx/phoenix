@@ -57,17 +57,18 @@ def test_criar_cliente_portable_nome_invalido(mock_portable):
     assert "scriptalert1script" in meta["id"]
 
     meta2 = criar_cliente_portable("")
-    assert "cliente-" in meta2["id"]
+    assert meta2["ok"] is False
+    assert meta2["erro"] == "INVALID_CLIENT_NAME"
 
     meta3 = criar_cliente_portable("..//--  ")
     assert "cliente-" in meta3["id"]
 
 def test_path_traversal_obter_pasta_base(mock_portable):
-    with pytest.raises(ValueError, match="ID de cliente inválido"):
+    with pytest.raises(ValueError, match="Path traversal detectado ou ID inválido"):
         obter_pasta_base("..")
 
-    with pytest.raises(ValueError, match="ID de cliente inválido"):
-        obter_pasta_base("C:\\")
+    with pytest.raises(ValueError, match="Path traversal detectado ou ID inválido"):
+        obter_pasta_base("../cliente")
 
 def test_legacy_client_compatibility(mock_portable):
     # Criar um cliente legado sem meta.json
@@ -100,7 +101,7 @@ def test_remover_cliente_portable(mock_portable):
 def test_remover_cliente_portable_traversal(mock_portable):
     res = remover_cliente_portable("..")
     assert res["ok"] is False
-    assert res["erro"] == "INVALID_CLIENT_ID"
+    assert res["erro"] == "CLIENT_NOT_FOUND"
 
     # Mesmo se bypassar validação de string (usando hack), deve ser pego
     import modules.shared as ms
@@ -109,7 +110,7 @@ def test_remover_cliente_portable_traversal(mock_portable):
 
     res2 = remover_cliente_portable("..")
     assert res2["ok"] is False
-    assert res2["erro"] == "CLIENT_DELETE_FAILED"
+    assert res2["erro"] == "CLIENT_NOT_FOUND"
 
     ms._validar_id_cliente = original_val
 
