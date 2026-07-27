@@ -1,57 +1,55 @@
 # Architecture Document: Custom Routine Profiles
 
 ## Repository Audit Findings
-- **JobManager**: Resides in `modules/gui/jobs.py`. It correctly implements asynchronous background task execution, managing locks and exclusive groups (`system_mutation`).
-- **RoutineService**: Found in `modules/core/routine_service.py`. It orchestrates the Complete Routine linearly.
-- **Persistence Paths**: Discovered in `modules/shared.py`. Handles resolution for portable mode (`exe_dir/dados`) and installed mode (`%PROGRAMDATA%/PhoenixOptimizer`).
-- **Restore Point**: Implemented in `modules/otimizacao.py` via `criar_ponto_restauracao()`, invoking PowerShell and emitting robust error codes.
-- **JobManager Test Risk**: `tests/test_jobs.py` contains a sleep-based timing risk (`time.sleep(0.1)`), causing intermittent false positives where jobs appear `running` when they should be `done`.
+- **JobManager**: Centralized in `modules/gui/jobs.py`. `JobManager` intercepts executions and safely prevents overlapping mutable profiles via `exclusive_group="system_mutation"`.
+- **Complete Routine**: `RoutineService` (in `modules/core/routine_service.py`) hardcodes the linear routine sequence but hides internal progress steps. This prevents it from being used dynamically in custom profiles.
+- **Gaming Optimization**: Currently scattered inside `modules/gui/api.py`. There is no canonical backend atomic method for Gaming.
+- **Persistence Resolution**: `modules.shared.obter_pasta_base()` provides the correct paths, mapping automatically to `%PROGRAMDATA%\PhoenixOptimizer` (Installed) or `exe_dir\dados` (Portable). Standard-user write access to `%PROGRAMDATA%` is an unresolved implementation risk that requires deeper installer investigation during implementation.
+- **Restore Point**: Implemented correctly in `otimizacao.py`. PowerShell BYPASS commands are strictly backend-hardcoded, and errors securely cascade up.
+- **JobManager Risk**: `tests/test_jobs.py` uses `time.sleep(0.1)` indicating an intermittent race condition where the thread hasn't finished dumping "done". This is a test synchronization flaw, not a production JobManager flaw.
 
-## Operation Mapping
+## Operation Mapping & Real Implementation
+| Step | Real Module & Class | Real Method | Exists in API? |
+| --- | --- | --- | --- |
+| `diagnostic_before` | `modules.diagnostico` | `coletar_diagnostico_silencioso()` | Wrapped (`obter_diagnostico`) |
+| `cleanup` | `modules.limpeza` | `executar_limpeza_completa()` | Wrapped (`executar_limpeza`) |
+| `optimize_general` | `modules.otimizacao` | `executar_otimizacao_geral()` | Wrapped (`executar_otimizacao_geral`) |
+| `optimize_gaming` | `modules.otimizacao` | *Gap: Scattered in API. Must be extracted* | Wrapped (`executar_otimizacao_gaming`) |
+| `optimize_disk` | `modules.otimizacao` | `otimizar_disco_principal()` | Wrapped (`otimizar_disco`) |
+| `standby_memory` | `modules.otimizacao` | `liberar_memoria_standby()` | Wrapped (`liberar_memoria_standby`) |
+| `startup_analysis` | `modules.otimizacao` | `analisar_startup()` | Wrapped (`analisar_startup`) |
+| `diagnostic_after` | `modules.diagnostico` | `coletar_diagnostico_silencioso()` | Wrapped |
+| `report` | `modules.relatorio` | `exportar_relatorio_txt()` | Embedded in `executar_rotina_completa` |
 
-| Conceptual Step | Real Module | Function/Method | Mutates | Creates Job Directly? | Requires RP? |
-| --- | --- | --- | --- | --- | --- |
-| `diagnostic_before` | `modules.diagnostico` | `coletar_diagnostico_silencioso()` | No | No (Wrapped) | No |
-| `cleanup` | `modules.limpeza` | `executar_limpeza_completa()` | Yes | No (Wrapped) | No |
-| `optimize_general` | `modules.otimizacao` | `executar_otimizacao_geral()` | Yes | No (Wrapped) | Yes |
-| `optimize_gaming` | `modules.otimizacao` | (Multiple specific functions) | Yes | No (Wrapped) | Yes |
-| `optimize_disk` | `modules.otimizacao` | `otimizar_disco_principal()` | Yes | No (Wrapped) | No |
-| `standby_memory` | `modules.otimizacao` | `liberar_memoria_standby()` | Yes | No (Wrapped) | No |
-| `startup_analysis`| `modules.otimizacao` | `analisar_startup()` | No | No (Wrapped) | No |
-| `diagnostic_after`| `modules.diagnostico` | `coletar_diagnostico_silencioso()` | No | No (Wrapped) | No |
-| `report` | `modules.relatorio` | `exportar_relatorio_txt()` | No | No (Wrapped) | No |
+### Architectural Gaps
+1. **Gaming Optimization Extraction**: There is no single atomic backend operation for Gaming. The sequence (`ativar_plano_energia`, `ativar_modo_jogo_windows`, `desativar_gamebar`, `otimizar_gpu_para_jogos`) must be extracted into `modules/otimizacao.py` as `executar_otimizacao_gaming(resetar_rede=False)` so `ProfileExecutor` can call it cleanly.
+2. **Standard-User `%PROGRAMDATA%` Permissions**: Unresolved risk regarding whether non-admins can save profiles locally if the installer does not grant explicit DACLs.
 
-## Proposed Components and Responsibilities
-- **ProfileService (`modules/core/profile_service.py`)**: Responsible for CRUD operations on custom profiles. Validates schema and handles persistence.
-- **ProfileExecutor (`modules/core/profile_executor.py`)**: Converts a `profile_id` into a sequence of Python operations. Generates the restore point if required, runs the sequence, calculates progress, and handles errors. Absorbs or wraps `RoutineService` for the Complete Profile.
-- **PhoenixAPI (`modules/gui/api.py`)**: Exposes two new endpoints: `obter_profiles()` and `executar_profile(profile_id: str)`.
-- **JSON Storage**: Uses atomic write patterns (write to temp file, replace) inside `modules.shared.obter_pasta_base()`.
+## Complete Profile Single-Source-of-Truth
+The "Complete Profile" default (`default-complete`) acts as the single source of truth for sequences.
+Instead of `ProfileExecutor` hiding steps inside `RoutineService.executar`, `default-complete` is explicitly defined as `[diagnostic_before, cleanup, optimize_general, diagnostic_after, report]`.
+The executor executes this sequence linearly.
+*Compatibility Strategy*: The legacy `RoutineService.executar()` and `PhoenixAPI.executar_rotina_completa` will be deprecated and internally re-routed to invoke `ProfileExecutor.execute("default-complete")`. This guarantees behavior, progress, and execution consistency.
 
-## Persistence Strategy
-Custom profiles will be stored in `profiles.json` within the application's base data directory (`obter_pasta_base()`). 
-- **Atomic Writes**: Data is serialized to a `.tmp` file and then renamed to `profiles.json` to prevent corruption during power loss.
-- **Corruption Recovery**: If `json.load` fails, the file is moved to `profiles.corrupt.json` and a fresh file is created.
+## Persistence and Profile Ownership
+Profiles belong to the Application globally, not to individual clients.
+- **Path**: `modules.shared.obter_pasta_base(cliente=None) / "profiles.json"`.
+- **Atomic Persistence**: Data is written using `json.dump` to `profiles.tmp.json` and cleanly renamed via `os.replace` to prevent mid-write corruption.
+- **Recovery**: If `profiles.json` fails `json.load()`, it is moved to `profiles.corrupt.json`. An empty custom profile state is instantiated.
 
-## Default Profile Strategy
-Default profiles (Quick, Standard, Gaming, Complete) are generated programmatically in the backend using immutable definitions. They are not stored in `profiles.json`. When the UI requests the profile list, the backend concatenates the hardcoded defaults with the parsed custom profiles.
-- **The Complete Profile**: Rather than mapping out steps manually, the executor will detect the "Complete" `profile_id` and explicitly invoke `RoutineService.executar()` to guarantee consistency.
+## Frontend / Backend Contract
+The frontend invokes `executar_profile(profile_id, options)` and receives a `job_id`.
+The API is heavily fortified:
+- No module paths or function names exist in the payload.
+- Backend resolves `profile_id` against the validated JSON store and Default registries.
+- Options: `{ skip_restore_point: boolean }` is allowed to facilitate the legacy Option B UI flow.
 
-## Concurrency and JobManager Integration
-- The executor operates within a single thread spawned by `JobManager`.
-- It acquires the `system_mutation` exclusive lock to prevent overlapping routines or manual optimizations during execution.
-- Only the `JobManager` job ID is returned to the frontend. The frontend polls progress via `verificar_tarefa`.
+## Restore-Point Timing
+The executor reads the full profile array. Before invoking `step[i]`, it checks the step's metadata. The *very first time* a step has `requires_rp=True`, the executor halts and invokes `otimizacao.criar_ponto_restauracao()`. Once created successfully, a boolean flag `rp_created_this_session` is set to true to prevent further calls.
+If it fails, the executor safely aborts with `status="done", ok=False, codigo="RESTORE_POINT_FAILED"`.
 
-## API Contracts (Frontend/Backend)
-- **Frontend Request**: `window.Phoenix.executar_profile({profile_id: "uuid-1234"})`
-- **Backend Response**: `{"job_id": "job-uuid"}`
-- **Polling**: `window.Phoenix.verificar_tarefa("job-uuid")` returns `{ status: "running", progresso: 45, mensagem: "Limpando disco..." }`
-- **No Remote Code Execution**: The API only accepts the string ID of the profile. Mapping to Python modules happens securely inside `ProfileExecutor`.
-
-## File Placement Proposal
-- `modules/core/profile_service.py` [NEW]
-- `modules/core/profile_executor.py` [NEW]
-- `modules/gui/api.py` [MODIFIED]
-- `tests/test_profile_service.py` [NEW]
-- `tests/test_profile_executor.py` [NEW]
-- `gui/js/pages/page_routine_profiles.js` [NEW]
-- `gui/js/operations/routine_executor.js` [MODIFIED/NEW]
+## File Placement & Dependencies
+- `modules/core/profile_service.py` [NEW]: Contains `ProfileService` for CRUD.
+- `modules/core/profile_executor.py` [NEW]: Contains `ProfileExecutor`.
+- `modules/otimizacao.py` [MODIFIED]: Extract gaming operations.
+- `modules/gui/api.py` [MODIFIED]: Add `obter_profiles`, `executar_profile`. Re-route `executar_rotina_completa`.

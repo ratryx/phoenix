@@ -1,77 +1,56 @@
 # Implementation Plan: Custom Routine Profiles
 
-## Stage 1: Investigate the possible JobManager test instability
-- **Scope**: Identify and stabilize the flaky `test_6_7_resultado_serializavel` test to ensure the foundation is solid before adding complex `ProfileExecutor` jobs. The audit identified an insufficient `time.sleep(0.1)` inside the test which causes intermittent failures.
-- **Expected Files**: 
-  - `tests/test_jobs.py` (to be modified during execution).
-- **Files Not to Modify**: 
-  - `modules/gui/jobs.py`
-  - Production code.
-- **Acceptance Criteria**: The test passes 10/10 times locally without modifying production code.
-- **Risks**: Modifying tests may mask real race conditions, so only the timing logic must be corrected using a proper polling assertion loop.
-- **Review Gate**: Stop and require code review of the test fix before proceeding.
-- **Commit Message**: `test: stabilize JobManager serialization test`
+## Stage 1: Stabilize Foundation
+- **Scope**: Fix the flaky `JobManager` test `test_6_7_resultado_serializavel`. The static `time.sleep(0.1)` must be replaced with a robust polling assertion to prevent false negatives in CI/CD.
+- **Expected Files**: `tests/test_jobs.py` (to be modified).
+- **Files Not to Modify**: `modules/gui/jobs.py` (production logic is sound).
 
-## Stage 2: Domain Model and Persistence
-- **Scope**: Create `ProfileService` to handle CRUD operations, schema definitions, and atomic persistence of custom profiles.
+## Stage 2: Extract Gaming Backend
+- **Scope**: Resolve the architectural gap where `optimize_gaming` exists only inline inside `PhoenixAPI`. Extract `executar_otimizacao_gaming(resetar_rede)` into `modules/otimizacao.py`.
+- **Expected Files**:
+  - `modules/otimizacao.py` [MODIFIED]
+  - `modules/gui/api.py` [MODIFIED]
+- **Files Not to Modify**: Frontend callers should not notice the refactor.
+
+## Stage 3: Domain Model and Persistence
+- **Scope**: Create `ProfileService` to handle CRUD operations, defining Default Profiles registry explicitly, and atomic persistence.
+- **Risk Handled**: The installer/non-admin write access to `%PROGRAMDATA%` risk must be investigated here. If unresolvable in standard config, a fallback to `%LOCALAPPDATA%` or a prompt to run as Admin must be scoped.
 - **Expected Files**:
   - `modules/core/profile_service.py` [NEW]
   - `tests/test_profile_service.py` [NEW]
-- **Files Not to Modify**: Frontend, API.
-- **Acceptance Criteria**: All CRUD operations pass in unit tests. Corruption recovery accurately loads an empty profile list.
-- **Commit Message**: `feat(core): implement profile domain model and persistence`
 
-## Stage 3: Backend CRUD API
-- **Scope**: Integrate `ProfileService` into `PhoenixAPI` to expose profile data securely to the frontend.
+## Stage 4: Backend CRUD API
+- **Scope**: Expose `obter_profiles`, `criar_profile`, `editar_profile`, and `deletar_profile` inside `PhoenixAPI`.
 - **Expected Files**:
   - `modules/gui/api.py` [MODIFIED]
   - `tests/test_profile_api.py` [NEW]
-- **Acceptance Criteria**: The pywebview backend properly responds to `obter_profiles`, `criar_profile`, `editar_profile`, and `deletar_profile`.
-- **Commit Message**: `feat(api): expose routine profiles CRUD endpoints`
 
-## Stage 4: Backend Executor
-- **Scope**: Create `ProfileExecutor` to map string IDs to actual operations and generate restore points when required.
+## Stage 5: Backend Executor
+- **Scope**: Create `ProfileExecutor` to sequentially map string IDs to atomic backend operations. Handles the `skip_restore_point` flag and automatically invokes `criar_ponto_restauracao` securely. Captures snapshots for `report`.
 - **Expected Files**:
   - `modules/core/profile_executor.py` [NEW]
   - `tests/test_profile_executor.py` [NEW]
-- **Acceptance Criteria**: The executor runs mock profiles step-by-step asynchronously and delegates the "Complete" profile to `RoutineService`.
-- **Commit Message**: `feat(core): implement custom profile executor logic`
 
-## Stage 5: API Exposure (Executor)
-- **Scope**: Expose `executar_profile` inside `PhoenixAPI`, delegating to `JobManager` using `exclusive_group="system_mutation"`.
+## Stage 6: API Exposure & Single-Source-Of-Truth Migration
+- **Scope**: Expose `executar_profile` inside `PhoenixAPI` with `exclusive_group="system_mutation"`. Internally deprecate `RoutineService.executar()` and re-route `executar_rotina_completa` to call `ProfileExecutor.execute("default-complete")`.
 - **Expected Files**:
   - `modules/gui/api.py` [MODIFIED]
-- **Acceptance Criteria**: The `executar_profile` endpoint returns a valid `job_id` and securely wraps the executor logic.
-- **Commit Message**: `feat(api): expose profile execution endpoint`
+  - `modules/core/routine_service.py` [DEPRECATED/REMOVED]
 
-## Stage 6: Routine Profiles Frontend Page
-- **Scope**: Build the vanilla HTML/CSS/JS page for listing, editing, creating, and deleting profiles.
+## Stage 7: Routine Profiles Frontend Page
+- **Scope**: Build the vanilla HTML/CSS/JS page for listing, creating, and deleting profiles using the new endpoints.
 - **Expected Files**:
   - `gui/index.html` [MODIFIED]
   - `gui/js/pages/page_routine_profiles.js` [NEW]
   - `gui/style.css` [MODIFIED]
-- **Acceptance Criteria**: UI correctly lists and manipulates profiles without allowing modification of Defaults.
-- **Commit Message**: `feat(ui): implement routine profiles management page`
 
-## Stage 7: Progress, Report, and History Integration
-- **Scope**: Build the progress tracker inside the frontend executor bridge and ensure reports dump correctly to the frontend view on completion.
+## Stage 8: Progress, Option B, and Report UI Sync
+- **Scope**: Build the progress tracker inside the frontend executor bridge. Implement the "Continuar mesmo assim" Option B fallback loop when `RESTORE_POINT_FAILED` is caught. Ensure the History tab loads the TXT report correctly.
 - **Expected Files**:
   - `gui/js/operations/routine_executor.js` [MODIFIED/NEW]
-- **Acceptance Criteria**: A complete custom profile run correctly displays a fluid progress bar and populates the History tab upon success.
-- **Commit Message**: `feat(ui): integrate progress tracking and reports for custom profiles`
 
-## Stage 8: Automated Tests
-- **Scope**: Add any missing end-to-end Python integration tests combining `PhoenixAPI`, `ProfileExecutor`, and `JobManager`.
-- **Expected Files**:
-  - `tests/test_profile_integration.py` [NEW]
-- **Acceptance Criteria**: Total 100% test passing in both Python and Node suites.
-- **Commit Message**: `test: complete integration testing for routine profiles`
+## Stage 9: Automated Tests
+- **Scope**: 100% test coverage including mock persistence environments.
 
-## Stage 9: Windows Smoke Testing
-- **Scope**: Manually perform the Smoke Test Checklist identified in `test-plan.md` on a Windows machine.
-- **Acceptance Criteria**: Visual confirmation that restore points trigger correctly and operations pass.
-
-## Stage 10: Controlled Merge
-- **Scope**: Merge `feat/custom-routine-profiles` into `main` keeping a clean history.
-- **Review Gate**: Full pull request approval required.
-- **Commit Message**: `merge: integrate custom routine profiles feature`
+## Stage 10: Windows Smoke Testing & Merge
+- **Scope**: Execute manual verification to certify the `%PROGRAMDATA%` permissions and Option B flow behavior locally. Pull request to merge into `main`.
