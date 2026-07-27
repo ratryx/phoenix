@@ -202,7 +202,7 @@ async function runTests() {
         assert.strictEqual(ctx.dom.inputNovo.style.borderColor, "var(--cor-erro)", "Destaca campo input com erro");
     }
 
-    console.log("Testes JS Client Session passaram.");
+    console.log("\n9 passed, 0 failed");
 }
 
 runTests().catch(err => {

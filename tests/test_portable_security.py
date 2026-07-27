@@ -126,3 +126,58 @@ def test_api_integration(mock_portable):
     
     res_remover = api.remover_cliente_portable(id_cliente)
     assert res_remover["ok"] is True
+
+def test_atomic_write_failure(mock_portable, monkeypatch):
+    import os
+    original_replace = os.replace
+    def fake_replace(src, dst):
+        raise OSError("Mock error replacing file")
+    monkeypatch.setattr(os, "replace", fake_replace)
+    
+    meta = criar_cliente_portable("Atomic Fail")
+    assert meta.get("ok") is False
+    assert meta.get("erro") == "PERSISTENCE_WRITE_FAILED"
+    
+def test_junction_rejection(mock_portable, monkeypatch):
+    import os
+    import modules.shared as ms
+    original_isjunction = getattr(os.path, 'isjunction', lambda p: False)
+    
+    def fake_isjunction(p):
+        if "junction-fake" in str(p):
+            return True
+        return original_isjunction(p)
+    monkeypatch.setattr(os.path, "isjunction", fake_isjunction, raising=False)
+    
+    # Bypass creating folder if it fails
+    # Let's just create a folder directly
+    pasta = ms.obter_pasta_clientes() / "junction-fake"
+    pasta.mkdir(parents=True, exist_ok=True)
+    
+    res = ms.remover_cliente_portable("junction-fake")
+    assert res["ok"] is False
+    assert res["erro"] == "CLIENT_NOT_FOUND"
+
+def test_api_portable_mode_required(mock_portable, monkeypatch):
+    # Simulate not portable mode
+    monkeypatch.setattr("modules.shared.IS_PORTABLE", False)
+    api = PhoenixAPI(hw_info={})
+    
+    res = api.selecionar_cliente("algum-id")
+    assert res["ok"] is False
+    assert res["erro"] == "PORTABLE_MODE_REQUIRED"
+    
+    res2 = api.remover_cliente_portable("algum-id")
+    assert res2["ok"] is False
+    assert res2["erro"] == "PORTABLE_MODE_REQUIRED"
+
+def test_active_client_state(mock_portable):
+    api = PhoenixAPI(hw_info={})
+    res_criar = api.criar_cliente_portable("Estado Ativo")
+    id_cliente = res_criar["cliente"]["id"]
+    
+    api.selecionar_cliente(id_cliente)
+    
+    from modules.shared import CLIENTE_ATIVO_ID, CLIENTE_ATIVO_NOME
+    assert CLIENTE_ATIVO_ID == id_cliente
+    assert CLIENTE_ATIVO_NOME == "Estado Ativo"
