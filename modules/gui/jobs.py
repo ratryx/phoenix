@@ -1,9 +1,9 @@
 import uuid
 import threading
 import time
-import traceback
 import logging
 import json
+from modules.core.exceptions import JobCancelledError
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class JobContext:
 
     def raise_if_cancelled(self):
         if self.is_cancel_requested():
-            raise Exception("Job cancelled cooperatively")
+            raise JobCancelledError("Job cancelled cooperatively")
 
     def update_progress(self, pct: int, msg: str):
         self._update_progress_fn(self.job_id, pct, msg)
@@ -35,16 +35,21 @@ class JobManager:
         self.ttl_seconds = ttl_seconds
         self.max_retained_jobs = max_retained_jobs
         self._exclusive_groups = {}  # group_name -> active_job_id
-        self._shutdown = False
+        
+        self._shutdown_event = threading.Event()
         self._watchdog_interval = watchdog_interval
 
         self._watchdog = threading.Thread(target=self._watchdog_loop, daemon=True, name="PhoenixJobWatchdog")
         self._watchdog.start()
 
     def _watchdog_loop(self):
-        while not self._shutdown:
+        while not self._shutdown_event.wait(self._watchdog_interval):
             self._check_timeouts()
-            time.sleep(self._watchdog_interval)
+            self._cleanup_expired()
+            
+        # Garante a limpeza uma última vez após o shutdown
+        self._check_timeouts()
+        self._cleanup_expired()
 
     def submit(self, target_fn, *args, job_id=None, operation_name="unknown", exclusive_group=None, timeout=None, pass_job_context=False, **kwargs):
         """Inicia uma função em thread isolada, retornando o job_id."""
@@ -53,7 +58,7 @@ class JobManager:
             if not isinstance(job_id, str) or not job_id.strip():
                 job_id = str(uuid.uuid4())
 
-            if self._shutdown:
+            if self._shutdown_event.is_set():
                 return self._create_rejected_job(
                     job_id, operation_name, exclusive_group,
                     "JOB_MANAGER_SHUTDOWN", "O sistema está sendo encerrado."
@@ -86,6 +91,7 @@ class JobManager:
                 "created_at": time.time(),
                 "started_at": None,
                 "completed_at": None,
+                "worker_exited_at": None,
                 "operation_name": operation_name,
                 "exclusive_group": exclusive_group,
                 "worker_alive": True,
@@ -121,9 +127,16 @@ class JobManager:
                     }
                     exception_type = "invalid"
 
+            except JobCancelledError:
+                res = {
+                    "ok": False,
+                    "codigo": "JOB_CANCELLED",
+                    "erro": "A operação foi cancelada pelo usuário."
+                }
+                exception_type = "cancelled"
             except Exception as e:
                 logger.exception(f"Falha durante execução do job {job_id} ({operation_name})")
-                if "Job cancelled cooperatively" in str(e) or job_ctx.is_cancel_requested():
+                if job_ctx.is_cancel_requested():
                     res = {
                         "ok": False,
                         "codigo": "JOB_CANCELLED",
@@ -143,7 +156,8 @@ class JobManager:
                     job = self._jobs.get(job_id)
                     if job:
                         job["worker_alive"] = False
-                        # Só sobrescreve se ainda não for timed_out ou cancel_requested que já virou cancelled
+                        job["worker_exited_at"] = time.time()
+                        
                         if job["status"] not in ("timed_out", "cancelled"):
                             if job_ctx.is_cancel_requested() or exception_type == "cancelled":
                                 job["status"] = "cancelled"
@@ -159,7 +173,6 @@ class JobManager:
                         elif not job.get("completed_at"):
                             job["completed_at"] = time.time()
 
-                    # Libera grupo exclusivo se formos o dono
                     if exclusive_group and self._exclusive_groups.get(exclusive_group) == job_id:
                         del self._exclusive_groups[exclusive_group]
 
@@ -178,12 +191,14 @@ class JobManager:
             "created_at": time.time(),
             "started_at": time.time(),
             "completed_at": time.time(),
+            "worker_exited_at": time.time(),
             "operation_name": operation_name,
             "exclusive_group": exclusive_group,
             "worker_alive": False,
             "cancel_event": threading.Event(),
             "deadline": None
         }
+        self._cleanup_expired()
         return job_id
 
     def update_progress(self, job_id, pct, msg):
@@ -195,9 +210,21 @@ class JobManager:
                     pct = max(0, min(100, int(float(pct))))
                 except (ValueError, TypeError):
                     pct = 0
-                msg = str(msg)[:200]
+                    
+                # Sanitização rigorosa da mensagem
+                if msg is None:
+                    safe_msg = ""
+                elif isinstance(msg, (int, float, bool)):
+                    safe_msg = str(msg)
+                elif isinstance(msg, str):
+                    safe_msg = msg
+                else:
+                    safe_msg = "[Objeto Complexo Omitido]"
+                    
+                safe_msg = safe_msg[:200]
+                
                 job["progresso"] = pct
-                job["mensagem"] = msg
+                job["mensagem"] = safe_msg
 
     def get_progress(self, job_id):
         """Lê o progresso de forma segura."""
@@ -240,6 +267,7 @@ class JobManager:
                         "erro": "A operação excedeu o tempo máximo permitido."
                     }
                     job["completed_at"] = time.time()
+                    # Não limpa o exclusive_group e worker_alive aqui; quem faz isso é o worker no finally
 
     def consultar(self, job_id: str) -> dict:
         """Consulta o status atual para o frontend."""
@@ -269,8 +297,9 @@ class JobManager:
         now = time.time()
         terminal_jobs = []
         for j_id, job in self._jobs.items():
-            if not job["worker_alive"] and job["status"] in ("done", "failed", "cancelled", "timed_out"):
-                terminal_jobs.append((j_id, job.get("completed_at") or 0))
+            if not job["worker_alive"]:
+                exit_time = job.get("worker_exited_at") or job.get("completed_at") or 0
+                terminal_jobs.append((j_id, exit_time))
 
         expired_ids = [j_id for j_id, comp_time in terminal_jobs if now - comp_time > self.ttl_seconds]
         for j_id in expired_ids:
@@ -286,14 +315,12 @@ class JobManager:
     def shutdown(self):
         """Inicia encerramento seguro do gerenciador de jobs."""
         with self._lock:
-            self._shutdown = True
+            self._shutdown_event.set()
             for job in self._jobs.values():
                 if job["worker_alive"]:
                     job["cancel_event"].set()
-                    if job["status"] not in ("done", "failed", "cancelled", "timed_out"):
-                        job["status"] = "cancelled"
-                        if not job.get("resultado"):
-                            job["resultado"] = {"ok": False, "codigo": "JOB_CANCELLED", "erro": "A operação foi cancelada pelo encerramento do sistema."}
+                    if job["status"] == "running":
+                        job["status"] = "cancel_requested"
 
         if threading.current_thread() != self._watchdog:
             self._watchdog.join(timeout=2.0)
