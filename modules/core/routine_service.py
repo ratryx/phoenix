@@ -1,91 +1,145 @@
-import os
-import traceback
-from modules import logs
-from modules import diagnostico
-from modules import limpeza
-from modules import otimizacao
-from modules import relatorio
+import logging
+from modules.core.exceptions import JobCancelledError
+
+logger = logging.getLogger(__name__)
 
 class RoutineService:
-    def __init__(self, svc_diagnostico=None, svc_limpeza=None, svc_otimizacao=None, svc_logs=None, svc_relatorio=None):
-        self.diagnostico = svc_diagnostico or diagnostico
-        self.limpeza = svc_limpeza or limpeza
-        self.otimizacao = svc_otimizacao or otimizacao
-        self.logs = svc_logs or logs
-        self.relatorio = svc_relatorio or relatorio
+    """
+    Serviço dedicado para orquestrar a rotina completa de atendimento.
+    Isola a lógica de negócio do PhoenixAPI e garante que a sequência
+    de diagnóstico, limpeza, otimização e geração de relatórios seja
+    cumprida e validada independentemente de janelas ou threads.
+    """
+    def __init__(
+        self,
+        diagnostico_module=None,
+        limpeza_module=None,
+        otimizacao_module=None,
+        logs_module=None,
+        relatorio_module=None,
+    ):
+        # Injeção de dependências (usa os reais por padrão)
+        if diagnostico_module is None:
+            from modules import diagnostico
+            diagnostico_module = diagnostico
+        if limpeza_module is None:
+            from modules import limpeza
+            limpeza_module = limpeza
+        if otimizacao_module is None:
+            from modules import otimizacao
+            otimizacao_module = otimizacao
+        if logs_module is None:
+            from modules import logs
+            logs_module = logs
+        if relatorio_module is None:
+            from modules import relatorio
+            relatorio_module = relatorio
 
-    def executar(self, id_atendimento: str, nome_cliente: str, job_context=None) -> dict:
+        self._diagnostico = diagnostico_module
+        self._limpeza = limpeza_module
+        self._otimizacao = otimizacao_module
+        self._logs = logs_module
+        self._relatorio = relatorio_module
+
+    def executar(self, id_atendimento: str, nome_cliente: str = "", job_context=None) -> dict:
+        """
+        Executa o fluxo completo do atendimento:
+        1. Diagnóstico Inicial
+        2. Limpeza
+        3. Otimização
+        4. Diagnóstico Final
+        5. Exportação de Relatório
+        """
         if not id_atendimento:
-            return {"ok": False, "erro": "O ID do atendimento é obrigatório"}
+            raise ValueError("ID do atendimento é obrigatório para iniciar a rotina.")
 
         def check_cancel():
             if job_context:
                 job_context.raise_if_cancelled()
 
         try:
-            self.logs.registrar_acao(id_atendimento, "Início da rotina completa")
+            # Checkpoint 1: before initial diagnosis
+            check_cancel()
+            if job_context: job_context.update_progress(10, "Realizando diagnóstico inicial...")
+            
+            # 1. Diagnóstico Inicial
+            dados_antes = self._diagnostico.coletar_diagnostico_silencioso()
+            self._logs.salvar_snapshot(id_atendimento, "antes", dados_antes, nome_cliente)
+            self._logs.registrar_acao(id_atendimento, "Diagnóstico inicial coletado", nome_cliente=nome_cliente)
+            
+            # Checkpoint 2: after initial diagnosis and snapshot persistence
             check_cancel()
 
-            # Passo 1: Diagnostico Inicial
-            if job_context:
-                job_context.update_progress(10, "Realizando diagnóstico inicial...")
-            diag_inicial = self.diagnostico.coletar_diagnostico_silencioso()
+            # Checkpoint 3: before cleanup
+            check_cancel()
+            if job_context: job_context.update_progress(30, "Executando limpeza completa...")
+            
+            # 2. Limpeza
+            espaco_liberado = self._limpeza.executar_limpeza_completa(id_atendimento)
+            
+            # Checkpoint 4: after cleanup
             check_cancel()
 
-            # Passo 2: Limpeza
-            if job_context:
-                job_context.update_progress(30, "Executando limpeza completa...")
-            bytes_liberados = self.limpeza.executar_limpeza_completa(id_atendimento)
+            # Checkpoint 5: before optimization
+            check_cancel()
+            if job_context: job_context.update_progress(60, "Aplicando otimizações gerais...")
+            
+            # 3. Otimização
+            self._otimizacao.executar_otimizacao_geral(id_atendimento)
+            
+            # Checkpoint 6: after optimization
             check_cancel()
 
-            # Passo 3: Otimizacao
-            if job_context:
-                job_context.update_progress(60, "Aplicando otimizações gerais e de gaming...")
-            self.otimizacao.executar_otimizacao_geral(id_atendimento)
+            # Checkpoint 7: before final diagnosis
+            check_cancel()
+            if job_context: job_context.update_progress(80, "Realizando diagnóstico final...")
+            
+            # 4. Diagnóstico Final
+            dados_depois = self._diagnostico.coletar_diagnostico_silencioso()
+            self._logs.salvar_snapshot(id_atendimento, "depois", dados_depois, nome_cliente)
+            self._logs.registrar_acao(id_atendimento, "Diagnóstico final coletado")
+            
+            # Checkpoint 8: after final snapshot persistence
             check_cancel()
 
-            self.otimizacao.ativar_plano_energia_alto_desempenho()
-            self.otimizacao.ativar_modo_jogo_windows()
-            self.otimizacao.desativar_gamebar_overlay()
-            self.otimizacao.otimizar_gpu_para_jogos()
+            # Checkpoint 9: before report generation
             check_cancel()
+            if job_context: job_context.update_progress(90, "Gerando relatório final...")
+            
+            # 5. Exportação de Relatório
+            espaco_liberado_mb = round(espaco_liberado / (1024 ** 2), 2)
+            pasta_logs = self._logs.obter_pasta_logs()
+            caminho_txt = pasta_logs / f"{id_atendimento}_relatorio.txt"
+            
+            snapshot_antes = self._logs.carregar_snapshot(id_atendimento, "antes")
+            snapshot_depois = self._logs.carregar_snapshot(id_atendimento, "depois")
+            
+            self._relatorio.exportar_relatorio_txt(snapshot_antes, snapshot_depois, espaco_liberado_mb, caminho_txt)
 
-            # Passo 4: Diagnostico Final
-            if job_context:
-                job_context.update_progress(80, "Realizando diagnóstico final...")
-            diag_final = self.diagnostico.coletar_diagnostico_silencioso()
-            check_cancel()
-
-            # Passo 5: Relatorio
-            if job_context:
-                job_context.update_progress(90, "Gerando relatório final...")
-            caminho_relatorio = self.relatorio.gerar_pdf(id_atendimento, nome_cliente, diag_inicial, diag_final, bytes_liberados)
-            check_cancel()
-
-            self.logs.registrar_acao(id_atendimento, "Rotina concluída com sucesso")
-
-            if job_context:
-                job_context.update_progress(100, "Concluído!")
+            self._logs.registrar_acao(id_atendimento, "Rotina concluída com sucesso")
+            if job_context: job_context.update_progress(100, "Concluído!")
 
             return {
                 "ok": True,
-                "relatorio_gerado": os.path.exists(caminho_relatorio) if caminho_relatorio else False,
-                "caminho_relatorio": caminho_relatorio,
-                "espaco_liberado_mb": round(bytes_liberados / (1024**2), 2)
+                "id_atendimento": id_atendimento,
+                "antes": dados_antes,
+                "depois": dados_depois,
+                "espaco_liberado_mb": espaco_liberado_mb,
+                "relatorio_txt": str(caminho_txt),
             }
 
-        except Exception as e:
-            msg_erro = str(e)
-            if "Job cancelled cooperatively" in msg_erro:
-                self.logs.registrar_acao(id_atendimento, "Rotina cancelada pelo usuário")
-                return {
-                    "ok": False,
-                    "codigo": "JOB_CANCELLED",
-                    "erro": "Rotina cancelada cooperativamente."
-                }
-            self.logs.registrar_acao(id_atendimento, f"Erro na rotina: {msg_erro}")
-            traceback.print_exc()
+        except JobCancelledError:
+            self._logs.registrar_acao(id_atendimento, "Rotina cancelada pelo usuário")
             return {
                 "ok": False,
-                "erro": msg_erro
+                "codigo": "JOB_CANCELLED",
+                "erro": "Rotina cancelada cooperativamente."
+            }
+        except Exception as e:
+            self._logs.registrar_acao(id_atendimento, f"Erro na rotina: {e}")
+            logger.exception("Falha inesperada durante a rotina completa.")
+            return {
+                "ok": False,
+                "codigo": "ROUTINE_FAILED",
+                "erro": "Não foi possível concluir a rotina."
             }
