@@ -28,11 +28,9 @@
         try {
             var jobRes = await Phoenix.bridge.call("listar_servicos");
             if (!jobRes || !jobRes.job_id) { 
-                Phoenix.ui.feedback.esconderOverlay(); 
                 return; 
             }
             var resultado = await Phoenix.jobs.awaitJob(jobRes.job_id);
-            Phoenix.ui.feedback.esconderOverlay();
 
             if (!resultado || !resultado.ok) {
                 container.innerHTML =
@@ -96,11 +94,9 @@
                             var metodoAcao = estaAtivo ? "desativar_servico" : "ativar_servico";
                             var mutRes = await Phoenix.bridge.call(metodoAcao, nomeServico);
                             if (!mutRes || !mutRes.job_id) { 
-                                Phoenix.ui.feedback.esconderOverlay(); 
                                 return; 
                             }
                             var mutResultado = await Phoenix.jobs.awaitJob(mutRes.job_id);
-                            Phoenix.ui.feedback.esconderOverlay();
 
                             if (mutResultado && mutResultado.ok) {
                                 toggle.classList.toggle("ativo");
@@ -108,8 +104,8 @@
                             }
                         } catch (e) {
                             console.error("[ERRO] Toggle serviço:", e);
-                            Phoenix.ui.feedback.esconderOverlay();
                         } finally {
+                            Phoenix.ui.feedback.esconderOverlay();
                             servicosEmAlteracao.delete(nomeServico);
                         }
                     });
@@ -117,8 +113,9 @@
             });
         } catch (err) {
             console.error("[ERRO] Serviços:", err);
-            Phoenix.ui.feedback.esconderOverlay();
             container.innerHTML = '<p class="texto-secundario">Erro ao carregar serviços.</p>';
+        } finally {
+            Phoenix.ui.feedback.esconderOverlay();
         }
     };
 

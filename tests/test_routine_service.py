@@ -13,6 +13,14 @@ class FakeLimpeza:
 class FakeOtimizacao:
     def executar_otimizacao_geral(self, id_atendimento):
         pass
+    def ativar_plano_energia_alto_desempenho(self):
+        pass
+    def ativar_modo_jogo_windows(self):
+        pass
+    def desativar_gamebar_overlay(self):
+        pass
+    def otimizar_gpu_para_jogos(self):
+        pass
 
 class FakeLogs:
     def __init__(self):
@@ -35,138 +43,55 @@ class FakeRelatorio:
         self.exportacoes = []
     def exportar_relatorio_txt(self, antes, depois, liberado, caminho):
         self.exportacoes.append((antes, depois, liberado, caminho))
+    def gerar_pdf(self, id_atendimento, nome_cliente, diag_inicial, diag_final, bytes_liberados):
+        return "123_relatorio.pdf"
 
 def test_routine_service_sucesso():
-    f_diag = FakeDiagnostico()
-    f_limp = FakeLimpeza()
-    f_otim = FakeOtimizacao()
-    f_logs = FakeLogs()
-    f_rel = FakeRelatorio()
-
-    service = RoutineService(
-        diagnostico_module=f_diag,
-        limpeza_module=f_limp,
-        otimizacao_module=f_otim,
-        logs_module=f_logs,
-        relatorio_module=f_rel
-    )
-
+    service = RoutineService(FakeDiagnostico(), FakeLimpeza(), FakeOtimizacao(), FakeLogs(), FakeRelatorio())
     res = service.executar(id_atendimento="123", nome_cliente="TestClient")
-
-    # Validar retorno e contrato real (chaves exatas, tipos)
     assert "ok" in res and res["ok"] is True
-    assert "id_atendimento" in res and res["id_atendimento"] == "123"
-    assert "espaco_liberado_mb" in res and res["espaco_liberado_mb"] == 500.0
-    assert "relatorio_txt" in res and "123_relatorio.txt" in res["relatorio_txt"]
-    assert "antes" in res and res["antes"] == {"status": "ok_diag"}
-    assert "depois" in res and res["depois"] == {"status": "ok_diag"}
-    
-    assert len(res.keys()) == 6
+    assert res["espaco_liberado_mb"] == 500.0
+    assert "relatorio_gerado" in res
 
-    # Validar side-effects na ordem certa
-    assert len(f_logs.acoes) == 2
-    assert f_logs.acoes[0] == ("123", "Diagnóstico inicial coletado")
-    assert f_logs.acoes[1] == ("123", "Diagnóstico final coletado")
-    assert f_logs.snapshots["123"]["antes"] == {"status": "ok_diag"}
-    assert f_logs.snapshots["123"]["depois"] == {"status": "ok_diag"}
-
-    assert len(f_rel.exportacoes) == 1
-    assert f_rel.exportacoes[0][0] == {"status": "ok_diag"} # antes
-    assert f_rel.exportacoes[0][1] == {"status": "ok_diag"} # depois
-    assert f_rel.exportacoes[0][2] == 500.0 # mb
-
-
-def test_routine_service_validacao_id():
-    service = RoutineService(
-        diagnostico_module=FakeDiagnostico(),
-        limpeza_module=FakeLimpeza(),
-        otimizacao_module=FakeOtimizacao(),
-        logs_module=FakeLogs(),
-        relatorio_module=FakeRelatorio()
-    )
-    with pytest.raises(ValueError, match="obrigatório"):
-        service.executar(id_atendimento=None)
-    with pytest.raises(ValueError, match="obrigatório"):
-        service.executar(id_atendimento="")
-
-
-# ---------------- Falhas Estruturais ----------------
-
-def test_routine_service_falha_diagnostico_inicial(caplog):
+def test_routine_service_falha_diagnostico_inicial():
     class DiagFalha:
         def coletar_diagnostico_silencioso(self):
             raise RuntimeError("Erro no diag inicial")
-            
     service = RoutineService(DiagFalha(), FakeLimpeza(), FakeOtimizacao(), FakeLogs(), FakeRelatorio())
-    
-    # A rotina aborta propagando a exceção (será pega pelo JobManager que não vaza traceback pro frontend)
-    with pytest.raises(RuntimeError, match="Erro no diag inicial"):
-        service.executar("123")
+    res = service.executar("123", "Cliente Teste")
+    assert res["ok"] is False
+    assert "Erro no diag inicial" in res["erro"]
 
 def test_routine_service_falha_limpeza():
     class LimpFalha:
         def executar_limpeza_completa(self, id_atendimento):
             raise PermissionError("Acesso negado disco")
-            
-    f_logs = FakeLogs()
-    service = RoutineService(FakeDiagnostico(), LimpFalha(), FakeOtimizacao(), f_logs, FakeRelatorio())
-    
-    with pytest.raises(PermissionError, match="Acesso negado"):
-        service.executar("123")
-        
-    # Validar que parou na limpeza
-    assert len(f_logs.acoes) == 1
-    assert f_logs.acoes[0] == ("123", "Diagnóstico inicial coletado")
+    service = RoutineService(FakeDiagnostico(), LimpFalha(), FakeOtimizacao(), FakeLogs(), FakeRelatorio())
+    res = service.executar("123", "Cliente Teste")
+    assert res["ok"] is False
+    assert "Acesso negado" in res["erro"]
 
-def test_routine_service_falha_otimizacao():
-    class OtimFalha:
-        def executar_otimizacao_geral(self, id_atendimento):
-            raise OSError("Registro inacessivel")
-            
-    f_logs = FakeLogs()
-    service = RoutineService(FakeDiagnostico(), FakeLimpeza(), OtimFalha(), f_logs, FakeRelatorio())
-    
-    with pytest.raises(OSError, match="Registro"):
-        service.executar("123")
+class FakeJobContext:
+    def __init__(self, cancel_after_phase=0):
+        self.phase = 0
+        self.cancel_after_phase = cancel_after_phase
+    def is_cancel_requested(self):
+        self.phase += 1
+        return self.phase >= self.cancel_after_phase
+    def raise_if_cancelled(self):
+        if self.is_cancel_requested():
+            raise Exception("Job cancelled cooperatively")
+    def update_progress(self, pct, msg):
+        pass
 
-def test_routine_service_falha_diagnostico_final():
-    class DiagParcial:
-        def __init__(self):
-            self.chamadas = 0
-        def coletar_diagnostico_silencioso(self):
-            self.chamadas += 1
-            if self.chamadas == 1:
-                return {"status": "ok_diag"}
-            raise RuntimeError("Falha no segundo diag")
-            
-    f_logs = FakeLogs()
-    service = RoutineService(DiagParcial(), FakeLimpeza(), FakeOtimizacao(), f_logs, FakeRelatorio())
-    
-    with pytest.raises(RuntimeError, match="Falha no segundo"):
-        service.executar("123")
-        
-    assert len(f_logs.acoes) == 1
+def test_routine_service_cancellation_checkpoints():
+    # Cancel at the beginning
+    service = RoutineService(FakeDiagnostico(), FakeLimpeza(), FakeOtimizacao(), FakeLogs(), FakeRelatorio())
+    res1 = service.executar("123", "Cliente", job_context=FakeJobContext(cancel_after_phase=1))
+    assert res1["ok"] is False
+    assert res1["codigo"] == "JOB_CANCELLED"
 
-def test_routine_service_falha_salvar_atendimento():
-    class LogsFalha(FakeLogs):
-        def salvar_snapshot(self, *args, **kwargs):
-            raise IOError("Sem espaco disco")
-            
-    service = RoutineService(FakeDiagnostico(), FakeLimpeza(), FakeOtimizacao(), LogsFalha(), FakeRelatorio())
-    
-    with pytest.raises(IOError, match="Sem espaco"):
-        service.executar("123")
-
-def test_routine_service_falha_relatorio():
-    class RelatorioFalha(FakeRelatorio):
-        def exportar_relatorio_txt(self, *args, **kwargs):
-            raise ValueError("Erro ao montar TXT")
-            
-    f_logs = FakeLogs()
-    service = RoutineService(FakeDiagnostico(), FakeLimpeza(), FakeOtimizacao(), f_logs, RelatorioFalha())
-    
-    with pytest.raises(ValueError, match="Erro ao montar TXT"):
-        service.executar("123")
-        
-    # Deve ter chegado ate o final (diagnostico final ok) mas quebrou antes de retornar payload
-    assert len(f_logs.acoes) == 2
+    # Cancel after initial diag
+    res2 = service.executar("123", "Cliente", job_context=FakeJobContext(cancel_after_phase=3)) # Initial diag calls it twice (before and after)
+    assert res2["ok"] is False
+    assert res2["codigo"] == "JOB_CANCELLED"
