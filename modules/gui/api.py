@@ -100,7 +100,9 @@ class PhoenixAPI:
         """Lista clientes salvos no pen drive (modo portable)."""
         from modules.shared import IS_PORTABLE, listar_clientes_portable
         if not IS_PORTABLE:
-            return {"ok": False, "portable": False}
+            erro = self._make_error("PORTABLE_MODE_REQUIRED")
+            erro["portable"] = False
+            return erro
         return {
             "ok": True,
             "portable": True,

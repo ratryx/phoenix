@@ -27,7 +27,7 @@ def _validar_id_cliente(id_cliente: str) -> bool:
     if not id_cliente or not isinstance(id_cliente, str):
         return False
     # Use strict allowlist: lowercase ASCII, digits, hyphens, and underscores (legacy compat). Length 1-100.
-    if not re.match(r'^[a-z0-9_-]{1,100}$', id_cliente):
+    if not re.fullmatch(r'[a-z0-9_-]{1,100}', id_cliente):
         return False
     reserved = {"CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9"}
     if id_cliente.upper() in reserved:

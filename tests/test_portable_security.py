@@ -42,6 +42,16 @@ def test_id_validation():
     assert _validar_id_cliente("CON") is False
     assert _validar_id_cliente("prn") is False
     assert _validar_id_cliente("a" * 101) is False
+    assert _validar_id_cliente("cliente\n") is False
+    assert _validar_id_cliente("cliente\r") is False
+    assert _validar_id_cliente("cliente\t") is False
+    assert _validar_id_cliente("cliente ") is False
+    assert _validar_id_cliente(" cliente") is False
+    assert _validar_id_cliente("cliente!") is False
+    assert _validar_id_cliente("cliente.") is False
+    assert _validar_id_cliente("Cliente") is False
+    assert _validar_id_cliente("cliente_legado") is True
+    assert _validar_id_cliente("a") is True
 
 def test_criar_cliente_portable_valido(mock_portable):
     meta = criar_cliente_portable("João Silva")
@@ -171,6 +181,11 @@ def test_api_portable_mode_required(mock_portable, monkeypatch):
     res2 = api.remover_cliente_portable("algum-id")
     assert res2["ok"] is False
     assert res2["codigo"] == "PORTABLE_MODE_REQUIRED"
+
+    res3 = api.obter_clientes_portable()
+    assert res3["ok"] is False
+    assert res3["codigo"] == "PORTABLE_MODE_REQUIRED"
+    assert res3["portable"] is False
 
 def test_active_client_state(mock_portable):
     api = PhoenixAPI(hw_info={})
