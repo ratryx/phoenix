@@ -4,20 +4,30 @@
     Phoenix.jobs.awaitJob = function (jobId, arg2, arg3) {
         return new Promise(function (resolve, reject) {
             var progressCallback = null;
-            var signal = null;
+            var options = {};
 
             if (typeof arg2 === "function") {
                 progressCallback = arg2;
                 if (arg3 && typeof arg3 === "object") {
-                    signal = arg3.signal;
+                    options = arg3;
                 }
             } else if (arg2 && typeof arg2 === "object") {
-                progressCallback = arg2.progressCallback;
-                signal = arg2.signal;
+                if (typeof arg2.progressCallback === "function") {
+                    progressCallback = arg2.progressCallback;
+                }
+                options = arg2;
+            }
+
+            var signal = options.signal;
+            var pollIntervalMs = options.pollIntervalMs;
+
+            if (typeof pollIntervalMs !== "number" || isNaN(pollIntervalMs) || pollIntervalMs < 100) {
+                pollIntervalMs = 500;
             }
 
             var timerId = null;
             var abortHandler = null;
+            var settled = false;
 
             function cleanup() {
                 if (timerId !== null) {
@@ -30,45 +40,66 @@
                 }
             }
 
+            function resolveOnce(val) {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                resolve(val);
+            }
+
+            function rejectOnce(err) {
+                if (settled) return;
+                settled = true;
+                cleanup();
+                reject(err);
+            }
+
             if (signal) {
                 if (signal.aborted) {
-                    Phoenix.bridge.call("cancelar_tarefa", jobId);
+                    settled = true;
+                    // Intencionalmente chama cancelar no bridge pra ser seguro
+                    Phoenix.bridge.call("cancelar_tarefa", jobId).catch(function() {});
                     resolve({ ok: false, codigo: "JOB_CANCELLED", erro: "Operação cancelada pelo usuário." });
                     return;
                 }
                 abortHandler = function () {
-                    cleanup();
-                    Phoenix.bridge.call("cancelar_tarefa", jobId);
-                    resolve({ ok: false, codigo: "JOB_CANCELLED", erro: "Operação cancelada pelo usuário." });
+                    if (settled) return;
+                    cleanup(); // impede polling novo
+                    
+                    Phoenix.bridge.call("cancelar_tarefa", jobId).catch(function() {});
+                    resolveOnce({ ok: false, codigo: "JOB_CANCELLED", erro: "Operação cancelada pelo usuário." });
                 };
                 signal.addEventListener("abort", abortHandler);
             }
 
             function check() {
+                if (settled) return;
+                
                 Phoenix.bridge.call("verificar_tarefa", jobId)
                     .then(function (estado) {
+                        if (settled) return; // Se abortou no meio da chamada in-flight
+                        
                         if (progressCallback && estado.progresso !== undefined) {
                             progressCallback(estado.progresso, estado.mensagem);
                         }
+                        
                         if (["done", "failed", "cancelled", "timed_out"].includes(estado.status)) {
-                            cleanup();
-                            resolve(estado.resultado);
+                            resolveOnce(estado.resultado);
                         } else if (estado.status === "not_found") {
-                            cleanup();
-                            reject(new Error("Falha na consulta de status do processo interno.")); // DO NOT leak job ID
+                            rejectOnce(new Error("Falha na consulta de status do processo interno."));
                         } else {
-                            if (timerId !== null) {
-                                timerId = setTimeout(check, 500);
+                            if (!settled) {
+                                timerId = setTimeout(check, pollIntervalMs);
                             }
                         }
                     })
-                    .catch(function(err) {
-                        cleanup();
-                        reject(err);
+                    .catch(function (err) {
+                        if (settled) return;
+                        rejectOnce(err);
                     });
             }
 
-            timerId = setTimeout(check, 500);
+            timerId = setTimeout(check, pollIntervalMs);
         });
     };
 
