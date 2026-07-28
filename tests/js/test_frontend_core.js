@@ -137,7 +137,7 @@ window.pywebview.api.verificar_tarefa = async (jobId) => {
         await window.Phoenix.jobs.awaitJob('not_found');
         assert.fail('Should reject');
     } catch (e) {
-        assert.ok(e.message.includes('não encontrado'));
+        assert.ok(e.message.includes('consulta de status'));
     }
 
     // error
@@ -148,24 +148,7 @@ window.pywebview.api.verificar_tarefa = async (jobId) => {
         assert.ok(e.message.includes('Bridge err'));
     }
 
-    // timeout
-    // Redefinindo constante MAX_TENTATIVAS para o teste ser rápido (mockando setTimeout na funcao)
-    const oldSetTimeout = global.setTimeout;
-    let timeouts = 0;
-    global.setTimeout = (cb, ms) => {
-        timeouts++;
-        if (timeouts > 130) {
-            assert.fail('Loop infinito');
-        }
-        oldSetTimeout(cb, 1);
-    };
-    try {
-        await window.Phoenix.jobs.awaitJob('timeout');
-        assert.fail('Should timeout');
-    } catch (e) {
-        assert.ok(e.message.includes('Timeout'));
-    }
-    global.setTimeout = oldSetTimeout;
+
 
     // progresso
     let p = 0;

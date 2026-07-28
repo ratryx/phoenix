@@ -15,6 +15,9 @@ class RoutineService:
         self.relatorio = svc_relatorio or relatorio
 
     def executar(self, id_atendimento: str, nome_cliente: str, job_context=None) -> dict:
+        if not id_atendimento:
+            return {"ok": False, "erro": "O ID do atendimento é obrigatório"}
+
         def check_cancel():
             if job_context:
                 job_context.raise_if_cancelled()

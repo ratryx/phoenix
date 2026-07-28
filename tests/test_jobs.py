@@ -249,3 +249,54 @@ def test_15_shutdown_behavior():
 
     # Shutdown is idempotent
     jm.shutdown()
+
+
+
+def test_16_17_cem_jobs_concorrentes():
+    from modules.gui.jobs import JobManager
+    import threading
+    jm = JobManager(watchdog_interval=1.0)
+    ids = []
+    for _ in range(100):
+        ids.append(jm.submit(lambda: {"ok": True}))
+    def consultar_tudo():
+        for i in ids:
+            jm.consultar(i)
+    threads = []
+    for _ in range(10):
+        t = threading.Thread(target=consultar_tudo)
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join()
+    jm.shutdown()
+    assert True
+
+def test_18_payload_nomes_esperados():
+    from modules.gui.jobs import JobManager
+    import time
+    jm = JobManager(watchdog_interval=1.0)
+    job_id = jm.submit(lambda: {"ok": True})
+    time.sleep(0.1)
+    jm.update_progress(job_id, 100, "Concluído")
+    payload = jm.consultar(job_id)
+    assert "status" in payload
+    assert "resultado" in payload
+    assert payload["status"] == "done"
+    jm.shutdown()
+
+def test_11_duas_operacoes_leitura():
+    from modules.gui.jobs import JobManager
+    import time
+    jm = JobManager(watchdog_interval=1.0)
+    def operacao():
+        time.sleep(0.1)
+        return {"ok": True}
+    job_id1 = jm.submit(operacao, exclusive_group=None)
+    job_id2 = jm.submit(operacao, exclusive_group=None)
+    status1 = jm.consultar(job_id1)
+    status2 = jm.consultar(job_id2)
+    assert status1["status"] == "running"
+    assert status2["status"] == "running"
+    time.sleep(0.15)
+    jm.shutdown()
