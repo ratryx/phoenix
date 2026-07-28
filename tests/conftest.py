@@ -28,8 +28,13 @@ def _global_test_isolation(monkeypatch, tmp_path):
     repo_root = Path(__file__).resolve().parent.parent
     dados_clientes = repo_root / "dados" / "clientes"
     
-    # We shouldn't delete existing data if it's there
-    existed_before = dados_clientes.exists()
+    # We shouldn't delete existing data if it's there, but we snapshot it
+    def get_paths():
+        if not dados_clientes.exists():
+            return set()
+        return set(p.relative_to(dados_clientes) for p in dados_clientes.rglob("*"))
+        
+    before_paths = get_paths()
     
     yield  # Run the test
     
@@ -39,9 +44,12 @@ def _global_test_isolation(monkeypatch, tmp_path):
     ms.CLIENTE_ATIVO_NOME = orig_cliente_ativo_nome
     ms.CACHE_DIR = orig_cache_dir
     
-    # Regression safeguard: if the directory was created during this test, fail the test
-    if not existed_before and dados_clientes.exists():
+    after_paths = get_paths()
+    new_paths = after_paths - before_paths
+    
+    # Regression safeguard: if a test created new children inside the repo, fail it
+    if new_paths:
         pytest.fail(
-            f"Regression: A test violated isolation and created {dados_clientes} inside the repository. "
+            f"Regression: A test violated isolation and created {new_paths} inside the repository. "
             "Tests must use mock_portable or tmp_path."
         )
