@@ -20,7 +20,7 @@ class PhoenixAPI:
         self._id_atendimento = None
         self._nome_cliente = ""
         self._job_manager = job_manager or JobManager()
-        
+
         if hardware_service is None:
             from modules.core.hardware_service import HardwareService
             hardware_service = HardwareService(hw_info=hw_info)
@@ -39,10 +39,10 @@ class PhoenixAPI:
     def _iniciar_job(self, target_fn, *args, operation_name="unknown", exclusive_group=None, **kwargs) -> dict:
         """Delega a criação do job para o JobManager e retorna o formato esperado pelo JS."""
         job_id = self._job_manager.submit(
-            target_fn, 
-            *args, 
-            operation_name=operation_name, 
-            exclusive_group=exclusive_group, 
+            target_fn,
+            *args,
+            operation_name=operation_name,
+            exclusive_group=exclusive_group,
             **kwargs
         )
         return {"job_id": job_id}
@@ -66,6 +66,31 @@ class PhoenixAPI:
 
     # ---------- Atendimento ----------
 
+    def _make_error(self, codigo: str) -> dict:
+        mensagens = {
+            "INVALID_CLIENT_NAME": "O nome do cliente é inválido ou está vazio.",
+            "INVALID_CLIENT_ID": "O ID do cliente fornecido é inválido.",
+            "CLIENT_NOT_FOUND": "O cliente especificado não pôde ser encontrado.",
+            "CLIENT_CREATE_FAILED": "Falha ao criar o diretório do cliente portátil.",
+            "CLIENT_SELECT_FAILED": "Falha ao selecionar e definir o cliente ativo.",
+            "CLIENT_DELETE_FAILED": "Falha ao remover os dados do cliente.",
+            "CLIENT_DELETE_FAILED_PERMISSION": "Permissão negada ao tentar remover o cliente.",
+            "PORTABLE_MODE_REQUIRED": "Esta ação exige que o modo Portable esteja ativo.",
+            "PERSISTENCE_WRITE_FAILED": "Falha ao salvar de forma segura os metadados do cliente."
+        }
+        erro_str = mensagens.get(codigo)
+        if not erro_str:
+            import logging
+            logging.warning(f"Unknown portable API error code intercepted: {codigo}")
+            codigo = "UNKNOWN_ERROR"
+            erro_str = "Ocorreu um erro interno desconhecido na operação do cliente portátil."
+
+        return {
+            "ok": False,
+            "codigo": codigo,
+            "erro": erro_str
+        }
+
     def iniciar_atendimento(self, nome_cliente: str = "") -> dict:
         self._nome_cliente = nome_cliente or ""
         self._id_atendimento = logs.gerar_id_atendimento()
@@ -75,37 +100,58 @@ class PhoenixAPI:
         """Lista clientes salvos no pen drive (modo portable)."""
         from modules.shared import IS_PORTABLE, listar_clientes_portable
         if not IS_PORTABLE:
-            return {"ok": False, "portable": False}
+            erro = self._make_error("PORTABLE_MODE_REQUIRED")
+            erro["portable"] = False
+            return erro
         return {
             "ok": True,
             "portable": True,
             "clientes": listar_clientes_portable()
         }
 
-    def selecionar_cliente(self, nome: str) -> dict:
-        """Define o cliente ativo da sessão."""
-        from modules.shared import (definir_cliente_ativo, 
-                                    salvar_meta_cliente, IS_PORTABLE)
+    def criar_cliente_portable(self, nome: str) -> dict:
+        from modules.shared import criar_cliente_portable, IS_PORTABLE
+        if not IS_PORTABLE:
+            return self._make_error("PORTABLE_MODE_REQUIRED")
         if not nome or not nome.strip():
-            return {"ok": False, "erro": "Nome inválido"}
-        nome = nome.strip()
-        definir_cliente_ativo(nome)
-        if IS_PORTABLE:
-            salvar_meta_cliente(nome)
-        return {"ok": True, "cliente": nome}
+            return self._make_error("INVALID_CLIENT_NAME")
+
+        try:
+            res = criar_cliente_portable(nome)
+            if not res.get("ok"):
+                return self._make_error(res.get("erro", "CLIENT_CREATE_FAILED"))
+            return {"ok": True, "cliente": res["cliente"]}
+        except Exception:
+            return self._make_error("CLIENT_CREATE_FAILED")
+
+    def selecionar_cliente(self, id_cliente: str) -> dict:
+        """Define o cliente ativo da sessão."""
+        from modules.shared import selecionar_cliente_portable, IS_PORTABLE
+
+        if not id_cliente or not id_cliente.strip():
+            return self._make_error("INVALID_CLIENT_ID")
+
+        res = selecionar_cliente_portable(id_cliente.strip())
+        if not res.get("ok"):
+            return self._make_error(res.get("erro", "CLIENT_SELECT_FAILED"))
+
+        return res
 
     def remover_cliente_portable(self, id_cliente: str) -> dict:
         """Remove um cliente do pen drive."""
-        from modules.shared import remover_cliente_portable
-        if remover_cliente_portable(id_cliente):
-            return {"ok": True}
-        return {"ok": False, "erro": "Não foi possível remover o cliente"}
+        from modules.shared import remover_cliente_portable, IS_PORTABLE
+        if not IS_PORTABLE:
+            return self._make_error("PORTABLE_MODE_REQUIRED")
+        res = remover_cliente_portable(id_cliente)
+        if not res.get("ok"):
+            return self._make_error(res.get("erro", "CLIENT_DELETE_FAILED"))
+        return {"ok": True}
 
     def obter_modo_portable(self) -> dict:
-        from modules.shared import IS_PORTABLE, CLIENTE_ATIVO
+        from modules.shared import IS_PORTABLE, CLIENTE_ATIVO_ID, CLIENTE_ATIVO_NOME
         return {
             "portable": IS_PORTABLE,
-            "cliente_ativo": CLIENTE_ATIVO
+            "cliente_ativo": {"id": CLIENTE_ATIVO_ID, "nome": CLIENTE_ATIVO_NOME} if CLIENTE_ATIVO_ID else None
         }
 
     # ---------- Diagnóstico ----------
@@ -203,7 +249,7 @@ class PhoenixAPI:
         """Otimiza o disco em segundo plano (fire-and-forget)."""
         return self._iniciar_job(
             lambda: {"ok": True, "saida": otimizacao.otimizar_disco_principal()},
-            operation_name="otimizar_disco", 
+            operation_name="otimizar_disco",
             exclusive_group="system_mutation"
         )
 
@@ -250,18 +296,18 @@ class PhoenixAPI:
     def executar_rotina_completa(self, nome_cliente: str = "") -> dict:
         """Executa a rotina completa em segundo plano (fire-and-forget)."""
         self.iniciar_atendimento(nome_cliente)
-        
+
         def rotina():
             return self._routine_service.executar(
                 id_atendimento=self._id_atendimento,
                 nome_cliente=self._nome_cliente
             )
-            
+
         return self._iniciar_job(rotina, operation_name="rotina_completa", exclusive_group="system_mutation")
 
     def liberar_memoria_standby(self) -> dict:
         return self._iniciar_job(
-            lambda: {"ok": otimizacao.liberar_memoria_standby(), 
+            lambda: {"ok": otimizacao.liberar_memoria_standby(),
                      "mensagem": "Memória standby liberada com sucesso"},
             operation_name="liberar_memoria",
             exclusive_group="system_mutation"
@@ -269,7 +315,7 @@ class PhoenixAPI:
 
     def analisar_startup(self) -> dict:
         return self._iniciar_job(
-            lambda: {"ok": True, 
+            lambda: {"ok": True,
                      "entradas": otimizacao.analisar_startup()},
             operation_name="analisar_startup"
         )

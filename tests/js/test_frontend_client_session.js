@@ -12,6 +12,19 @@ function setupEnvironment() {
         setTimeout: setTimeout,
         clearTimeout: clearTimeout,
         document: {
+            createElement: function(tag) {
+                return {
+                    tagName: tag,
+                    style: {},
+                    className: '',
+                    children: [],
+                    appendChild: function(child) { this.children.push(child); },
+                    addEventListener: function(evt, cb) { 
+                        this.listeners = this.listeners || {};
+                        this.listeners[evt] = cb; 
+                    }
+                };
+            },
             getElementById: function(id) {
                 if (id === 'tela-selecao-cliente') return context.dom.telaSelecao;
                 if (id === 'lista-clientes-portable') return context.dom.listaClientes;
@@ -40,10 +53,13 @@ function setupEnvironment() {
                         return { clientes: context.mocks.clientesList };
                     }
                     if (endpoint === "selecionar_cliente") {
-                        return { ok: !context.mocks.selecaoFails };
+                        return { ok: !context.mocks.selecaoFails, cliente: { id: args, nome: "Nome " + args } };
                     }
                     if (endpoint === "remover_cliente_portable") {
                         return { ok: !context.mocks.remocaoFails };
+                    }
+                    if (endpoint === "criar_cliente_portable") {
+                        return { ok: true, cliente: { id: "novo-" + args, nome: args } };
                     }
                     return {};
                 }
@@ -64,8 +80,19 @@ function setupEnvironment() {
     
     context.dom = {
         telaSelecao: { style: { display: 'none' } },
-        listaClientes: { innerHTML: '' },
-        inputNovo: { value: '', style: { borderColor: '' } },
+        listaClientes: { 
+            innerHTML: '', 
+            children: [],
+            appendChild: function(child) { this.children.push(child); }
+        },
+        inputNovo: { 
+            value: '', 
+            style: { borderColor: '' },
+            addEventListener: function(evt, cb) { 
+                this.listeners = this.listeners || {};
+                this.listeners[evt] = cb; 
+            }
+        },
         versaoEl: { textContent: 'v2.0' }
     };
 
@@ -104,7 +131,7 @@ async function runTests() {
         const ctx = setupEnvironment();
         await ctx.Phoenix.features.clientSession.initialize();
         assert.strictEqual(ctx.dom.telaSelecao.style.display, 'flex', "Deve mostrar tela de seleção");
-        assert.strictEqual(ctx.dom.listaClientes.innerHTML, '', "Deve ter lista vazia");
+        assert.strictEqual(ctx.dom.listaClientes.children.length, 0, "Deve ter lista vazia");
     }
 
     // Teste 3: Inicialização em modo Não Portable
@@ -119,19 +146,25 @@ async function runTests() {
     {
         const ctx = setupEnvironment();
         ctx.mocks.clientesList = [
-            { id: "1", nome: "Empresa A", total_atendimentos: 5, ultimo_atendimento: "2026-07-16" }
+            { id: "1", nome: "Empresa <script>A</script>", total_atendimentos: 5, ultimo_atendimento: "2026-07-16" }
         ];
         await ctx.Phoenix.features.clientSession.initialize();
-        assert.ok(ctx.dom.listaClientes.innerHTML.includes("Empresa A"), "Lista de clientes deve renderizar 'Empresa A'");
+        assert.ok(ctx.dom.listaClientes.children.length > 0, "Lista de clientes deve renderizar 'Empresa A'");
+        const title = ctx.dom.listaClientes.children[0];
+        const card = ctx.dom.listaClientes.children[1];
+        const textNodes = card.children.find(c => c.style.flex === '1');
+        const nameNode = textNodes.children[0];
+        assert.strictEqual(nameNode.textContent, "Empresa <script>A</script>", "Deve usar textContent mitigando XSS");
+        assert.ok(typeof card.listeners.click === 'function', "Deve ter event listener de clique");
     }
 
     // Teste 5: Seleção de cliente
     {
         const ctx = setupEnvironment();
-        await ctx.Phoenix.features.clientSession.selectClient("Cliente Z");
-        assert.ok(ctx.metrics.endpointsCalled.some(e => e.endpoint === "selecionar_cliente" && e.args === "Cliente Z"));
+        await ctx.Phoenix.features.clientSession.selectClient("id-cliente-z");
+        assert.ok(ctx.metrics.endpointsCalled.some(e => e.endpoint === "selecionar_cliente" && e.args === "id-cliente-z"));
         assert.strictEqual(ctx.dom.telaSelecao.style.display, 'none', "Ao selecionar, esconde a tela");
-        assert.ok(ctx.dom.versaoEl.textContent.includes("Cliente Z"), "Atualiza a UI (versaoEl)");
+        assert.ok(ctx.dom.versaoEl.textContent.includes("Nome id-cliente-z"), "Atualiza a UI (versaoEl)");
     }
 
     // Teste 6: Remoção de cliente (confirma)
@@ -156,7 +189,8 @@ async function runTests() {
         const ctx = setupEnvironment();
         ctx.dom.inputNovo.value = "Novo LTDA ";
         await ctx.Phoenix.features.clientSession.confirmNewClient();
-        assert.ok(ctx.metrics.endpointsCalled.some(e => e.endpoint === "selecionar_cliente" && e.args === "Novo LTDA"), "Deve fazer trim e selecionar");
+        assert.ok(ctx.metrics.endpointsCalled.some(e => e.endpoint === "criar_cliente_portable" && e.args === "Novo LTDA"), "Deve chamar criar");
+        assert.ok(ctx.metrics.endpointsCalled.some(e => e.endpoint === "selecionar_cliente" && e.args === "novo-Novo LTDA"), "Deve selecionar o id");
     }
 
     // Teste 9: Confirmar novo cliente (Vazio)
@@ -164,11 +198,11 @@ async function runTests() {
         const ctx = setupEnvironment();
         ctx.dom.inputNovo.value = "   ";
         await ctx.Phoenix.features.clientSession.confirmNewClient();
-        assert.ok(!ctx.metrics.endpointsCalled.some(e => e.endpoint === "selecionar_cliente"), "Não chama selecionar_cliente se vazio");
+        assert.ok(!ctx.metrics.endpointsCalled.some(e => e.endpoint === "criar_cliente_portable"), "Não chama se vazio");
         assert.strictEqual(ctx.dom.inputNovo.style.borderColor, "var(--cor-erro)", "Destaca campo input com erro");
     }
 
-    console.log("Testes JS Client Session passaram.");
+    console.log("\n9 passed, 0 failed");
 }
 
 runTests().catch(err => {

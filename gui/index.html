@@ -45,12 +45,10 @@
           border:1px solid var(--cor-painel-borda);
           border-radius:var(--raio-sm);
           color:var(--cor-texto);font-size:14px;
-          outline:none;box-sizing:border-box"
-        onkeydown="if(event.key==='Enter')confirmarNovoCliente()">
+        outline:none;box-sizing:border-box">
       <div style="margin-top:12px;display:flex;
         justify-content:flex-end">
-        <button class="botao primario" 
-          onclick="confirmarNovoCliente()">
+        <button id="btn-novo-cliente" class="botao primario">
           Iniciar atendimento
         </button>
       </div>
