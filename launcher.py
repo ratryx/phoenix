@@ -24,7 +24,7 @@ def setup_console() -> bool:
         return sys.stdout.isatty()
 
     kernel32 = ctypes.windll.kernel32
-    
+
     # Verifica se já possui um console associado
     if kernel32.GetConsoleWindow() != 0:
         return True
@@ -40,7 +40,7 @@ def setup_console() -> bool:
             return True
         except Exception:
             return False
-            
+
     return False
 
 HAS_CONSOLE = setup_console()
@@ -101,6 +101,27 @@ def exibir_tela_escolha_modo(hw_info: dict, recomendacao: str):
     return Prompt.ask("[bold white]Escolha uma opção[/bold white]", default="1" if recomendacao == "baixo" else "2")
 
 
+def _iniciar_modo_portable() -> bool:
+    """
+    Controla o fluxo inicial do modo Portable (seleção de cliente via CLI).
+    Retorna True se o cliente foi selecionado com sucesso, False se o usuário cancelou.
+    Se houver erro crítico na seleção, o programa é encerrado (sys.exit(1)).
+    """
+    from modules import selecao_cliente
+    from modules.shared import selecionar_cliente_portable
+
+    cliente_escolhido = selecao_cliente.exibir_selecao_cli()
+    if not cliente_escolhido:
+        return False
+
+    res = selecionar_cliente_portable(cliente_escolhido["id"])
+    if not res.get("ok"):
+        console.print(f"\n[bold red]Erro ao selecionar o cliente: {res.get('erro')}[/bold red]")
+        console.print("[dim]O programa será encerrado.[/dim]")
+        sys.exit(1)
+
+    return True
+
 def main():
     if not HAS_CONSOLE:
         try:
@@ -127,10 +148,10 @@ def main():
         console=console
     ) as progress:
         task = progress.add_task("[cyan]Detectando hardware do sistema...", total=None)
-        
+
         def update_progress(msg):
             progress.update(task, description=f"[cyan]{msg}")
-            
+
         hw_info = hardware.obter_hardware_com_cache(progress_callback=update_progress)
         progress.update(task, description="[green]Hardware detectado com sucesso!")
     recomendacao = hardware.classificar_capacidade_hardware(hw_info)
@@ -138,16 +159,8 @@ def main():
     from modules.shared import IS_PORTABLE
 
     if IS_PORTABLE:
-        from modules import selecao_cliente
-        cliente_escolhido = selecao_cliente.exibir_selecao_cli()
-        if not cliente_escolhido:
+        if not _iniciar_modo_portable():
             sys.exit(0)
-        from modules.shared import selecionar_cliente_portable
-        res = selecionar_cliente_portable(cliente_escolhido["id"])
-        if not res.get("ok"):
-            console.print(f"\n[bold red]Erro ao selecionar o cliente: {res.get('erro')}[/bold red]")
-            console.print("[dim]O programa será encerrado.[/dim]")
-            sys.exit(1)
 
     escolha = exibir_tela_escolha_modo(hw_info, recomendacao)
 

@@ -115,24 +115,24 @@ class PhoenixAPI:
             return self._make_error("INVALID_CLIENT_NAME")
 
         try:
-            meta = criar_cliente_portable(nome)
-            if isinstance(meta, dict) and not meta.get("ok", True):
-                return self._make_error(meta.get("erro", "CLIENT_CREATE_FAILED"))
-            return {"ok": True, "cliente": meta}
+            res = criar_cliente_portable(nome)
+            if not res.get("ok"):
+                return self._make_error(res.get("erro", "CLIENT_CREATE_FAILED"))
+            return {"ok": True, "cliente": res["cliente"]}
         except Exception:
             return self._make_error("CLIENT_CREATE_FAILED")
 
     def selecionar_cliente(self, id_cliente: str) -> dict:
         """Define o cliente ativo da sessão."""
         from modules.shared import selecionar_cliente_portable, IS_PORTABLE
-        
+
         if not id_cliente or not id_cliente.strip():
             return self._make_error("INVALID_CLIENT_ID")
-            
+
         res = selecionar_cliente_portable(id_cliente.strip())
         if not res.get("ok"):
             return self._make_error(res.get("erro", "CLIENT_SELECT_FAILED"))
-            
+
         return res
 
     def remover_cliente_portable(self, id_cliente: str) -> dict:

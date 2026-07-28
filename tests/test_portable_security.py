@@ -45,23 +45,23 @@ def test_id_validation():
 
 def test_criar_cliente_portable_valido(mock_portable):
     meta = criar_cliente_portable("João Silva")
-    assert "joao-silva" in meta["id"]
-    assert meta["nome_display"] == "João Silva"
+    assert "joao-silva" in meta["cliente"]["id"]
+    assert meta["cliente"]["nome_display"] == "João Silva"
 
-    pasta = obter_pasta_base(meta["id"])
+    pasta = obter_pasta_base(meta["cliente"]["id"])
     assert pasta.exists()
     assert (pasta / "meta.json").exists()
 
 def test_criar_cliente_portable_nome_invalido(mock_portable):
     meta = criar_cliente_portable("<script>alert(1)</script>")
-    assert "scriptalert1script" in meta["id"]
+    assert "scriptalert1script" in meta["cliente"]["id"]
 
     meta2 = criar_cliente_portable("")
     assert meta2["ok"] is False
     assert meta2["erro"] == "INVALID_CLIENT_NAME"
 
     meta3 = criar_cliente_portable("..//--  ")
-    assert "cliente-" in meta3["id"]
+    assert "cliente-" in meta3["cliente"]["id"]
 
 def test_path_traversal_obter_pasta_base(mock_portable):
     with pytest.raises(ValueError, match="Path traversal detectado ou ID inválido"):
@@ -89,7 +89,7 @@ def test_legacy_client_compatibility(mock_portable):
 
 def test_remover_cliente_portable(mock_portable):
     meta = criar_cliente_portable("Para Remover")
-    id_cliente = meta["id"]
+    id_cliente = meta["cliente"]["id"]
 
     res = remover_cliente_portable(id_cliente)
     assert res["ok"] is True
@@ -186,7 +186,7 @@ def test_active_client_state(mock_portable):
 def test_metadata_id_mismatch(mock_portable):
     import modules.shared as ms
     meta = ms.criar_cliente_portable('Cliente A')
-    id_a = meta['id']
+    id_a = meta['cliente']['id']
 
     # Simulate malicious meta.json
     meta_file = mock_portable / 'dados' / 'clientes' / id_a / 'meta.json'
@@ -204,7 +204,7 @@ def test_metadata_id_mismatch(mock_portable):
 def test_malicious_metadata_id(mock_portable):
     import modules.shared as ms
     meta = ms.criar_cliente_portable('Cliente Traversal')
-    id_c = meta['id']
+    id_c = meta['cliente']['id']
 
     meta_file = mock_portable / 'dados' / 'clientes' / id_c / 'meta.json'
     import json
@@ -269,3 +269,117 @@ def test_unknown_backend_error_code_normalization(mock_portable):
     assert res['ok'] is False
     assert res['codigo'] == 'UNKNOWN_ERROR'
     assert res['erro'] == 'Ocorreu um erro interno desconhecido na operação do cliente portátil.'
+
+
+def test_symlink_alias_rejection(mock_portable, monkeypatch):
+    from modules.shared import obter_pasta_clientes, _resolver_pasta_cliente, remover_cliente_portable, criar_cliente_portable, _is_safe_dir, listar_clientes_portable
+    import os
+    res = criar_cliente_portable("Cliente Real")
+    id_real = res["cliente"]["id"]
+
+    pasta_real = obter_pasta_clientes() / id_real
+    pasta_alias = obter_pasta_clientes() / "cliente-alias"
+
+    try:
+        os.symlink(pasta_real, pasta_alias, target_is_directory=True)
+    except Exception as e:
+        pytest.skip(f"Symlink creation skipped: {e}")
+
+    # Listing ignores it
+    clientes = listar_clientes_portable()
+    assert not any(c["id"] == "cliente-alias" for c in clientes)
+
+    # Resolving alias fails
+    assert _resolver_pasta_cliente("cliente-alias") is None
+
+    # Deleting alias fails
+    del_res = remover_cliente_portable("cliente-alias")
+    assert del_res["ok"] is False
+    assert del_res["erro"] == "CLIENT_NOT_FOUND"
+
+    # Original is intact
+    assert pasta_real.exists()
+    assert (pasta_real / "meta.json").exists()
+
+def test_junction_alias_rejection(mock_portable, monkeypatch):
+    from modules.shared import obter_pasta_clientes, _resolver_pasta_cliente, remover_cliente_portable, criar_cliente_portable, _is_safe_dir, listar_clientes_portable
+    import os
+    res = criar_cliente_portable("Cliente Real J")
+    id_real = res["cliente"]["id"]
+
+    pasta_real = obter_pasta_clientes() / id_real
+    pasta_alias = obter_pasta_clientes() / "cliente-alias-j"
+
+    # We don't actually create a junction, we just mock isjunction
+    # First create a normal dir to act as the alias so it exists
+    pasta_alias.mkdir()
+
+    original_isjunction = getattr(os.path, 'isjunction', None)
+
+    def mock_isjunction(path):
+        if "cliente-alias-j" in str(path):
+            return True
+        if original_isjunction:
+            return original_isjunction(path)
+        return False
+
+    monkeypatch.setattr(os.path, "isjunction", mock_isjunction, raising=False)
+
+    # Resolving alias fails
+    assert _resolver_pasta_cliente("cliente-alias-j") is None
+
+    # Deleting alias fails
+    del_res = remover_cliente_portable("cliente-alias-j")
+    assert del_res["ok"] is False
+    assert del_res["erro"] == "CLIENT_NOT_FOUND"
+
+def test_link_outside_root(mock_portable, monkeypatch, tmp_path):
+    from modules.shared import obter_pasta_clientes, _resolver_pasta_cliente, remover_cliente_portable, criar_cliente_portable, _is_safe_dir, listar_clientes_portable
+    import os
+    outside_dir = tmp_path / "outside_client"
+    outside_dir.mkdir()
+
+    pasta_alias = obter_pasta_clientes() / "cliente-alias-out"
+
+    try:
+        os.symlink(outside_dir, pasta_alias, target_is_directory=True)
+    except Exception as e:
+        pytest.skip(f"Symlink creation skipped: {e}")
+
+    assert _resolver_pasta_cliente("cliente-alias-out") is None
+
+    del_res = remover_cliente_portable("cliente-alias-out")
+    assert del_res["ok"] is False
+
+    assert outside_dir.exists()
+
+def test_toctou_deletion_replacement(mock_portable, monkeypatch):
+    from modules.shared import obter_pasta_clientes, _resolver_pasta_cliente, remover_cliente_portable, criar_cliente_portable, _is_safe_dir, listar_clientes_portable
+    import os
+    res = criar_cliente_portable("Cliente Alvo")
+    id_alvo = res["cliente"]["id"]
+
+    pasta_alvo = obter_pasta_clientes() / id_alvo
+    assert pasta_alvo.exists()
+
+    # Mock _is_safe_dir to simulate the directory turning into a symlink
+    # right after the first _resolver_pasta_cliente check but before the final one.
+
+    calls = []
+    original_is_safe = _is_safe_dir
+
+    def mock_is_safe_dir(path):
+        calls.append(path)
+        if len(calls) == 2:
+            return False # Fails the revalidation
+        return original_is_safe(path)
+
+    monkeypatch.setattr("modules.shared._is_safe_dir", mock_is_safe_dir)
+
+    del_res = remover_cliente_portable(id_alvo)
+
+    assert del_res["ok"] is False
+    assert del_res["erro"] == "CLIENT_NOT_FOUND"
+
+    # The actual folder was not deleted
+    assert pasta_alvo.exists()

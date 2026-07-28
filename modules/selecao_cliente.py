@@ -82,13 +82,14 @@ def exibir_selecao_cli() -> dict | None:
             
     from modules.shared import criar_cliente_portable
     res = criar_cliente_portable(nome)
-    
-    if not res.get("ok", True):  # If ok is False
-        console.print(f"\n[red]✗ Erro ao criar cliente: {res.get('erro')}[/red]")
-        return None
+    if not res.get("ok"):
+        console.print(f"\n[red]Erro ao criar o cliente: {res.get('erro')}[/red]")
+        import sys
+        sys.exit(1)
         
-    console.print(f"\n[green]✓[/green] Novo cliente: [bold]{res['nome_display']}[/bold]")
-    return {"id": res["id"], "nome": res["nome_display"]}
+    cliente = res.get("cliente", {})
+    console.print(f"\n[green]✓ Novo cliente: {nome}[/green]")
+    return {"id": cliente.get("id"), "nome": cliente.get("nome_display")}
 
 
 def exibir_selecao_gui() -> str | None:
