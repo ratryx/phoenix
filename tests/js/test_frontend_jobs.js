@@ -77,23 +77,21 @@ function runTest() {
         bridge.mockVerificar = () => new Promise(r => resolveCheck = r);
         
         const ac = new AbortController();
-        const p = jobs.awaitJob("job4", { signal: ac.signal });
-        p.catch(() => {}); // evita unhandled rejection
+        let bridgeChamado = null;
+        bridge.mockCancelar = (id) => { bridgeChamado = id; return {ok:true}; };
+        bridge.mockVerificar = () => new Promise(r => setTimeout(() => r({ status: "running" }), 100));
         
-        let cancelCalled = false;
-        bridge.mockCancelar = () => { cancelCalled = true; return {ok:true}; };
-        
-        await new Promise(r => setTimeout(r, 600)); // Espera o primeiro check disparar
-        
-        ac.abort();
-        resolveCheck({ status: "running" }); // unblock fetch
+        let abortController = new AbortController();
+        let p_abort = jobs.awaitJob('run_forever', { signal: abortController.signal });
+        abortController.abort();
         
         try {
-            await p;
-            assertEq(true, false, "Devia ter disparado exceção de cancelamento local");
+            let res = await p_abort;
+            let success = (res.ok === false && res.codigo === "JOB_CANCELLED");
+            assertEq(success, true, "Devia ter resolvido com ok=false e codigo JOB_CANCELLED");
+            assertEq(bridgeChamado, 'run_forever', "cancelar_tarefa foi chamado no bridge");
         } catch (e) {
-            assertEq(e.message, "Job cancelado localmente.", "Exceção correta para abort local");
-            assertEq(cancelCalled, true, "cancelar_tarefa foi chamado no bridge");
+            assertEq(false, true, "Não devia ter rejeitado: " + e.message);
         }
     }
 
