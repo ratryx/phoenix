@@ -58,7 +58,7 @@ def test_routine_service_sucesso():
     assert res["id_atendimento"] == "123"
     assert res["espaco_liberado_mb"] == 500.0
     assert "123_relatorio.txt" in res["relatorio_txt"]
-    
+
     assert len(f_logs.acoes) == 3 # 2 diags + 1 conclusão
     assert f_logs.acoes[0] == ("123", "Diagnóstico inicial coletado")
     assert f_logs.acoes[1] == ("123", "Diagnóstico final coletado")
@@ -79,19 +79,31 @@ def test_routine_service_validacao_id():
         service.executar(id_atendimento="")
 
 def test_routine_service_falha_sanitizada():
+    class SensitiveRoutineException(Exception):
+        pass
+
     class DiagFalha:
         def coletar_diagnostico_silencioso(self):
-            raise RuntimeError("Erro no diag inicial vazado")
-            
+            raise SensitiveRoutineException("C:\\Users\\Client\\secret.txt dangerous-command")
+
     f_logs = FakeLogs()
     service = RoutineService(DiagFalha(), FakeLimpeza(), FakeOtimizacao(), f_logs, FakeRelatorio())
-    
+
     res = service.executar("123")
     assert res["ok"] is False
     assert res["codigo"] == "ROUTINE_FAILED"
-    assert "vazado" not in res["erro"]
+
+    res_str = str(res)
+    assert "secret.txt" not in res_str
+    assert "dangerous-command" not in res_str
+    assert "SensitiveRoutineException" not in res_str
+
     assert len(f_logs.acoes) == 1
-    assert "Erro na rotina: Erro no diag inicial vazado" in f_logs.acoes[0][1]
+    acao = f_logs.acoes[0][1]
+    assert "Falha durante a execução da rotina completa" in acao
+    assert "secret.txt" not in acao
+    assert "dangerous-command" not in acao
+    assert "SensitiveRoutineException" not in acao
 
 class FakeJobContext:
     def __init__(self, cancel_after_phase=0):
@@ -108,7 +120,7 @@ class FakeJobContext:
 
 def test_routine_service_cancellation_checkpoints():
     service = RoutineService(FakeDiagnostico(), FakeLimpeza(), FakeOtimizacao(), FakeLogs(), FakeRelatorio())
-    
+
     # Cancel at checkpoint 1 (before initial diag)
     res1 = service.executar("123", job_context=FakeJobContext(cancel_after_phase=1))
     assert res1["ok"] is False
