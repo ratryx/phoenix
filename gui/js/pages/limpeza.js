@@ -24,20 +24,21 @@
         executando = true;
 
         Phoenix.ui.feedback.mostrarOverlay("Limpando arquivos temporários...", true);
-        
+        let sucesso = false;
         try {
             const jobRes = await Phoenix.bridge.call("executar_limpeza");
             if (!jobRes || !jobRes.job_id) {
-                Phoenix.ui.feedback.esconderOverlay(true, false);
                 return;
             }
             const resultado = await Phoenix.jobs.awaitJob(jobRes.job_id);
-            Phoenix.ui.feedback.esconderOverlay(true, resultado && resultado.ok);
+            if (resultado && resultado.ok) {
+                sucesso = true;
+            }
             renderizarLimpeza(resultado);
         } catch (e) {
             console.error("[ERRO] Limpeza:", e);
-            Phoenix.ui.feedback.esconderOverlay(true, false);
         } finally {
+            Phoenix.ui.feedback.esconderOverlay(true, sucesso);
             executando = false;
         }
     };

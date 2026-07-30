@@ -36,13 +36,29 @@ class PhoenixAPI:
             routine_service = RoutineService()
         self._routine_service = routine_service
 
-    def _iniciar_job(self, target_fn, *args, operation_name="unknown", exclusive_group=None, **kwargs) -> dict:
+    def _iniciar_job(self, target_fn, *args, operation_name="unknown", exclusive_group=None, timeout=None, pass_job_context=False, **kwargs) -> dict:
         """Delega a criação do job para o JobManager e retorna o formato esperado pelo JS."""
+        if timeout is None:
+            if operation_name == "rotina_completa":
+                timeout = 600
+            elif operation_name == "criar_ponto_restauracao":
+                timeout = 300
+            elif operation_name == "otimizar_disco":
+                timeout = 300
+            elif exclusive_group == "system_mutation":
+                timeout = 180
+            elif operation_name in ("carregar_hardware_cache", "forcar_rescan_hardware"):
+                timeout = 45
+            else:
+                timeout = 30
+
         job_id = self._job_manager.submit(
             target_fn,
             *args,
             operation_name=operation_name,
             exclusive_group=exclusive_group,
+            timeout=timeout,
+            pass_job_context=pass_job_context,
             **kwargs
         )
         return {"job_id": job_id}
@@ -50,6 +66,10 @@ class PhoenixAPI:
     def verificar_tarefa(self, job_id: str) -> dict:
         """Retorna o status atual de uma tarefa a partir do JobManager."""
         return self._job_manager.consultar(job_id)
+
+    def cancelar_tarefa(self, job_id: str) -> dict:
+        """Solicita o cancelamento cooperativo de uma tarefa."""
+        return self._job_manager.cancelar(job_id)
 
     # ---------- Hardware / contexto inicial ----------
 
@@ -297,13 +317,14 @@ class PhoenixAPI:
         """Executa a rotina completa em segundo plano (fire-and-forget)."""
         self.iniciar_atendimento(nome_cliente)
 
-        def rotina():
+        def rotina(job_context=None):
             return self._routine_service.executar(
                 id_atendimento=self._id_atendimento,
-                nome_cliente=self._nome_cliente
+                nome_cliente=self._nome_cliente,
+                job_context=job_context
             )
 
-        return self._iniciar_job(rotina, operation_name="rotina_completa", exclusive_group="system_mutation")
+        return self._iniciar_job(rotina, operation_name="rotina_completa", exclusive_group="system_mutation", pass_job_context=True)
 
     def liberar_memoria_standby(self) -> dict:
         return self._iniciar_job(
@@ -337,4 +358,5 @@ class PhoenixAPI:
         self._window_controller.minimizar()
 
     def fechar_janela(self):
+        self._job_manager.shutdown()
         self._window_controller.fechar()

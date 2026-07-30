@@ -21,12 +21,10 @@
                 try {
                     var jobRes = await bridge.call("executar_rotina_completa", "");
                     if (!jobRes || !jobRes.job_id) {
-                        feedback.esconderOverlay(true);
                         return;
                     }
                     
                     var resultado = await jobs.awaitJob(jobRes.job_id);
-                    feedback.esconderOverlay(true);
 
                     if (!resultado || !resultado.ok) {
                         await feedback.confirmarModal(
@@ -41,6 +39,14 @@
                     Phoenix.pages.relatorio.showResult(resultado);
                 } catch (e) {
                     console.error("[ERRO] Rotina completa:", e);
+                    if (e.message !== "Job cancelado localmente.") {
+                        await feedback.confirmarModal(
+                            'Erro',
+                            'Ocorreu um erro ao processar a rotina.',
+                            '🚨'
+                        );
+                    }
+                } finally {
                     feedback.esconderOverlay(true);
                 }
             });

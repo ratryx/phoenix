@@ -1,11 +1,67 @@
-import time
 import pytest
-from modules.gui.jobs import JobManager
+import time
 from modules.gui.api import PhoenixAPI
+
+class MockHardwareService:
+    def carregar_hardware_cache(self, progress_callback=None):
+        pass
+    def forcar_rescan_hardware(self):
+        pass
+    def obter_hardware(self):
+        return {}
+    def obter_nivel_qualidade_visual(self):
+        return "alto"
+
+class MockWindowController:
+    def minimizar(self):
+        pass
+    def fechar(self):
+        pass
+
+class MockRoutineService:
+    def executar(self, id_atendimento, nome_cliente, job_context=None):
+        pass
+
+class MockJobManager:
+    def submit(self, fn, *args, job_id=None, operation_name=None, exclusive_group=None, timeout=None, pass_job_context=False, **kwargs):
+        self.last_timeout = timeout
+        return "123"
+    def update_progress(self, job_id, pct, msg):
+        pass
+    def get_progress(self, job_id):
+        return 0
+
+def test_api_timeout_policies():
+    jm = MockJobManager()
+    api = PhoenixAPI(hw_info={}, job_manager=jm, hardware_service=MockHardwareService(), window_controller=MockWindowController(), routine_service=MockRoutineService())
+
+    # default
+    api.obter_diagnostico()
+    assert jm.last_timeout == 30
+
+    # rotina completa
+    api.executar_rotina_completa()
+    assert jm.last_timeout == 600
+
+    # system_mutation fallback
+    api.executar_limpeza()
+    assert jm.last_timeout == 180
+
+    # restore point
+    api.criar_ponto_restauracao()
+    assert jm.last_timeout == 300
+
+    # hardware cache
+    api.carregar_hardware_cache()
+    assert jm.last_timeout == 45
+
+
+import time
+from modules.gui.jobs import JobManager
 from modules.gui_app import iniciar
 
 def test_api_injecao_manager():
-    """Valida se a API usa a instância exata de JobManager, HardwareService e WindowController injetada."""
+    """Valida se a API usa a inst├óncia exata de JobManager, HardwareService e WindowController injetada."""
     manager = JobManager(ttl_seconds=100)
     
     class FakeHardwareService:
@@ -28,11 +84,11 @@ def test_api_injecao_manager():
     assert type(api_default._routine_service).__name__ == "RoutineService"
 
 def test_api_delegacao_routine_service(monkeypatch):
-    """Valida se a API injeta e aciona o RoutineService corretamente sem chamar módulos diretos."""
+    """Valida se a API injeta e aciona o RoutineService corretamente sem chamar m├│dulos diretos."""
     class MockRoutineService:
         def __init__(self):
             self.chamadas = []
-        def executar(self, id_atendimento, nome_cliente):
+        def executar(self, id_atendimento, nome_cliente, job_context=None):
             self.chamadas.append((id_atendimento, nome_cliente))
             return {"ok": True, "res": "mockado"}
 
@@ -52,7 +108,7 @@ def test_api_delegacao_routine_service(monkeypatch):
     assert payload["status"] == "done"
     assert payload["resultado"] == {"ok": True, "res": "mockado"}
     
-    # Valida parâmetros passados pro serviço
+    # Valida par├ómetros passados pro servi├ºo
     assert len(mock_routine.chamadas) == 1
     chamada = mock_routine.chamadas[0]
     
@@ -76,7 +132,7 @@ def test_api_delegacao_verificar_tarefa():
     assert payload["resultado"]["ok"] is True
 
 def test_api_metodo_assincrono_leitura(monkeypatch):
-    """Valida que uma operação de leitura (obter_diagnostico) roda em background sem grupo exclusivo."""
+    """Valida que uma opera├º├úo de leitura (obter_diagnostico) roda em background sem grupo exclusivo."""
     from modules import diagnostico
     monkeypatch.setattr(diagnostico, "coletar_diagnostico_silencioso", lambda: {"diag": 1})
     
@@ -98,7 +154,7 @@ def test_api_metodo_assincrono_leitura(monkeypatch):
     assert job_interno["exclusive_group"] is None
 
 def test_api_metodo_assincrono_destrutivo(monkeypatch):
-    """Valida que uma operação de mutação utiliza o grupo system_mutation."""
+    """Valida que uma opera├º├úo de muta├º├úo utiliza o grupo system_mutation."""
     from modules import limpeza
     monkeypatch.setattr(limpeza, "executar_limpeza_completa", lambda x: 500)
     
@@ -116,7 +172,7 @@ def test_api_metodo_assincrono_destrutivo(monkeypatch):
     assert job_interno["exclusive_group"] == "system_mutation"
 
 def test_api_metodo_com_progresso(monkeypatch):
-    """Valida que carregar_hardware_cache emite atualizações de progresso no payload e não corrompe sistema."""
+    """Valida que carregar_hardware_cache emite atualiza├º├Áes de progresso no payload e n├úo corrompe sistema."""
     from modules import hardware
     def mock_hw(progress_callback=None):
         if progress_callback:
@@ -131,7 +187,7 @@ def test_api_metodo_com_progresso(monkeypatch):
     res = api.carregar_hardware_cache()
     job_id = res["job_id"]
     
-    # Testa se a mensagem pre-worker "Iniciando detecção..." entrou em vigor rápido (antes do worker)
+    # Testa se a mensagem pre-worker "Iniciando detec├º├úo..." entrou em vigor r├ípido (antes do worker)
     payload_inicio = api.verificar_tarefa(job_id)
     
     time.sleep(0.1)
@@ -140,7 +196,7 @@ def test_api_metodo_com_progresso(monkeypatch):
     assert payload_fim["resultado"]["hardware"]["hw"] == 1
 
 def test_api_concorrencia_destrutiva_rejeita(monkeypatch):
-    """Testa que duas operações do mesmo grupo exclusivo geram conflito seguro."""
+    """Testa que duas opera├º├Áes do mesmo grupo exclusivo geram conflito seguro."""
     from modules import limpeza
     import time
     
@@ -162,14 +218,14 @@ def test_api_concorrencia_destrutiva_rejeita(monkeypatch):
     
     # job 2 falhou logo de cara
     payload2 = api.verificar_tarefa(job_id2)
-    assert payload2["status"] == "done"
+    assert payload2["status"] == "failed"
     assert payload2["resultado"]["ok"] is False
-    assert "já está em execução" in payload2["resultado"]["erro"]
+    assert "está em execução" in payload2["resultado"]["erro"]
     assert "system_mutation" not in payload2["resultado"].get("erro", "")
     assert "system_mutation" not in payload2["resultado"].get("detalhe", "")
     assert payload2["resultado"]["detalhe"] == "Por favor, aguarde a conclusão da tarefa atual."
     
-    # job 1 ainda estara executando ou terminará
+    # job 1 ainda estara executando ou terminar├í
     time.sleep(0.4)
     payload1 = api.verificar_tarefa(job_id1)
     assert payload1["status"] == "done"
@@ -181,7 +237,7 @@ def test_janela_nao_serializada():
     assert "janela" not in public_attrs
     assert "window_controller" not in public_attrs
     
-    # Valida dicionário interno explicitamente
+    # Valida dicion├írio interno explicitamente
     dict_api = api.__dict__
     assert "_janela" not in dict_api
     assert "_window" not in dict_api
@@ -214,7 +270,7 @@ class MockHardwareService:
         return {"ok": True}
 
 def test_api_delegacao_hardware_sincrono():
-    """Testa se os métodos síncronos delegam para o HardwareService sem criar jobs."""
+    """Testa se os m├®todos s├¡ncronos delegam para o HardwareService sem criar jobs."""
     api = PhoenixAPI({}, hardware_service=MockHardwareService())
     
     assert api.obter_hardware() == {"tipo": "hardware"}
@@ -246,7 +302,7 @@ def test_api_delegacao_hardware_assincrono():
     assert payload_rescan["resultado"]["ok"] is True
 
 def test_api_delegacao_janela():
-    """Testa se os métodos da janela são delegados pro WindowController."""
+    """Testa se os m├®todos da janela s├úo delegados pro WindowController."""
     class FakeWindowController:
         def __init__(self):
             self.calls = []
@@ -275,7 +331,7 @@ def test_api_delegacao_janela():
 
 def test_iniciar_gui_app(monkeypatch):
     """
-    Testa que a inicialização não abre janela real, usa a mesma instância de HardwareService
+    Testa que a inicializa├º├úo n├úo abre janela real, usa a mesma inst├óncia de HardwareService
     e WindowController, e chama set_window() com a janela criada pelo webview.
     """
     import modules.gui_app

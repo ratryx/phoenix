@@ -68,14 +68,13 @@
                 try {
                     const jobRes = await Phoenix.bridge.call("executar_otimizacao_geral");
                     if (!jobRes || !jobRes.job_id) { 
-                        Phoenix.ui.feedback.esconderOverlay(true); 
                         return; 
                     }
                     const resultado = await Phoenix.jobs.awaitJob(jobRes.job_id);
-                    Phoenix.ui.feedback.esconderOverlay(true);
                     exibirResultadoOtimizacao(resultado, "Otimização geral aplicada.");
                 } catch (e) {
                     console.error("[ERRO] Otimização geral:", e);
+                } finally {
                     Phoenix.ui.feedback.esconderOverlay(true);
                 }
             });
@@ -94,17 +93,16 @@
                 try {
                     const jobRes = await Phoenix.bridge.call("executar_otimizacao_gaming", false);
                     if (!jobRes || !jobRes.job_id) { 
-                        Phoenix.ui.feedback.esconderOverlay(true); 
                         return; 
                     }
                     const resultado = await Phoenix.jobs.awaitJob(jobRes.job_id);
-                    Phoenix.ui.feedback.esconderOverlay(true);
                     exibirResultadoOtimizacao(
                         resultado,
                         "Otimização para jogos aplicada. Reinicie o PC para garantir efeito completo."
                     );
                 } catch (e) {
                     console.error("[ERRO] Otimização gaming:", e);
+                } finally {
                     Phoenix.ui.feedback.esconderOverlay(true);
                 }
             });

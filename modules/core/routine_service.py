@@ -1,4 +1,5 @@
 import logging
+from modules.core.exceptions import JobCancelledError
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ class RoutineService:
         self._logs = logs_module
         self._relatorio = relatorio_module
 
-    def executar(self, id_atendimento: str, nome_cliente: str = "") -> dict:
+    def executar(self, id_atendimento: str, nome_cliente: str = "", job_context=None) -> dict:
         """
         Executa o fluxo completo do atendimento:
         1. Diagnóstico Inicial
@@ -52,37 +53,95 @@ class RoutineService:
         if not id_atendimento:
             raise ValueError("ID do atendimento é obrigatório para iniciar a rotina.")
 
-        # 1. Diagnóstico Inicial
-        dados_antes = self._diagnostico.coletar_diagnostico_silencioso()
-        self._logs.salvar_snapshot(id_atendimento, "antes", dados_antes, nome_cliente)
-        self._logs.registrar_acao(id_atendimento, "Diagnóstico inicial coletado", nome_cliente=nome_cliente)
+        def check_cancel():
+            if job_context:
+                job_context.raise_if_cancelled()
 
-        # 2. Limpeza
-        espaco_liberado = self._limpeza.executar_limpeza_completa(id_atendimento)
+        try:
+            # Checkpoint 1: before initial diagnosis
+            check_cancel()
+            if job_context: job_context.update_progress(10, "Realizando diagnóstico inicial...")
 
-        # 3. Otimização
-        self._otimizacao.executar_otimizacao_geral(id_atendimento)
+            # 1. Diagnóstico Inicial
+            dados_antes = self._diagnostico.coletar_diagnostico_silencioso()
+            self._logs.salvar_snapshot(id_atendimento, "antes", dados_antes, nome_cliente)
+            self._logs.registrar_acao(id_atendimento, "Diagnóstico inicial coletado", nome_cliente=nome_cliente)
 
-        # 4. Diagnóstico Final
-        dados_depois = self._diagnostico.coletar_diagnostico_silencioso()
-        self._logs.salvar_snapshot(id_atendimento, "depois", dados_depois, nome_cliente)
-        self._logs.registrar_acao(id_atendimento, "Diagnóstico final coletado")
+            # Checkpoint 2: after initial diagnosis and snapshot persistence
+            check_cancel()
 
-        # 5. Exportação de Relatório
-        espaco_liberado_mb = round(espaco_liberado / (1024 ** 2), 2)
-        pasta_logs = self._logs.obter_pasta_logs()
-        caminho_txt = pasta_logs / f"{id_atendimento}_relatorio.txt"
-        
-        snapshot_antes = self._logs.carregar_snapshot(id_atendimento, "antes")
-        snapshot_depois = self._logs.carregar_snapshot(id_atendimento, "depois")
-        
-        self._relatorio.exportar_relatorio_txt(snapshot_antes, snapshot_depois, espaco_liberado_mb, caminho_txt)
+            # Checkpoint 3: before cleanup
+            check_cancel()
+            if job_context: job_context.update_progress(30, "Executando limpeza completa...")
 
-        return {
-            "ok": True,
-            "id_atendimento": id_atendimento,
-            "antes": dados_antes,
-            "depois": dados_depois,
-            "espaco_liberado_mb": espaco_liberado_mb,
-            "relatorio_txt": str(caminho_txt),
-        }
+            # 2. Limpeza
+            espaco_liberado = self._limpeza.executar_limpeza_completa(id_atendimento)
+
+            # Checkpoint 4: after cleanup
+            check_cancel()
+
+            # Checkpoint 5: before optimization
+            check_cancel()
+            if job_context: job_context.update_progress(60, "Aplicando otimizações gerais...")
+
+            # 3. Otimização
+            self._otimizacao.executar_otimizacao_geral(id_atendimento)
+
+            # Checkpoint 6: after optimization
+            check_cancel()
+
+            # Checkpoint 7: before final diagnosis
+            check_cancel()
+            if job_context: job_context.update_progress(80, "Realizando diagnóstico final...")
+
+            # 4. Diagnóstico Final
+            dados_depois = self._diagnostico.coletar_diagnostico_silencioso()
+            self._logs.salvar_snapshot(id_atendimento, "depois", dados_depois, nome_cliente)
+            self._logs.registrar_acao(id_atendimento, "Diagnóstico final coletado")
+
+            # Checkpoint 8: after final snapshot persistence
+            check_cancel()
+
+            # Checkpoint 9: before report generation
+            check_cancel()
+            if job_context: job_context.update_progress(90, "Gerando relatório final...")
+
+            # 5. Exportação de Relatório
+            espaco_liberado_mb = round(espaco_liberado / (1024 ** 2), 2)
+            pasta_logs = self._logs.obter_pasta_logs()
+            caminho_txt = pasta_logs / f"{id_atendimento}_relatorio.txt"
+
+            snapshot_antes = self._logs.carregar_snapshot(id_atendimento, "antes")
+            snapshot_depois = self._logs.carregar_snapshot(id_atendimento, "depois")
+
+            self._relatorio.exportar_relatorio_txt(snapshot_antes, snapshot_depois, espaco_liberado_mb, caminho_txt)
+
+            self._logs.registrar_acao(id_atendimento, "Rotina concluída com sucesso")
+            if job_context: job_context.update_progress(100, "Concluído!")
+
+            return {
+                "ok": True,
+                "id_atendimento": id_atendimento,
+                "antes": dados_antes,
+                "depois": dados_depois,
+                "espaco_liberado_mb": espaco_liberado_mb,
+                "relatorio_txt": str(caminho_txt),
+            }
+
+        except JobCancelledError:
+            self._logs.registrar_acao(
+                id_atendimento,
+                "Rotina cancelada pelo usuário"
+            )
+            raise
+        except Exception as e:
+            self._logs.registrar_acao(
+                id_atendimento,
+                "Falha durante a execução da rotina completa"
+            )
+            logger.exception("Falha inesperada durante a rotina completa.")
+            return {
+                "ok": False,
+                "codigo": "ROUTINE_FAILED",
+                "erro": "Não foi possível concluir a rotina."
+            }
