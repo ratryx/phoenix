@@ -138,8 +138,10 @@ def test_8_9_ttl_remove_job():
     wait_for_status(jm, job_concluido, "done")
     wait_for_worker_exit(jm, job_concluido)
 
-    time.sleep(0.2)
-    jm._cleanup_expired()
+    # Patch time instead of sleeping
+    import unittest.mock
+    with unittest.mock.patch('time.time', return_value=time.time() + 10.0):
+        jm._cleanup_expired()
 
     assert jm.consultar(job_concluido)["status"] == "not_found"
     assert jm.consultar(job_em_execucao)["status"] == "running"
@@ -359,5 +361,53 @@ def test_shutdown_behavior_non_cooperative_failure():
     status_final = jm.consultar(j_id)
     assert status_final["status"] == "failed"
     assert status_final["resultado"]["codigo"] == "JOB_INTERNAL_ERROR"
+
+    jm.shutdown()
+
+def test_shutdown_behavior_duplicate_id_protection():
+    jm = JobManager(watchdog_interval=0.1)
+    ev_started = threading.Event()
+    ev_can_finish = threading.Event()
+
+    def longo(job_context=None):
+        ev_started.set()
+        ev_can_finish.wait(5.0)
+        return {"ok": True, "dado": "real_result"}
+
+    # 1. Submit an exclusive worker using job_id="fixed-active-id"
+    j_id = jm.submit(longo, job_id="fixed-active-id", pass_job_context=True, exclusive_group="system_mutation")
+    assert j_id == "fixed-active-id"
+
+    # 2. Confirm it started
+    ev_started.wait(2.0)
+
+    # 3. Call shutdown()
+    jm.shutdown()
+
+    # 4. Submit again using the same job_id
+    res = jm.submit(lambda: {"ok": True}, job_id="fixed-active-id", exclusive_group="system_mutation")
+
+    # 5. Confirm the returned rejection ID is different
+    assert res != "fixed-active-id"
+    assert type(res) is str
+
+    # 6. Confirm the original record still exists and is cancel_requested
+    status = jm.consultar("fixed-active-id")
+    assert status["status"] == "cancel_requested"
+
+    # 7. Confirm the original worker still owns the exclusive group
+    assert jm._exclusive_groups.get("system_mutation") == "fixed-active-id"
+
+    # 8. Release the original worker
+    ev_can_finish.set()
+    wait_for_worker_exit(jm, "fixed-active-id")
+
+    # 9. Confirm its real final result remains intact
+    status_final = jm.consultar("fixed-active-id")
+    assert status_final["status"] == "done"
+    assert status_final["resultado"]["dado"] == "real_result"
+
+    # 10. Confirm ownership is released only after its actual exit
+    assert "system_mutation" not in jm._exclusive_groups
 
     jm.shutdown()

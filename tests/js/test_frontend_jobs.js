@@ -76,6 +76,12 @@ function runTest() {
         } catch (err) {
             console.error(`❌ [FALHA] ${name}: exceção não tratada - ${err}`);
             failed++;
+        } finally {
+            const activeTimers = timers.filter(t => t.active).length;
+            if (activeTimers > 0) {
+                console.error(`❌ [FALHA] ${name}: vazou ${activeTimers} timer(s) ativo(s)`);
+                failed++;
+            }
         }
     }
 
@@ -129,17 +135,26 @@ function runTest() {
 
         // 5. custom valid pollIntervalMs
         await runCase("5. custom valid pollIntervalMs", async () => {
-            jobs.awaitJob("j5", { pollIntervalMs: 150 });
+            bridge.mockVerificar = () => ({ status: "done", resultado: { ok: true } });
+            let p = jobs.awaitJob("j5", { pollIntervalMs: 150 });
             assertEq(timers[0].delay, 150, "usou 150ms");
+            await stepTimer();
+            await p;
         });
 
         // 6. invalid/small pollIntervalMs fallback
         await runCase("6. invalid/small pollIntervalMs fallback", async () => {
-            jobs.awaitJob("j6_1", { pollIntervalMs: 50 });
+            bridge.mockVerificar = () => ({ status: "done", resultado: { ok: true } });
+            let p1 = jobs.awaitJob("j6_1", { pollIntervalMs: 50 });
             assertEq(timers[0].delay, 500, "50ms virou 500ms");
-            timers.length = 0;
-            jobs.awaitJob("j6_2", { pollIntervalMs: "asd" });
+            await stepTimer();
+            await p1;
+
+            timers.length = 0; // clear to retest
+            let p2 = jobs.awaitJob("j6_2", { pollIntervalMs: "asd" });
             assertEq(timers[0].delay, 500, "NaN virou 500ms");
+            await stepTimer();
+            await p2;
         });
 
         // 7. running then done
@@ -292,13 +307,14 @@ function runTest() {
         // 19. two concurrent jobs remain independent
         await runCase("19. two concurrent jobs remain independent", async () => {
             let reqs = [];
+            let progB = 0;
             bridge.mockVerificar = (id) => {
                 reqs.push(id);
                 if (id === "j19_a") return { status: "done", resultado: { ok: true, r: "a" } };
                 if (id === "j19_b") return { status: "running", progresso: 10 };
             };
             let pA = jobs.awaitJob("j19_a");
-            let pB = jobs.awaitJob("j19_b");
+            let pB = jobs.awaitJob("j19_b", (pct) => { progB = pct; });
 
             await stepTimer(); // j19_a done
             let resA = await pA;
@@ -306,6 +322,15 @@ function runTest() {
 
             await stepTimer(); // j19_b running
             assertEq(reqs.includes("j19_b"), true, "B fez requisicao");
+            assertEq(progB, 10, "B callbacks independentes");
+
+            // Finish B
+            bridge.mockVerificar = (id) => {
+                if (id === "j19_b") return { status: "done", resultado: { ok: true, r: "b" } };
+            };
+            await stepTimer();
+            let resB = await pB;
+            assertEq(resB.r, "b", "B terminou independentemente");
         });
 
         console.log(`\nResultados: ${passed} OK, ${failed} Falhas.`);
