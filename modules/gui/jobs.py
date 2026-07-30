@@ -35,7 +35,7 @@ class JobManager:
         self.ttl_seconds = ttl_seconds
         self.max_retained_jobs = max_retained_jobs
         self._exclusive_groups = {}  # group_name -> active_job_id
-        
+
         self._shutdown_event = threading.Event()
         self._watchdog_interval = watchdog_interval
 
@@ -46,21 +46,26 @@ class JobManager:
         while not self._shutdown_event.wait(self._watchdog_interval):
             self._check_timeouts()
             self._cleanup_expired()
-            
+
         # Garante a limpeza uma última vez após o shutdown
         self._check_timeouts()
         self._cleanup_expired()
 
+    def _generate_unique_job_id(self):
+        while True:
+            new_id = str(uuid.uuid4())
+            if new_id not in self._jobs:
+                return new_id
+
     def submit(self, target_fn, *args, job_id=None, operation_name="unknown", exclusive_group=None, timeout=None, pass_job_context=False, **kwargs):
         """Inicia uma função em thread isolada, retornando o job_id."""
         with self._lock:
-            job_id = job_id or str(uuid.uuid4())
             if not isinstance(job_id, str) or not job_id.strip():
-                job_id = str(uuid.uuid4())
+                job_id = self._generate_unique_job_id()
 
             if self._shutdown_event.is_set():
                 return self._create_rejected_job(
-                    job_id, operation_name, exclusive_group,
+                    self._generate_unique_job_id(), operation_name, exclusive_group,
                     "JOB_MANAGER_SHUTDOWN", "O sistema está sendo encerrado."
                 )
 
@@ -68,7 +73,7 @@ class JobManager:
 
             if job_id in self._jobs:
                 return self._create_rejected_job(
-                    str(uuid.uuid4()), operation_name, exclusive_group,
+                    self._generate_unique_job_id(), operation_name, exclusive_group,
                     "JOB_DUPLICATE_ID", "ID de tarefa duplicado fornecido."
                 )
 
@@ -77,7 +82,7 @@ class JobManager:
                 active_job_id = self._exclusive_groups.get(exclusive_group)
                 if active_job_id and active_job_id in self._jobs and self._jobs[active_job_id]["worker_alive"]:
                     return self._create_rejected_job(
-                        str(uuid.uuid4()), operation_name, exclusive_group,
+                        self._generate_unique_job_id(), operation_name, exclusive_group,
                         "JOB_CONFLICT", "Outra operação do sistema já está em execução.",
                         detalhe="Por favor, aguarde a conclusão da tarefa atual."
                     )
@@ -149,7 +154,7 @@ class JobManager:
                     if job:
                         job["worker_alive"] = False
                         job["worker_exited_at"] = time.time()
-                        
+
                         if job["status"] not in ("timed_out", "cancelled"):
                             if exception_type == "cancelled":
                                 job["status"] = "cancelled"
@@ -202,7 +207,7 @@ class JobManager:
                     pct = max(0, min(100, int(float(pct))))
                 except (ValueError, TypeError):
                     pct = 0
-                    
+
                 # Sanitização rigorosa da mensagem
                 if msg is None:
                     safe_msg = ""
@@ -212,9 +217,9 @@ class JobManager:
                     safe_msg = msg
                 else:
                     safe_msg = "[Objeto Complexo Omitido]"
-                    
+
                 safe_msg = safe_msg[:200]
-                
+
                 job["progresso"] = pct
                 job["mensagem"] = safe_msg
 
