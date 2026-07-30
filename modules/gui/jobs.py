@@ -136,21 +136,13 @@ class JobManager:
                 exception_type = "cancelled"
             except Exception as e:
                 logger.exception(f"Falha durante execução do job {job_id} ({operation_name})")
-                if job_ctx.is_cancel_requested():
-                    res = {
-                        "ok": False,
-                        "codigo": "JOB_CANCELLED",
-                        "erro": "A operação foi cancelada pelo usuário."
-                    }
-                    exception_type = "cancelled"
-                else:
-                    res = {
-                        "ok": False,
-                        "codigo": "JOB_INTERNAL_ERROR",
-                        "erro": "Não foi possível concluir a operação.",
-                        "detalhe": "Um erro inesperado ocorreu. Os detalhes foram registrados nos logs."
-                    }
-                    exception_type = "failed"
+                res = {
+                    "ok": False,
+                    "codigo": "JOB_INTERNAL_ERROR",
+                    "erro": "Não foi possível concluir a operação.",
+                    "detalhe": "Um erro inesperado ocorreu. Os detalhes foram registrados nos logs."
+                }
+                exception_type = "failed"
             finally:
                 with self._lock:
                     job = self._jobs.get(job_id)
@@ -159,7 +151,7 @@ class JobManager:
                         job["worker_exited_at"] = time.time()
                         
                         if job["status"] not in ("timed_out", "cancelled"):
-                            if job_ctx.is_cancel_requested() or exception_type == "cancelled":
+                            if exception_type == "cancelled":
                                 job["status"] = "cancelled"
                                 if not res:
                                     res = {"ok": False, "codigo": "JOB_CANCELLED", "erro": "A operação foi cancelada."}

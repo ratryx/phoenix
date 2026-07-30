@@ -136,7 +136,10 @@ class RoutineService:
                 "erro": "Rotina cancelada cooperativamente."
             }
         except Exception as e:
-            self._logs.registrar_acao(id_atendimento, f"Erro na rotina: {e}")
+            self._logs.registrar_acao(
+                id_atendimento,
+                "Falha durante a execução da rotina completa"
+            )
             logger.exception("Falha inesperada durante a rotina completa.")
             return {
                 "ok": False,
