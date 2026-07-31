@@ -47,21 +47,37 @@
         const container = document.getElementById("conteudo-limpeza");
         if (!container) return;
 
-        if (!resultado || !resultado.ok) {
-            container.innerHTML =
-                '<div class="card"><span class="badge erro">Erro</span> ' +
-                ((resultado && resultado.erro) || "Erro desconhecido") +
-                "</div>";
-            return;
-        }
+        container.innerHTML = '';
+        const div = document.createElement("div");
+        div.className = "card";
 
-        container.innerHTML =
-            '<div class="card">' +
-            '<span class="badge sucesso">Concluído</span>' +
-            '<p style="margin-top:10px">Espaço total liberado: <strong>' +
-            formatarBytes(resultado.espaco_liberado_mb) +
-            "</strong></p>" +
-            "</div>";
+        if (!resultado || !resultado.ok) {
+            const span = document.createElement("span");
+            span.className = "badge erro";
+            span.textContent = "Erro";
+            div.appendChild(span);
+            div.appendChild(document.createTextNode(" "));
+            
+            const txt = (resultado && resultado.erro) || "Erro desconhecido";
+            div.appendChild(document.createTextNode(txt));
+        } else {
+            const span = document.createElement("span");
+            span.className = "badge sucesso";
+            span.textContent = "Concluído";
+            div.appendChild(span);
+
+            const p = document.createElement("p");
+            p.style.marginTop = "10px";
+            p.appendChild(document.createTextNode("Espaço total liberado: "));
+            
+            const strong = document.createElement("strong");
+            strong.textContent = formatarBytes(resultado.espaco_liberado_mb);
+            p.appendChild(strong);
+            
+            div.appendChild(p);
+        }
+        
+        container.appendChild(div);
     }
 
     Phoenix.pages = Phoenix.pages || {};

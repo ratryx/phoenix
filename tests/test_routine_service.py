@@ -32,10 +32,13 @@ class FakeOtimizacao:
     def __init__(self, fail_on=None):
         self.fail_on = fail_on
         self.calls = 0
-    def executar_otimizacao_geral(self, id_atendimento):
+    def executar_otimizacao_geral(self, id_atendimento, cancel_event=None):
         self.calls += 1
+        if cancel_event and cancel_event.is_set():
+            return {"ok": False, "codigo": "COMMAND_CANCELLED"}
         if self.fail_on == "optimization":
             raise RuntimeError("Sensitive failure optimization C:\\Users\\Client\\secret.txt")
+        return {"ok": True, "codigo": "COMMAND_OK"}
 
 class FakeLogs:
     def __init__(self, fail_on=None):
@@ -147,11 +150,14 @@ class FakeJobContext:
     def __init__(self, cancel_after_phase=0):
         self.phase = 0
         self.cancel_after_phase = cancel_after_phase
+        import threading
+        self.cancel_event = threading.Event()
     def is_cancel_requested(self):
         return self.phase >= self.cancel_after_phase
     def raise_if_cancelled(self):
         self.phase += 1
         if self.phase >= self.cancel_after_phase:
+            self.cancel_event.set()
             raise JobCancelledError("Job cancelled cooperatively")
     def update_progress(self, pct, msg):
         pass

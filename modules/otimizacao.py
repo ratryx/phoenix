@@ -121,34 +121,36 @@ def verificar_status_otimizacoes() -> dict:
 
 def reaplicar_otimizacao(id_otimizacao: str) -> dict:
     """Reaplica uma otimização específica após backup do ponto de restauração."""
-    # Como não temos como saber o que havia antes de re-escrever o registro de forma segura,
-    # o criar_ponto_restauracao é usado como safety net antes de qualquer reaplicação.
     if id_otimizacao == "plano_energia":
-        ativar_plano_energia_alto_desempenho()
-        return {"ok": True, "id": id_otimizacao}
+        res = ativar_plano_energia_alto_desempenho()
+        return {"ok": res.get("ok", False), "id": id_otimizacao, "codigo": res.get("codigo")}
         
     config = ITENS_VERIFICACAO.get(id_otimizacao)
     if not config:
         return {"ok": False, "erro": "ID não encontrado"}
         
     if config["tipo"] == "registro":
+        res = {"ok": False}
         if id_otimizacao == "modo_jogo":
-            ativar_modo_jogo_windows()
+            res = ativar_modo_jogo_windows()
         elif id_otimizacao == "gpu_scheduling":
-            otimizar_gpu_para_jogos()
+            res = otimizar_gpu_para_jogos()
         elif id_otimizacao == "gamebar_overlay":
-            desativar_gamebar_overlay()
+            res = desativar_gamebar_overlay()
         elif id_otimizacao == "efeitos_visuais":
-            desativar_efeitos_visuais()
+            res = desativar_efeitos_visuais()
         elif id_otimizacao == "apps_segundo_plano":
-            limitar_processos_em_segundo_plano()
-        return {"ok": True, "id": id_otimizacao}
+            res = limitar_processos_em_segundo_plano()
+        return {"ok": res.get("ok", False), "id": id_otimizacao, "codigo": res.get("codigo")}
         
     return {"ok": False, "erro": "Tipo de otimização não suportado"}
 
 def reaplicar_todas_inativas(status_atual: dict) -> dict:
     """Reaplica em lote todas as inativas com 1 único ponto de restauração prévio."""
-    criar_ponto_restauracao()
+    res_pr = criar_ponto_restauracao()
+    if not res_pr.get("ok"):
+        return res_pr
+        
     reaplicadas = []
     
     for item in status_atual.get("itens", []):
@@ -230,6 +232,8 @@ def criar_ponto_restauracao(cancel_event=None) -> dict:
 def _executar_comando(comando: list, nome_acao: str, cancel_event=None) -> dict:
     """Executa um comando do sistema e retorna resultado estruturado."""
     resultado = run_windows_command(comando, operation_name=nome_acao, timeout_seconds=30.0, cancel_event=cancel_event)
+    if resultado.code == "COMMAND_CANCELLED":
+        return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
     if not resultado.ok:
         console.print(f"  [yellow]⚠[/yellow] {nome_acao} (falhou)")
         return to_public_result(resultado)
@@ -304,27 +308,36 @@ def otimizar_gpu_para_jogos(cancel_event=None):
     )
 
 
-def listar_itens_inicializacao() -> str:
+def listar_itens_inicializacao() -> dict:
     """Lista os programas configurados para abrir junto com o Windows."""
     comando_ps = (
         "Get-CimInstance Win32_StartupCommand | Select-Object Name, Command, Location | Format-Table -AutoSize"
     )
     resultado = run_windows_command(
-        ["powershell", "-Command", comando_ps],
+        ["powershell", "-NoProfile", "-Command", comando_ps],
         operation_name="Listar inicialização",
         timeout_seconds=30.0
     )
     if not resultado.ok:
-        if resultado.timed_out:
-            return "Erro: a consulta demorou demais e foi interrompida."
-        erro = resultado.stderr.strip()
-        return f"Erro ao listar: {erro}"
+        return {
+            "ok": False,
+            "codigo": resultado.code,
+            "erro": "Falha ao listar programas de inicialização." if not resultado.timed_out else "Tempo limite excedido."
+        }
     
     saida = resultado.stdout.strip()
     if not saida:
-        erro = resultado.stderr.strip()
-        return f"Nenhum item encontrado." + (f"\n\nDetalhe: {erro}" if erro else "")
-    return saida
+        return {
+            "ok": True,
+            "codigo": "COMMAND_OK",
+            "saida": "",
+            "mensagem": "Nenhum item encontrado."
+        }
+    return {
+        "ok": True,
+        "codigo": "COMMAND_OK",
+        "saida": saida
+    }
 
 
 def otimizar_disco_principal(cancel_event=None) -> dict:
@@ -344,7 +357,7 @@ def otimizar_disco_principal(cancel_event=None) -> dict:
         return ""
 
 
-def executar_verificacao_integridade_sistema(id_atendimento: str = None) -> dict:
+def executar_verificacao_integridade_sistema(id_atendimento: str = None, cancel_event=None) -> dict:
     """
     Executa verificação completa de integridade do Windows:
     1. DISM (repara o store de componentes do Windows)
@@ -358,15 +371,21 @@ def executar_verificacao_integridade_sistema(id_atendimento: str = None) -> dict
     console.print("  [bold]Etapa 1/2 — DISM (reparando store de componentes)...[/bold]")
     res_dism = _executar_comando(
         ["DISM", "/Online", "/Cleanup-Image", "/RestoreHealth"],
-        "DISM: Store de componentes verificado/reparado"
+        "DISM: Store de componentes verificado/reparado",
+        cancel_event=cancel_event
     )
+    if res_dism.get("codigo") == "COMMAND_CANCELLED":
+        return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
     resultados["dism"] = res_dism
 
     console.print("  [bold]Etapa 2/2 — SFC (verificando arquivos do sistema)...[/bold]")
     res_sfc = _executar_comando(
         ["sfc", "/scannow"],
-        "SFC: Arquivos do sistema verificados"
+        "SFC: Arquivos do sistema verificados",
+        cancel_event=cancel_event
     )
+    if res_sfc.get("codigo") == "COMMAND_CANCELLED":
+        return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
     resultados["sfc"] = res_sfc
 
     sucesso = res_dism.get("ok", False) and res_sfc.get("ok", False)
@@ -396,7 +415,9 @@ def limpar_dns_e_rede(cancel_event=None):
     resultados = {}
     todos_ok = True
     for cmd, nome in comandos:
-        res = _executar_comando(cmd, nome)
+        res = _executar_comando(cmd, nome, cancel_event=cancel_event)
+        if res.get("codigo") == "COMMAND_CANCELLED":
+            return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
         resultados[nome] = res
         if not res.get("ok"):
             todos_ok = False
@@ -412,11 +433,17 @@ def executar_otimizacao_geral(id_atendimento: str = None, cancel_event=None) -> 
     """Executa o conjunto de otimizações gerais de performance (não-destrutivas)."""
     console.print(Panel("[bold yellow]Aplicando otimizações de performance...[/bold yellow]", border_style="orange3"))
 
-    resultados_cmd = {
-        "plano_energia": ativar_plano_energia_alto_desempenho(cancel_event=cancel_event),
-        "efeitos_visuais": desativar_efeitos_visuais(cancel_event=cancel_event),
-        "apps_segundo_plano": limitar_processos_em_segundo_plano(cancel_event=cancel_event),
-    }
+    acoes = [
+        ("plano_energia", ativar_plano_energia_alto_desempenho),
+        ("efeitos_visuais", desativar_efeitos_visuais),
+        ("apps_segundo_plano", limitar_processos_em_segundo_plano)
+    ]
+    resultados_cmd = {}
+    for nome, func in acoes:
+        res = func(cancel_event=cancel_event)
+        if res.get("codigo") == "COMMAND_CANCELLED":
+            return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
+        resultados_cmd[nome] = res
 
     sucesso = sum(1 for v in resultados_cmd.values() if v.get("ok"))
     total = len(resultados_cmd)
@@ -450,15 +477,25 @@ def executar_otimizacao_gaming(id_atendimento: str = None,
         "[bold yellow]Aplicando otimizações para jogos (FPS)...[/bold yellow]", 
         border_style="orange3"
     ))
-    resultados = {
-        "plano_energia": ativar_plano_energia_alto_desempenho(cancel_event=cancel_event),
-        "modo_jogo": ativar_modo_jogo_windows(cancel_event=cancel_event),
-        "gamebar": desativar_gamebar_overlay(cancel_event=cancel_event),
-        "gpu": otimizar_gpu_para_jogos(cancel_event=cancel_event)
-    }
     
+    acoes = [
+        ("plano_energia", ativar_plano_energia_alto_desempenho),
+        ("modo_jogo", ativar_modo_jogo_windows),
+        ("gamebar", desativar_gamebar_overlay),
+        ("gpu", otimizar_gpu_para_jogos)
+    ]
+    resultados = {}
+    for nome, func in acoes:
+        res = func(cancel_event=cancel_event)
+        if res.get("codigo") == "COMMAND_CANCELLED":
+            return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
+        resultados[nome] = res
+        
     if resetar_rede:
-        resultados["rede"] = limpar_dns_e_rede()
+        res = limpar_dns_e_rede(cancel_event=cancel_event)
+        if res.get("codigo") == "COMMAND_CANCELLED":
+            return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
+        resultados["rede"] = res
 
     sucesso = sum(1 for v in resultados.values() if v.get("ok"))
     total = len(resultados)

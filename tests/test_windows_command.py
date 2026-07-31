@@ -170,14 +170,20 @@ def test_process_already_exited_during_termination(mock_popen):
 
 @patch("subprocess.Popen")
 def test_windows_taskkill_tree_termination(mock_popen):
+    event = threading.Event()
+
     mock_target = MagicMock()
     mock_target.pid = 1234
-    mock_target.communicate.return_value = (b"", b"")
+    
+    def comm_side_effect(*args, **kwargs):
+        event.set()
+        raise subprocess.TimeoutExpired(cmd="cmd", timeout=2.0)
+        
+    mock_target.communicate.side_effect = comm_side_effect
     mock_target.poll.return_value = None
     mock_target.wait.return_value = 0
     
     mock_taskkill = MagicMock()
-    mock_taskkill.communicate.return_value = (b"", b"")
     
     def popen_side_effect(args, **kwargs):
         if "taskkill" in args:
@@ -185,9 +191,6 @@ def test_windows_taskkill_tree_termination(mock_popen):
         return mock_target
         
     mock_popen.side_effect = popen_side_effect
-    
-    event = threading.Event()
-    event.set()
     
     result = run_windows_command(
         ["target.exe"],
@@ -197,19 +200,26 @@ def test_windows_taskkill_tree_termination(mock_popen):
     )
     assert result.termination_ok is True
     # Ensure taskkill was called
-    assert any("taskkill" in call.args[0][0] for call in mock_popen.call_args_list if isinstance(call.args[0], list))
+    assert any(isinstance(call.args[0], list) and "taskkill" in call.args[0] for call in mock_popen.call_args_list)
 
 @patch("subprocess.Popen")
 def test_taskkill_failure_with_kill_fallback(mock_popen):
+    event = threading.Event()
+
     mock_target = MagicMock()
     mock_target.pid = 1234
-    mock_target.communicate.return_value = (b"", b"")
+    
+    def comm_side_effect(*args, **kwargs):
+        event.set()
+        raise subprocess.TimeoutExpired(cmd="cmd", timeout=2.0)
+        
+    mock_target.communicate.side_effect = comm_side_effect
     mock_target.poll.return_value = None
     # wait times out initially, then succeeds after kill
     mock_target.wait.side_effect = [subprocess.TimeoutExpired("cmd", 2.0), 0]
     
     mock_taskkill = MagicMock()
-    mock_taskkill.communicate.side_effect = Exception("taskkill crashed")
+    mock_taskkill.wait.side_effect = Exception("taskkill crashed")
     
     def popen_side_effect(args, **kwargs):
         if "taskkill" in args:
@@ -217,9 +227,6 @@ def test_taskkill_failure_with_kill_fallback(mock_popen):
         return mock_target
         
     mock_popen.side_effect = popen_side_effect
-    
-    event = threading.Event()
-    event.set()
     
     result = run_windows_command(
         ["target.exe"],
@@ -350,14 +357,9 @@ def test_hidden_window_process_group_flags_on_windows(mock_popen):
     
     kwargs = mock_popen.call_args[1]
     
-    startupinfo = kwargs.get("startupinfo")
-    if hasattr(subprocess, "STARTUPINFO"):
-        assert startupinfo is not None
-        assert startupinfo.dwFlags & subprocess.STARTF_USESHOWWINDOW
-        
     creationflags = kwargs.get("creationflags", 0)
-    if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
-        assert creationflags & subprocess.CREATE_NEW_PROCESS_GROUP
+    assert creationflags & getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+    assert creationflags & getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
 
 def test_monotonic_duration():
     result = run_windows_command(
