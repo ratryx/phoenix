@@ -203,6 +203,10 @@ def listar_backups() -> list:
 def _restaurar_valor_registro(caminho: str, nome_valor: str, valor: str, tipo: str) -> bool:
     """Restaura um valor no registro do Windows nativamente e com seguranca."""
     try:
+        # Validate that path and value match CHAVES_RASTREADAS
+        if not any(info.get("caminho") == caminho and info.get("valor") == nome_valor for info in CHAVES_RASTREADAS.values()):
+            return False
+
         if caminho.startswith("HKCU:\\"):
             root = winreg.HKEY_CURRENT_USER
             sub_caminho = caminho[6:]
@@ -216,18 +220,30 @@ def _restaurar_valor_registro(caminho: str, nome_valor: str, valor: str, tipo: s
             if tipo == "registro_dword":
                 try:
                     int_val = int(valor)
+                    if not (0 <= int_val <= 4294967295):
+                        return False
                     winreg.SetValueEx(k, nome_valor, 0, winreg.REG_DWORD, int_val)
                 except ValueError:
                     return False
             elif tipo == "registro_binario":
                 try:
-                    byte_list = [int(b) for b in valor.split(",") if 0 <= int(b) <= 255]
+                    tokens = valor.split(",")
+                    if not tokens:
+                        return False
+                    byte_list = []
+                    for b in tokens:
+                        if not b:
+                            return False
+                        int_b = int(b)
+                        if not (0 <= int_b <= 255):
+                            return False
+                        byte_list.append(int_b)
                     winreg.SetValueEx(k, nome_valor, 0, winreg.REG_BINARY, bytes(byte_list))
                 except ValueError:
                     return False
             return True
-    except Exception as e:
-        logger.debug(f"Falha ao restaurar {nome_valor}: {e}")
+    except Exception:
+        logger.debug("Falha ao restaurar chave protegida")
         return False
 
 
@@ -256,8 +272,8 @@ def executar_rollback(caminho_backup: str = None) -> dict:
     try:
         with open(caminho_backup, "r", encoding="utf-8") as f:
             backup = json.load(f)
-    except Exception as e:
-        logger.debug(f"Falha ao ler backup {caminho_backup}: {e}")
+    except Exception:
+        logger.debug("Falha ao ler arquivo de backup.")
         return {"ok": False, "erro": "Falha ao ler arquivo de backup. O arquivo pode estar corrompido ou inacessível."}
 
     console.print(Panel(

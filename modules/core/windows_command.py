@@ -53,8 +53,10 @@ def _terminate_process_tree(process: subprocess.Popen) -> bool:
             creationflags=CREATE_NO_WINDOW
         )
         taskkill_proc.wait(timeout=10.0)
+        if taskkill_proc.returncode != 0:
+            logger.debug(f"taskkill failed with returncode {taskkill_proc.returncode}")
     except Exception as e:
-        logger.debug(f"Failed to invoke taskkill for PID {process.pid}")
+        logger.debug(f"Failed to invoke taskkill for PID {process.pid}: {e}")
 
     try:
         process.wait(timeout=3.0)
@@ -153,9 +155,13 @@ def run_windows_command(
         return _create_result(COMMAND_CANCELLED, False, None, cancelled=True, termination_ok=True)
 
     # 3. Setup Windows flags
-    CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
-    CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
-    creationflags = CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+    import sys
+    if sys.platform == "win32":
+        CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+        CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+        creationflags = CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+    else:
+        creationflags = 0
 
     # 4. Start process
     try:

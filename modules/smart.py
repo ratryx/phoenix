@@ -49,15 +49,20 @@ def _consultar_confiabilidade_disco(device_id: str) -> dict | None:
     Get-StorageReliabilityCounter. Inclui temperatura, horas de uso,
     setores realocados, erros de leitura/escrita, etc.
     """
+    try:
+        normalized_device_id = str(int(device_id))
+    except (TypeError, ValueError):
+        return None
+
     comando_ps = (
-        f"Get-PhysicalDisk | Where-Object DeviceId -eq '{device_id}' | "
+        f"Get-PhysicalDisk | Where-Object DeviceId -eq '{normalized_device_id}' | "
         "Get-StorageReliabilityCounter | Select-Object "
         "Temperature, PowerOnHours, ReadErrorsTotal, WriteErrorsTotal, "
         "ReadErrorsCorrected, WriteErrorsCorrected, Wear | ConvertTo-Json"
     )
     resultado = run_windows_command(
         ["powershell", "-NoProfile", "-Command", comando_ps],
-        operation_name=f"Consultar S.M.A.R.T. disco {device_id}",
+        operation_name=f"Consultar S.M.A.R.T. disco {normalized_device_id}",
         timeout_seconds=15.0
     )
     if resultado.ok:

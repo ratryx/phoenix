@@ -19,8 +19,8 @@ O runner `run_windows_command` fornece as seguintes garantias técnicas:
 - **Ausência de Janelas Pretas**: Uso automático da flag `CREATE_NO_WINDOW` no Windows para evitar flashes incômodos no terminal.
 - **Process Group Isolation**: Os processos são criados em seus próprios process groups (`CREATE_NEW_PROCESS_GROUP`), garantindo que possam ser finalizados sem abater a aplicação pai (a própria GUI do Phoenix Optimizer).
 - **Encerramento Profundo (`taskkill /T /F`)**: Diante de timeout ou cancelamento, a função utiliza `taskkill` na árvore de processos para mitigar instâncias zumbis de processos "teimosos" comuns em comandos Powershell.
-- **Leitura Segura em Arquivos Temporários**: Os fluxos `stdout` e `stderr` são redirecionados de forma estrita para arquivos temporários no disco durante a execução para evitar que pipes travem o sistema por encher o buffer (`deadlocks`). A decodificação emprega múltiplas codificações heurísticas (`utf-8`, `utf-16`, e `cp1252`), lidando com as restrições variadas do ambiente Windows.
-- **Prevenção de Estouro de Memória**: O runner impõe um limite máximo (`MAX_OUTPUT_BYTES`) para truncar saídas gigantes a partir da leitura dos arquivos de log temporários, evitando que esgotem a RAM ou sobrecarreguem a interface web.
+- **Leitura Segura com Pipes e Polling**: Os fluxos `stdout` e `stderr` são redirecionados de forma estrita via PIPEs, e lidos usando polling e `communicate(timeout=...)` em um loop de espera, mitigando o risco de `deadlocks` ou bloqueios no encadeamento principal. A decodificação emprega múltiplas codificações heurísticas (`utf-8`, `utf-16`, e `cp1252`), lidando com as restrições variadas do ambiente Windows.
+- **Prevenção de Estouro de Memória**: O runner impõe um limite máximo para truncar saídas gigantes a partir da leitura dos pipes, evitando que esgotem a RAM ou sobrecarreguem a interface web.
 
 ## Retorno Seguro e Interface com a Web
 

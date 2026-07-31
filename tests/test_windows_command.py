@@ -97,12 +97,28 @@ def test_null_byte_argument():
     )
     assert result.code == COMMAND_INVALID
 
+import math
+
 def test_invalid_timeout():
     result = run_windows_command(
         ["cmd.exe"],
         operation_name="test_timeout",
         timeout_seconds=-1.0
     )
+    assert result.code == COMMAND_INVALID
+
+    result = run_windows_command(["cmd.exe"], operation_name="test_timeout", timeout_seconds=math.nan)
+    assert result.code == COMMAND_INVALID
+    
+    result = run_windows_command(["cmd.exe"], operation_name="test_timeout", timeout_seconds=math.inf)
+    assert result.code == COMMAND_INVALID
+
+def test_invalid_output_limits():
+    result = run_windows_command(["cmd.exe"], operation_name="test_limits", timeout_seconds=1.0, max_output_chars=-10)
+    assert result.code == COMMAND_INVALID
+
+def test_invalid_acceptable_returncodes():
+    result = run_windows_command(["cmd.exe"], operation_name="test_returncodes", timeout_seconds=1.0, acceptable_returncodes=[0, "1"])
     assert result.code == COMMAND_INVALID
 
 @patch("subprocess.Popen")
@@ -369,7 +385,8 @@ def test_monotonic_duration():
     )
     assert result.duration_ms >= 0
 
-def test_cancellation_before_process_launch():
+@patch("subprocess.Popen")
+def test_cancellation_before_process_launch(mock_popen):
     event = threading.Event()
     event.set()
     
@@ -380,6 +397,7 @@ def test_cancellation_before_process_launch():
         cancel_event=event
     )
     assert result.cancelled is True
+    assert not mock_popen.called
 
 def test_no_process_or_reader_left_alive_after_completion():
     # Tricky to test perfectly without psutil, but we mock and ensure communicate/wait returns.

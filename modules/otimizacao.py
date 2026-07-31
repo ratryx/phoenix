@@ -152,13 +152,18 @@ def reaplicar_todas_inativas(status_atual: dict) -> dict:
         return res_pr
         
     reaplicadas = []
+    falhas = []
     
     for item in status_atual.get("itens", []):
         if not item["ativo"]:
             res = reaplicar_otimizacao(item["id"])
             if res.get("ok"):
                 reaplicadas.append(item["id"])
+            else:
+                falhas.append(item["id"])
                 
+    if falhas:
+        return {"ok": False, "codigo": "OPERATION_PARTIAL_FAILURE", "reaplicadas": reaplicadas, "falhas": falhas}
     return {"ok": True, "reaplicadas": reaplicadas}
 
 
@@ -192,6 +197,13 @@ def criar_ponto_restauracao(cancel_event=None) -> dict:
     ]
 
     resultado = run_windows_command(comando, operation_name="Criar Ponto de Restauração", timeout_seconds=120.0, cancel_event=cancel_event)
+
+    if resultado.code == "COMMAND_CANCELLED":
+        return {
+            "ok": False,
+            "codigo": "COMMAND_CANCELLED",
+            "erro": "A operação foi cancelada pelo usuário."
+        }
 
     if resultado.ok:
         return {
@@ -318,6 +330,9 @@ def listar_itens_inicializacao() -> dict:
         operation_name="Listar inicialização",
         timeout_seconds=30.0
     )
+    if resultado.code == "COMMAND_CANCELLED":
+        return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
+    
     if not resultado.ok:
         return {
             "ok": False,
@@ -330,13 +345,13 @@ def listar_itens_inicializacao() -> dict:
         return {
             "ok": True,
             "codigo": "COMMAND_OK",
-            "saida": "",
+            "itens": [],
             "mensagem": "Nenhum item encontrado."
         }
     return {
         "ok": True,
         "codigo": "COMMAND_OK",
-        "saida": saida
+        "itens": saida.splitlines()
     }
 
 
@@ -459,8 +474,8 @@ def executar_otimizacao_geral(id_atendimento: str = None, cancel_event=None) -> 
 
     if id_atendimento:
         from modules import logs
-        logs.registrar_acao(id_atendimento, "Otimização geral aplicada",
-                          f"{sucesso}/{total} otimizações com sucesso")
+        msg = "Otimização geral concluída parcialmente" if not todos_ok else "Otimização geral aplicada"
+        logs.registrar_acao(id_atendimento, msg, f"{sucesso}/{total} sucessos")
 
     return {
         "ok": todos_ok,
@@ -515,7 +530,8 @@ def executar_otimizacao_gaming(id_atendimento: str = None,
 
     if id_atendimento:
         from modules import logs
-        logs.registrar_acao(id_atendimento, "Otimização para jogos aplicada", f"{sucesso}/{total} sucessos")
+        msg = "Otimização para jogos concluída parcialmente" if not todos_ok else "Otimização para jogos aplicada"
+        logs.registrar_acao(id_atendimento, msg, f"{sucesso}/{total} sucessos")
     
     return {
         "ok": todos_ok,

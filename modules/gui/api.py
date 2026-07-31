@@ -287,11 +287,7 @@ class PhoenixAPI:
         )
 
     def listar_inicializacao(self) -> dict:
-        try:
-            saida = otimizacao.listar_itens_inicializacao()
-            return {"ok": True, "saida": saida}
-        except Exception as e:
-            return {"ok": False, "erro": str(e)}
+        return otimizacao.listar_itens_inicializacao()
 
     # ---------- Serviços ----------
 
