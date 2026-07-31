@@ -360,16 +360,36 @@ def otimizar_disco_principal(cancel_event=None) -> dict:
     Executa otimização do disco C: — TRIM se for SSD, desfragmentação se for HDD.
     O Windows já decide automaticamente o método correto via /retrim ou /defrag.
     """
-    try:
-        resultado = run_windows_command(["defrag", "C:", "/O"], operation_name="Otimizar Disco", timeout_seconds=300.0, cancel_event=cancel_event)
+    resultado = run_windows_command(
+        ["defrag", "C:", "/O"],
+        operation_name="Otimizar Disco",
+        timeout_seconds=270.0,
+        cancel_event=cancel_event,
+    )
+
+    if resultado.code == "COMMAND_CANCELLED":
+        return {
+            "ok": False,
+            "codigo": "COMMAND_CANCELLED",
+            "erro": "A operação foi cancelada pelo usuário.",
+        }
+
+    if resultado.ok:
         console.print("  [green]✓[/green] Otimização de disco (C:) executada")
-        return resultado.stdout
-    except subprocess.TimeoutExpired:
-        console.print("  [yellow]⚠[/yellow] Otimização de disco demorou mais que o esperado e foi interrompida")
-        return ""
-    except Exception as e:
-        console.print(f"  [red]✗[/red] Falha na otimização de disco: {e}")
-        return ""
+        return {
+            "ok": True,
+            "codigo": "COMMAND_OK",
+            "saida": resultado.stdout,
+        }
+
+    return to_public_result(
+        resultado,
+        error_message=(
+            "A otimização do disco excedeu o tempo permitido."
+            if resultado.code == "COMMAND_TIMEOUT"
+            else "Não foi possível otimizar o disco."
+        ),
+    )
 
 
 def executar_verificacao_integridade_sistema(id_atendimento: str = None, cancel_event=None) -> dict:

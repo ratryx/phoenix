@@ -20,7 +20,7 @@ O runner `run_windows_command` fornece as seguintes garantias técnicas:
 - **Process Group Isolation**: Os processos são criados em seus próprios process groups (`CREATE_NEW_PROCESS_GROUP`), garantindo que possam ser finalizados sem abater a aplicação pai (a própria GUI do Phoenix Optimizer).
 - **Encerramento Profundo (`taskkill /T /F`)**: Diante de timeout ou cancelamento, a função utiliza `taskkill` na árvore de processos para mitigar instâncias zumbis de processos "teimosos" comuns em comandos Powershell.
 - **Leitura Segura com Pipes e Polling**: Os fluxos `stdout` e `stderr` são redirecionados de forma estrita via PIPEs, e lidos usando polling e `communicate(timeout=...)` em um loop de espera, mitigando o risco de `deadlocks` ou bloqueios no encadeamento principal. A decodificação emprega múltiplas codificações heurísticas (`utf-8`, `utf-16`, e `cp1252`), lidando com as restrições variadas do ambiente Windows.
-- **Prevenção de Estouro de Memória**: O runner impõe um limite máximo para truncar saídas gigantes a partir da leitura dos pipes, evitando que esgotem a RAM ou sobrecarreguem a interface web.
+- **Limite de Exposição de Saída**: O runner impõe um limite máximo (`max_output_chars`) para truncar a saída decodificada e exposta na interface da web. Como o método `communicate()` do subprocesso pode armazenar todo o conteúdo na memória (buffer), essa restrição tem como foco o tamanho das *strings* entregues após captura, não se propondo a impedir o esgotamento total da memória pelo subprocesso.
 
 ## Retorno Seguro e Interface com a Web
 

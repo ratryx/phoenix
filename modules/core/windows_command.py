@@ -42,21 +42,36 @@ def _terminate_process_tree(process: subprocess.Popen) -> bool:
     try:
         pid = process.pid
         taskkill_args = ["taskkill", "/PID", str(pid), "/T", "/F"]
-        
-        CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
-        
+
+        import sys
+        if sys.platform == "win32":
+            CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+            creationflags = CREATE_NO_WINDOW
+        else:
+            creationflags = 0
+
         taskkill_proc = subprocess.Popen(
             taskkill_args,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             shell=False,
-            creationflags=CREATE_NO_WINDOW
+            creationflags=creationflags
         )
-        taskkill_proc.wait(timeout=10.0)
-        if taskkill_proc.returncode != 0:
-            logger.debug(f"taskkill failed with returncode {taskkill_proc.returncode}")
-    except Exception as e:
-        logger.debug(f"Failed to invoke taskkill for PID {process.pid}: {e}")
+
+        try:
+            taskkill_proc.wait(timeout=10.0)
+            if taskkill_proc.returncode != 0:
+                logger.debug("Windows process-tree termination command failed.")
+        except subprocess.TimeoutExpired:
+            logger.debug("Windows process-tree termination command timed out.")
+            try:
+                taskkill_proc.kill()
+                taskkill_proc.wait(timeout=2.0)
+            except Exception:
+                pass
+
+    except Exception:
+        logger.debug("Windows process-tree termination command failed.")
 
     try:
         process.wait(timeout=3.0)
@@ -66,19 +81,19 @@ def _terminate_process_tree(process: subprocess.Popen) -> bool:
             process.kill()
             process.wait(timeout=2.0)
             return True
-        except Exception as e:
-            logger.debug(f"Failed to kill process {process.pid} as fallback")
+        except Exception:
+            logger.debug("Fallback process termination failed.")
             return False
 
 def _decode_output(data: bytes, max_chars: int) -> str:
     if not data:
         return ""
-        
+
     text = ""
     encodings_to_try = [
         "utf-8-sig", "utf-8", "utf-16", "cp1252", "oem", "ascii"
     ]
-    
+
     for enc in encodings_to_try:
         try:
             if enc == "oem":
@@ -93,7 +108,7 @@ def _decode_output(data: bytes, max_chars: int) -> str:
             continue
     else:
         text = data.decode("utf-8", errors="replace")
-        
+
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     if len(text) > max_chars:
         text = text[:max_chars] + "\n[TRUNCATED]"
@@ -109,8 +124,8 @@ def run_windows_command(
     max_output_chars: int = 32768,
 ) -> CommandResult:
     start_time = time.monotonic()
-    
-    def _create_result(code: str, ok: bool, returncode: Optional[int], 
+
+    def _create_result(code: str, ok: bool, returncode: Optional[int],
                        stdout: str = "", stderr: str = "",
                        timed_out: bool = False, cancelled: bool = False,
                        termination_ok: bool = True) -> CommandResult:
@@ -130,24 +145,27 @@ def run_windows_command(
     # 1. Validation
     if not isinstance(args, (list, tuple)) or not args:
         return _create_result(COMMAND_INVALID, False, None)
-    
+
     for arg in args:
         if not isinstance(arg, str):
             return _create_result(COMMAND_INVALID, False, None)
         if "\x00" in arg:
             return _create_result(COMMAND_INVALID, False, None)
-            
+
     if not args[0].strip():
         return _create_result(COMMAND_INVALID, False, None)
-        
-    if not isinstance(timeout_seconds, (int, float)) or math.isnan(timeout_seconds) or math.isinf(timeout_seconds) or timeout_seconds <= 0:
+
+    if not isinstance(timeout_seconds, (int, float)) or isinstance(timeout_seconds, bool) or math.isnan(timeout_seconds) or math.isinf(timeout_seconds) or timeout_seconds <= 0:
         return _create_result(COMMAND_INVALID, False, None)
-        
-    if not isinstance(max_output_chars, int) or max_output_chars <= 0:
+
+    if not isinstance(max_output_chars, int) or isinstance(max_output_chars, bool) or max_output_chars <= 0:
         return _create_result(COMMAND_INVALID, False, None)
-        
+
+    if not isinstance(acceptable_returncodes, (list, tuple, set, frozenset)) or not acceptable_returncodes:
+        return _create_result(COMMAND_INVALID, False, None)
+
     for code in acceptable_returncodes:
-        if not isinstance(code, int):
+        if not isinstance(code, int) or isinstance(code, bool):
             return _create_result(COMMAND_INVALID, False, None)
 
     # 2. Cancellation before launch
@@ -177,18 +195,18 @@ def run_windows_command(
         return _create_result(COMMAND_NOT_FOUND, False, None)
     except PermissionError:
         return _create_result(COMMAND_ACCESS_DENIED, False, None)
-    except OSError as e:
-        logger.error(f"Failed to start process ({operation_name})")
+    except OSError:
+        logger.error("Failed to start process.")
         return _create_result(COMMAND_INTERNAL_ERROR, False, None)
-    except Exception as e:
-        logger.error(f"Unexpected error starting ({operation_name})")
+    except Exception:
+        logger.error("Unexpected error starting process.")
         return _create_result(COMMAND_INTERNAL_ERROR, False, None)
 
     # 5. Wait loop
     poll_interval = 0.1
     stdout_chunks = []
     stderr_chunks = []
-    
+
     try:
         while True:
             if cancel_event and cancel_event.is_set():
@@ -231,15 +249,16 @@ def run_windows_command(
             except subprocess.TimeoutExpired:
                 pass
 
-    except Exception as e:
-        logger.error(f"Unexpected error while waiting for ({operation_name})")
+    except Exception:
+        logger.error("Unexpected error while waiting for process.")
         term_ok = _terminate_process_tree(process)
-        return _create_result(COMMAND_INTERNAL_ERROR, False, None, termination_ok=term_ok)
+        final_code = COMMAND_INTERNAL_ERROR if term_ok else COMMAND_TERMINATION_FAILED
+        return _create_result(final_code, False, None, termination_ok=term_ok)
 
     returncode = process.returncode
     stdout = _decode_output(b"".join(stdout_chunks), max_output_chars)
     stderr = _decode_output(b"".join(stderr_chunks), max_output_chars)
-    
+
     ok = returncode in acceptable_returncodes
     code = COMMAND_OK if ok else COMMAND_FAILED
 
@@ -258,7 +277,7 @@ def to_public_result(
         "ok": result.ok,
         "codigo": result.code,
     }
-    
+
     if result.returncode is not None:
         payload["returncode"] = result.returncode
 
@@ -267,5 +286,5 @@ def to_public_result(
             payload["saida"] = result.stdout
     else:
         payload["erro"] = error_message
-        
+
     return payload

@@ -109,7 +109,7 @@ def test_invalid_timeout():
 
     result = run_windows_command(["cmd.exe"], operation_name="test_timeout", timeout_seconds=math.nan)
     assert result.code == COMMAND_INVALID
-    
+
     result = run_windows_command(["cmd.exe"], operation_name="test_timeout", timeout_seconds=math.inf)
     assert result.code == COMMAND_INVALID
 
@@ -124,18 +124,18 @@ def test_invalid_acceptable_returncodes():
 @patch("subprocess.Popen")
 def test_timeout(mock_popen):
     mock_proc = MagicMock()
-    
+
     # communicate(timeout=X) will raise TimeoutExpired
     # communicate() will return (b"", b"")
     def comm_side_effect(*args, **kwargs):
         if "timeout" in kwargs:
             raise subprocess.TimeoutExpired(cmd="cmd", timeout=kwargs["timeout"])
         return (b"", b"")
-        
+
     mock_proc.communicate.side_effect = comm_side_effect
     mock_proc.poll.return_value = None
     mock_popen.return_value = mock_proc
-    
+
     result = run_windows_command(
         ["cmd.exe"],
         operation_name="test_timeout",
@@ -151,10 +151,10 @@ def test_cooperative_cancellation(mock_popen):
     mock_proc.communicate.return_value = (b"", b"")
     mock_proc.poll.return_value = None
     mock_popen.return_value = mock_proc
-    
+
     event = threading.Event()
     event.set()
-    
+
     result = run_windows_command(
         ["cmd.exe"],
         operation_name="test_cancel",
@@ -171,10 +171,10 @@ def test_process_already_exited_during_termination(mock_popen):
     mock_proc.communicate.return_value = (b"", b"")
     mock_proc.poll.return_value = 0 # Exited
     mock_popen.return_value = mock_proc
-    
+
     event = threading.Event()
     event.set()
-    
+
     result = run_windows_command(
         ["cmd.exe"],
         operation_name="test_already_exited",
@@ -190,24 +190,24 @@ def test_windows_taskkill_tree_termination(mock_popen):
 
     mock_target = MagicMock()
     mock_target.pid = 1234
-    
+
     def comm_side_effect(*args, **kwargs):
         event.set()
         raise subprocess.TimeoutExpired(cmd="cmd", timeout=2.0)
-        
+
     mock_target.communicate.side_effect = comm_side_effect
     mock_target.poll.return_value = None
     mock_target.wait.return_value = 0
-    
+
     mock_taskkill = MagicMock()
-    
+
     def popen_side_effect(args, **kwargs):
         if "taskkill" in args:
             return mock_taskkill
         return mock_target
-        
+
     mock_popen.side_effect = popen_side_effect
-    
+
     result = run_windows_command(
         ["target.exe"],
         operation_name="test_taskkill",
@@ -224,26 +224,26 @@ def test_taskkill_failure_with_kill_fallback(mock_popen):
 
     mock_target = MagicMock()
     mock_target.pid = 1234
-    
+
     def comm_side_effect(*args, **kwargs):
         event.set()
         raise subprocess.TimeoutExpired(cmd="cmd", timeout=2.0)
-        
+
     mock_target.communicate.side_effect = comm_side_effect
     mock_target.poll.return_value = None
     # wait times out initially, then succeeds after kill
     mock_target.wait.side_effect = [subprocess.TimeoutExpired("cmd", 2.0), 0]
-    
+
     mock_taskkill = MagicMock()
     mock_taskkill.wait.side_effect = Exception("taskkill crashed")
-    
+
     def popen_side_effect(args, **kwargs):
         if "taskkill" in args:
             return mock_taskkill
         return mock_target
-        
+
     mock_popen.side_effect = popen_side_effect
-    
+
     result = run_windows_command(
         ["target.exe"],
         operation_name="test_fallback",
@@ -261,23 +261,23 @@ def test_complete_termination_failure(mock_popen):
     mock_target.poll.return_value = None
     mock_target.wait.side_effect = subprocess.TimeoutExpired("cmd", 2.0)
     mock_target.kill.side_effect = Exception("Kill failed")
-    
+
     mock_taskkill = MagicMock()
     mock_taskkill.communicate.side_effect = Exception("taskkill crashed")
-    
+
     def popen_side_effect(args, **kwargs):
         if "taskkill" in args:
             return mock_taskkill
         return mock_target
-        
+
     mock_popen.side_effect = popen_side_effect
-    
+
     result = run_windows_command(
         ["target.exe"],
         operation_name="test_complete_fail",
         timeout_seconds=5.0
     )
-    assert result.code == COMMAND_INTERNAL_ERROR
+    assert result.code == COMMAND_TERMINATION_FAILED
     assert result.termination_ok is False
 
 def test_stdout_capture():
@@ -356,23 +356,24 @@ def test_shell_false(mock_popen):
     mock_proc.communicate.return_value = (b"", b"")
     mock_proc.poll.return_value = 0
     mock_popen.return_value = mock_proc
-    
+
     run_windows_command(["test.exe"], operation_name="test_shell", timeout_seconds=5.0)
-    
+
     kwargs = mock_popen.call_args[1]
     assert kwargs.get("shell") is False
 
+@patch("sys.platform", "win32")
 @patch("subprocess.Popen")
 def test_hidden_window_process_group_flags_on_windows(mock_popen):
     mock_proc = MagicMock()
     mock_proc.communicate.return_value = (b"", b"")
     mock_proc.poll.return_value = 0
     mock_popen.return_value = mock_proc
-    
+
     run_windows_command(["test.exe"], operation_name="test_flags", timeout_seconds=5.0)
-    
+
     kwargs = mock_popen.call_args[1]
-    
+
     creationflags = kwargs.get("creationflags", 0)
     assert creationflags & getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
     assert creationflags & getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
@@ -389,7 +390,7 @@ def test_monotonic_duration():
 def test_cancellation_before_process_launch(mock_popen):
     event = threading.Event()
     event.set()
-    
+
     result = run_windows_command(
         ["cmd.exe", "/c", "exit 0"],
         operation_name="test_early_cancel",
@@ -400,5 +401,29 @@ def test_cancellation_before_process_launch(mock_popen):
     assert not mock_popen.called
 
 def test_no_process_or_reader_left_alive_after_completion():
-    # Tricky to test perfectly without psutil, but we mock and ensure communicate/wait returns.
-    pass
+    result = run_windows_command(
+        ["cmd.exe", "/c", "exit 0"],
+        operation_name="test_clean",
+        timeout_seconds=5.0
+    )
+    assert result.ok is True
+    assert result.termination_ok is True
+
+def test_boolean_validations():
+    res1 = run_windows_command(["cmd.exe"], operation_name="test_bool", timeout_seconds=True)
+    assert res1.code == COMMAND_INVALID
+
+    res2 = run_windows_command(["cmd.exe"], operation_name="test_bool", timeout_seconds=5.0, max_output_chars=False)
+    assert res2.code == COMMAND_INVALID
+
+    res3 = run_windows_command(["cmd.exe"], operation_name="test_bool", timeout_seconds=5.0, acceptable_returncodes=[0, True])
+    assert res3.code == COMMAND_INVALID
+
+def test_logs_no_pid_or_exception_text(caplog):
+    import logging
+    with caplog.at_level(logging.DEBUG):
+        run_windows_command(["non_existent_exec_999999.exe"], operation_name="test_logs", timeout_seconds=5.0)
+
+    for record in caplog.records:
+        assert "PID" not in record.message
+        assert "Exception" not in record.message
