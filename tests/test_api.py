@@ -373,3 +373,30 @@ def test_iniciar_gui_app(monkeypatch):
     
     assert len(historico_criacoes_win) == 1
     assert historico_criacoes_win[0].janela_setada is fake_janela
+
+
+def test_nested_cancellation_network_reset(monkeypatch):
+    from modules.gui.api import PhoenixAPI
+    from modules.core.exceptions import JobCancelledError
+    from modules.gui.jobs import JobManager
+    
+    jm = JobManager()
+    api = PhoenixAPI(hw_info={}, job_manager=jm)
+    
+    # Mock otimizacao.executar_otimizacao_gaming to return COMMAND_CANCELLED
+    def mock_gaming(*args, **kwargs):
+        return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
+        
+    monkeypatch.setattr("modules.otimizacao.executar_otimizacao_gaming", mock_gaming)
+    
+    res = api.executar_otimizacao_gaming(resetar_rede=True)
+    job_id = res["job_id"]
+    
+    # Check if job fails with JobCancelledError
+    final_res = jm.consultar(job_id)
+    import time
+    while final_res["status"] in ("pending", "running"):
+        time.sleep(0.1)
+        final_res = jm.consultar(job_id)
+        
+    assert final_res["status"] == "cancelled"

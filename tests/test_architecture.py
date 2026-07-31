@@ -36,12 +36,21 @@ def test_no_subprocess_outside_windows_command():
             if isinstance(node, ast.Call):
                 if isinstance(node.func, ast.Attribute):
                     if isinstance(node.func.value, ast.Name) and node.func.value.id == "subprocess":
-                        if node.func.attr in ("run", "Popen"):
+                        if node.func.attr in ("run", "Popen", "call", "check_call", "check_output"):
+                            violations.append(f"{filepath.relative_to(project_root)}: {node.lineno}")
+                    elif isinstance(node.func.value, ast.Name) and node.func.value.id == "os":
+                        if node.func.attr == "system":
                             violations.append(f"{filepath.relative_to(project_root)}: {node.lineno}")
                 elif isinstance(node.func, ast.Name):
-                    if node.func.id in ("run", "Popen"):
-                        # Verifica se foi importado de subprocess (heuristica basica)
+                    if node.func.id in ("run", "Popen", "call", "check_call", "check_output"):
                         if "subprocess" in content:
                             violations.append(f"{filepath.relative_to(project_root)}: {node.lineno}")
+                    if node.func.id == "system" and "os" in content:
+                        violations.append(f"{filepath.relative_to(project_root)}: {node.lineno}")
+                
+                # Check for shell=True
+                for kw in node.keywords:
+                    if kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+                        violations.append(f"{filepath.relative_to(project_root)}: {node.lineno} (shell=True)")
                             
     assert not violations, f"Encontrado uso de subprocess fora do core: {violations}"
