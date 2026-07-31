@@ -24,6 +24,17 @@ async function runTests() {
                     if (id === 'btn-executar-limpeza') return sandbox.mockBtn;
                     if (id === 'conteudo-limpeza') return sandbox.mockContainer;
                     return null;
+                },
+                createElement: (tag) => {
+                    return { 
+                        textContent: '', 
+                        innerHTML: '', 
+                        style: {}, 
+                        appendChild: function(c) { this.innerHTML += c.textContent || c.innerHTML || ''; }
+                    };
+                },
+                createTextNode: (txt) => {
+                    return { textContent: txt };
                 }
             }
         },
@@ -37,7 +48,10 @@ async function runTests() {
                 if (ev === 'click') sandbox.mockBtn.onclick = cb;
             }
         },
-        mockContainer: { innerHTML: '' }
+        mockContainer: { 
+            innerHTML: '', 
+            appendChild: function(child) { this.innerHTML += child.textContent || child.innerHTML || ''; }
+        }
     };
 
     sandbox.document = sandbox.window.document;

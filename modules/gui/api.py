@@ -211,10 +211,17 @@ class PhoenixAPI:
 
     def criar_ponto_restauracao(self) -> dict:
         """Cria um ponto de restauração em segundo plano (fire-and-forget)."""
+        def worker(job_context):
+            res = otimizacao.criar_ponto_restauracao(cancel_event=job_context.cancel_event)
+            if res.get("codigo") == "COMMAND_CANCELLED":
+                from modules.core.exceptions import JobCancelledError
+                raise JobCancelledError()
+            return res
         return self._iniciar_job(
-            otimizacao.criar_ponto_restauracao,
+            worker,
             operation_name="criar_ponto_restauracao",
-            exclusive_group="system_mutation"
+            exclusive_group="system_mutation",
+            pass_job_context=True
         )
 
     def carregar_hardware_cache(self) -> dict:
@@ -246,39 +253,41 @@ class PhoenixAPI:
 
     def executar_otimizacao_geral(self) -> dict:
         """Aplica otimizações gerais em segundo plano (fire-and-forget)."""
-        def acao():
-            otimizacao.executar_otimizacao_geral(self._id_atendimento)
-            return {"ok": True}
-        return self._iniciar_job(acao, operation_name="otimizacao_geral", exclusive_group="system_mutation")
+        def acao(job_context):
+            res = otimizacao.executar_otimizacao_geral(self._id_atendimento, cancel_event=job_context.cancel_event)
+            if res.get("codigo") == "COMMAND_CANCELLED":
+                from modules.core.exceptions import JobCancelledError
+                raise JobCancelledError()
+            return res
+        return self._iniciar_job(acao, operation_name="otimizacao_geral", exclusive_group="system_mutation", pass_job_context=True)
 
     def executar_otimizacao_gaming(self, resetar_rede: bool = False) -> dict:
         """Aplica otimizações para jogos em segundo plano (fire-and-forget)."""
-        def acao():
-            otimizacao.ativar_plano_energia_alto_desempenho()
-            otimizacao.ativar_modo_jogo_windows()
-            otimizacao.desativar_gamebar_overlay()
-            otimizacao.otimizar_gpu_para_jogos()
-            if resetar_rede:
-                otimizacao.limpar_dns_e_rede()
-            if self._id_atendimento:
-                logs.registrar_acao(self._id_atendimento, "Otimização para jogos aplicada")
-            return {"ok": True}
-        return self._iniciar_job(acao, operation_name="otimizacao_gaming", exclusive_group="system_mutation")
+        def acao(job_context):
+            res = otimizacao.executar_otimizacao_gaming(self._id_atendimento, resetar_rede=resetar_rede, cancel_event=job_context.cancel_event)
+            if res.get("codigo") == "COMMAND_CANCELLED":
+                from modules.core.exceptions import JobCancelledError
+                raise JobCancelledError()
+            return res
+        return self._iniciar_job(acao, operation_name="otimizacao_gaming", exclusive_group="system_mutation", pass_job_context=True)
 
     def otimizar_disco(self) -> dict:
         """Otimiza o disco em segundo plano (fire-and-forget)."""
+        def worker(job_context):
+            res = otimizacao.otimizar_disco_principal(cancel_event=job_context.cancel_event)
+            if res.get("codigo") == "COMMAND_CANCELLED":
+                from modules.core.exceptions import JobCancelledError
+                raise JobCancelledError()
+            return res
         return self._iniciar_job(
-            lambda: {"ok": True, "saida": otimizacao.otimizar_disco_principal()},
+            worker,
             operation_name="otimizar_disco",
-            exclusive_group="system_mutation"
+            exclusive_group="system_mutation",
+            pass_job_context=True
         )
 
     def listar_inicializacao(self) -> dict:
-        try:
-            saida = otimizacao.listar_itens_inicializacao()
-            return {"ok": True, "saida": saida}
-        except Exception as e:
-            return {"ok": False, "erro": str(e)}
+        return otimizacao.listar_itens_inicializacao()
 
     # ---------- Serviços ----------
 
@@ -290,18 +299,32 @@ class PhoenixAPI:
 
     def desativar_servico(self, nome_servico: str) -> dict:
         """Desativa um serviço em segundo plano (fire-and-forget)."""
+        def worker(job_context):
+            res = servicos.desativar_servico(nome_servico, cancel_event=job_context.cancel_event)
+            if res.get("codigo") == "COMMAND_CANCELLED":
+                from modules.core.exceptions import JobCancelledError
+                raise JobCancelledError()
+            return res
         return self._iniciar_job(
-            lambda: {"ok": servicos.desativar_servico(nome_servico)},
+            worker,
             operation_name="desativar_servico",
-            exclusive_group="system_mutation"
+            exclusive_group="system_mutation",
+            pass_job_context=True
         )
 
     def ativar_servico(self, nome_servico: str) -> dict:
         """Ativa um serviço em segundo plano (fire-and-forget)."""
+        def worker(job_context):
+            res = servicos.ativar_servico(nome_servico, cancel_event=job_context.cancel_event)
+            if res.get("codigo") == "COMMAND_CANCELLED":
+                from modules.core.exceptions import JobCancelledError
+                raise JobCancelledError()
+            return res
         return self._iniciar_job(
-            lambda: {"ok": servicos.ativar_servico(nome_servico)},
+            worker,
             operation_name="ativar_servico",
-            exclusive_group="system_mutation"
+            exclusive_group="system_mutation",
+            pass_job_context=True
         )
 
     # ---------- Logs / relatório ----------

@@ -9,7 +9,7 @@ Funciona para NVIDIA, AMD e Intel — cada fabricante tem sua forma de
 consulta e link de download.
 """
 
-import subprocess
+from modules.core.windows_command import run_windows_command
 import json
 import re
 from rich.table import Table
@@ -37,17 +37,15 @@ def _consultar_versao_driver_nvidia() -> str | None:
     Consulta a versão do driver NVIDIA instalado via nvidia-smi.
     Retorna a versão no formato 'xxx.xx' (ex: '560.94').
     """
-    try:
-        resultado = subprocess.run(
-            ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=10
-        )
-        if resultado.returncode == 0:
-            versao = resultado.stdout.strip().split("\n")[0].strip()
-            if versao:
-                return versao
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
+    resultado = run_windows_command(
+        ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader,nounits"],
+        operation_name="Consultar driver NVIDIA",
+        timeout_seconds=10.0
+    )
+    if resultado.ok:
+        versao = resultado.stdout.strip().split("\n")[0].strip()
+        if versao:
+            return versao
     return None
 
 
@@ -61,20 +59,23 @@ def _consultar_drivers_wmi() -> list:
         "Select-Object Name, DriverVersion, DriverDate, AdapterCompatibility, "
         "Status, VideoProcessor | ConvertTo-Json"
     )
-    try:
-        resultado = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", comando_ps],
-            capture_output=True, text=True, timeout=15
-        )
+    resultado = run_windows_command(
+        ["powershell", "-NoProfile", "-Command", comando_ps],
+        operation_name="Consultar WMI",
+        timeout_seconds=15.0
+    )
+    if resultado.ok:
         saida = resultado.stdout.strip()
         if not saida:
             return []
-        dados = json.loads(saida)
-        if isinstance(dados, dict):
-            dados = [dados]
-        return dados
-    except Exception:
-        return []
+        try:
+            dados = json.loads(saida)
+            if isinstance(dados, dict):
+                dados = [dados]
+            return dados
+        except Exception:
+            return []
+    return []
 
 
 def _parse_driver_date(data_raw) -> str:

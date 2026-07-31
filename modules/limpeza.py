@@ -5,7 +5,7 @@ no Windows 10/11. Sempre soma o espaço liberado para exibir no relatório final
 
 import os
 import shutil
-import subprocess
+from modules.core.windows_command import run_windows_command
 import tempfile
 from pathlib import Path
 from rich.panel import Panel
@@ -74,23 +74,22 @@ def limpar_cache_firefox(pasta_profiles: str) -> int:
 
 def limpar_lixeira() -> bool:
     """Esvazia a lixeira do Windows usando PowerShell."""
-    try:
-        subprocess.run(
-            ["powershell", "-Command", "Clear-RecycleBin -Force -ErrorAction SilentlyContinue"],
-            capture_output=True, timeout=30
-        )
-        return True
-    except Exception:
-        return False
+    resultado = run_windows_command(
+        ["powershell", "-Command", "Clear-RecycleBin -Force -ErrorAction SilentlyContinue"],
+        operation_name="Limpar Lixeira",
+        timeout_seconds=30.0
+    )
+    return resultado.ok
 
 
 def limpar_cache_dns() -> bool:
     """Limpa o cache de DNS (útil para resolver lentidão de internet)."""
-    try:
-        subprocess.run(["ipconfig", "/flushdns"], capture_output=True, timeout=15)
-        return True
-    except Exception:
-        return False
+    resultado = run_windows_command(
+        ["ipconfig", "/flushdns"],
+        operation_name="Limpar DNS",
+        timeout_seconds=15.0
+    )
+    return resultado.ok
 
 
 def bytes_para_mb(valor: int) -> float:
@@ -150,13 +149,17 @@ def executar_limpeza_completa(id_atendimento: str = None):
         resultados.append(("Cache do Firefox", bytes_para_mb(liberado_firefox)))
 
         progress.update(tarefa, description="Esvaziando lixeira...")
-        limpar_lixeira()
+        lixeira_ok = limpar_lixeira()
         progress.advance(tarefa)
 
         progress.update(tarefa, description="Limpando cache de DNS...")
-        limpar_cache_dns()
+        dns_ok = limpar_cache_dns()
 
     console.print()
+    if not lixeira_ok:
+        console.print("  [yellow]⚠[/yellow] Aviso: falha ao esvaziar lixeira")
+    if not dns_ok:
+        console.print("  [yellow]⚠[/yellow] Aviso: falha ao limpar cache DNS")
     for nome, mb in resultados:
         if mb > 0:
             console.print(f"  [green]✓[/green] {nome}: [yellow]{mb} MB[/yellow] liberados")

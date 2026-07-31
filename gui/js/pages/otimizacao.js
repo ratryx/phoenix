@@ -45,17 +45,23 @@
         const container = document.getElementById("resultado-otimizacao");
         if (!container) return;
 
+        container.innerHTML = '';
+        const div = document.createElement("div");
+        div.className = "card";
+        const span = document.createElement("span");
+        
         if (!resultado || !resultado.ok) {
-            container.innerHTML =
-                '<div class="card"><span class="badge erro">Erro</span> ' +
-                ((resultado && resultado.erro) || "Erro desconhecido") +
-                "</div>";
-            return;
+            span.className = "badge erro";
+            span.textContent = "Erro";
+            div.appendChild(span);
+            div.appendChild(document.createTextNode(" " + ((resultado && resultado.erro) || "Erro desconhecido")));
+        } else {
+            span.className = "badge sucesso";
+            span.textContent = "Concluído";
+            div.appendChild(span);
+            div.appendChild(document.createTextNode(" " + mensagemSucesso));
         }
-        container.innerHTML =
-            '<div class="card"><span class="badge sucesso">Concluído</span> ' +
-            mensagemSucesso +
-            "</div>";
+        container.appendChild(div);
     }
 
     page.executeGeneral = async function () {

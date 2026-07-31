@@ -26,7 +26,22 @@ async function runTests() {
             document: {
                 getElementById: (id) => {
                     return sandbox.mockDom[id] || null;
-                }
+                },
+                createElement: (tag) => {
+                    const el = { tag: tag, children: [], innerHTML: '' };
+                    el.appendChild = function(child) {
+                        this.children.push(child);
+                        if (typeof child === 'string') {
+                            this.innerHTML += child;
+                        } else if (child.innerHTML) {
+                            this.innerHTML += child.innerHTML;
+                        } else if (child.textContent) {
+                            this.innerHTML += child.textContent;
+                        }
+                    };
+                    return el;
+                },
+                createTextNode: (text) => text
             }
         },
         console: { error: () => {}, log: () => {} },
@@ -37,7 +52,7 @@ async function runTests() {
             'btn-otimizar-disco': { dataset: {}, addEventListener: (ev, cb) => { if (ev === 'click') sandbox.clicks.disco = cb; } },
             'btn-liberar-ram': { dataset: {}, addEventListener: (ev, cb) => { if (ev === 'click') sandbox.clicks.ram = cb; } },
             'btn-analisar-startup': { dataset: {}, addEventListener: (ev, cb) => { if (ev === 'click') sandbox.clicks.startup = cb; } },
-            'resultado-otimizacao': { innerHTML: '' },
+            'resultado-otimizacao': { innerHTML: '', children: [], appendChild: function(c) { this.children.push(c); if(c.innerHTML) this.innerHTML += c.innerHTML; else if(c.textContent) this.innerHTML += c.textContent; else if(typeof c === 'string') this.innerHTML += c; } },
             'resultado-startup': { innerHTML: '', style: {} }
         },
         clicks: {}

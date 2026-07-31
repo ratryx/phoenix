@@ -85,7 +85,21 @@ class RoutineService:
             if job_context: job_context.update_progress(60, "Aplicando otimizações gerais...")
 
             # 3. Otimização
-            self._otimizacao.executar_otimizacao_geral(id_atendimento)
+            optimization_result = self._otimizacao.executar_otimizacao_geral(
+                id_atendimento,
+                cancel_event=job_context.cancel_event if job_context else None,
+            )
+            
+            if optimization_result.get("codigo") == "COMMAND_CANCELLED":
+                raise JobCancelledError()
+                
+            if not optimization_result.get("ok"):
+                self._logs.registrar_acao(id_atendimento, "Rotina interrompida devido a falha na otimização")
+                return {
+                    "ok": False,
+                    "codigo": "ROUTINE_FAILED",
+                    "erro": "Não foi possível concluir a rotina porque a etapa de otimização falhou."
+                }
 
             # Checkpoint 6: after optimization
             check_cancel()

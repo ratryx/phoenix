@@ -7,7 +7,7 @@ Funciona independentemente do Ponto de Restauração do Windows — o backup
 """
 
 import json
-import subprocess
+from modules.core.windows_command import run_windows_command
 from datetime import datetime
 from pathlib import Path
 from rich.table import Table
@@ -78,63 +78,62 @@ def _obter_pasta_backups() -> Path:
     return pasta
 
 
+import winreg
+import logging
+import re
+logger = logging.getLogger(__name__)
+
 def _ler_valor_registro(caminho: str, nome_valor: str) -> str | None:
-    """Lê um valor do registro do Windows via PowerShell."""
-    comando_ps = (
-        f"try {{ "
-        f"(Get-ItemProperty -Path '{caminho}' -Name '{nome_valor}' -ErrorAction Stop).'{nome_valor}' "
-        f"}} catch {{ Write-Output 'NOT_FOUND' }}"
-    )
+    """Lê um valor do registro do Windows nativamente."""
     try:
-        resultado = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", comando_ps],
-            capture_output=True, text=True, timeout=10
-        )
-        saida = resultado.stdout.strip()
-        if saida == "NOT_FOUND" or not saida:
+        if caminho.startswith("HKCU:\\"):
+            root = winreg.HKEY_CURRENT_USER
+            sub_caminho = caminho[6:]
+        elif caminho.startswith("HKLM:\\"):
+            root = winreg.HKEY_LOCAL_MACHINE
+            sub_caminho = caminho[6:]
+        else:
             return None
-        return saida
+            
+        with winreg.OpenKey(root, sub_caminho, 0, winreg.KEY_READ) as k:
+            val, _ = winreg.QueryValueEx(k, nome_valor)
+            return str(val)
     except Exception:
         return None
 
 
 def _ler_valor_registro_binario(caminho: str, nome_valor: str) -> str | None:
-    """Lê um valor binário do registro e retorna como string de bytes."""
-    comando_ps = (
-        f"try {{ "
-        f"$val = (Get-ItemProperty -Path '{caminho}' -Name '{nome_valor}' -ErrorAction Stop).'{nome_valor}'; "
-        f"($val | ForEach-Object {{ $_.ToString() }}) -join ',' "
-        f"}} catch {{ Write-Output 'NOT_FOUND' }}"
-    )
+    """Lê um valor binário do registro nativamente."""
     try:
-        resultado = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", comando_ps],
-            capture_output=True, text=True, timeout=10
-        )
-        saida = resultado.stdout.strip()
-        if saida == "NOT_FOUND" or not saida:
+        if caminho.startswith("HKCU:\\"):
+            root = winreg.HKEY_CURRENT_USER
+            sub_caminho = caminho[6:]
+        elif caminho.startswith("HKLM:\\"):
+            root = winreg.HKEY_LOCAL_MACHINE
+            sub_caminho = caminho[6:]
+        else:
             return None
-        return saida
+            
+        with winreg.OpenKey(root, sub_caminho, 0, winreg.KEY_READ) as k:
+            val, _ = winreg.QueryValueEx(k, nome_valor)
+            return ",".join(str(b) for b in val)
     except Exception:
         return None
 
 
 def _ler_plano_energia_ativo() -> str | None:
     """Retorna o GUID do plano de energia ativo."""
-    try:
-        resultado = subprocess.run(
-            ["powercfg", "/getactivescheme"],
-            capture_output=True, text=True, timeout=10
-        )
-        # Formato: "Power Scheme GUID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  (Nome)"
+    resultado = run_windows_command(
+        ["powercfg", "/getactivescheme"],
+        operation_name="Ler plano de energia", timeout_seconds=10.0
+    )
+    if resultado.ok:
         saida = resultado.stdout.strip()
         if "GUID:" in saida:
             partes = saida.split("GUID:")
             guid = partes[1].strip().split()[0].strip()
             return guid
-        return None
-    except Exception:
-        return None
+    return None
 
 
 def salvar_backup_pre_otimizacao() -> dict:
@@ -202,41 +201,61 @@ def listar_backups() -> list:
 
 
 def _restaurar_valor_registro(caminho: str, nome_valor: str, valor: str, tipo: str) -> bool:
-    """Restaura um valor no registro do Windows."""
-    if tipo == "registro_dword":
-        comando_ps = (
-            f"New-ItemProperty -Path '{caminho}' -Name '{nome_valor}' "
-            f"-PropertyType DWord -Value {valor} -Force | Out-Null"
-        )
-    elif tipo == "registro_binario":
-        # valor é uma string "x,y,z" — converter para array de bytes
-        comando_ps = (
-            f"$bytes = @({valor}); "
-            f"Set-ItemProperty -Path '{caminho}' -Name '{nome_valor}' -Value ([byte[]]$bytes) -Force"
-        )
-    else:
-        return False
-
+    """Restaura um valor no registro do Windows nativamente e com seguranca."""
     try:
-        resultado = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", comando_ps],
-            capture_output=True, text=True, timeout=15
-        )
-        return resultado.returncode == 0
+        # Validate that path and value match CHAVES_RASTREADAS
+        if not any(info.get("caminho") == caminho and info.get("valor") == nome_valor for info in CHAVES_RASTREADAS.values()):
+            return False
+
+        if caminho.startswith("HKCU:\\"):
+            root = winreg.HKEY_CURRENT_USER
+            sub_caminho = caminho[6:]
+        elif caminho.startswith("HKLM:\\"):
+            root = winreg.HKEY_LOCAL_MACHINE
+            sub_caminho = caminho[6:]
+        else:
+            return False
+            
+        with winreg.OpenKey(root, sub_caminho, 0, winreg.KEY_SET_VALUE) as k:
+            if tipo == "registro_dword":
+                try:
+                    int_val = int(valor)
+                    if not (0 <= int_val <= 4294967295):
+                        return False
+                    winreg.SetValueEx(k, nome_valor, 0, winreg.REG_DWORD, int_val)
+                except ValueError:
+                    return False
+            elif tipo == "registro_binario":
+                try:
+                    tokens = valor.split(",")
+                    if not tokens:
+                        return False
+                    byte_list = []
+                    for b in tokens:
+                        if not b:
+                            return False
+                        int_b = int(b)
+                        if not (0 <= int_b <= 255):
+                            return False
+                        byte_list.append(int_b)
+                    winreg.SetValueEx(k, nome_valor, 0, winreg.REG_BINARY, bytes(byte_list))
+                except ValueError:
+                    return False
+            return True
     except Exception:
+        logger.debug("Falha ao restaurar chave protegida")
         return False
 
 
 def _restaurar_plano_energia(guid: str) -> bool:
     """Restaura o plano de energia original."""
-    try:
-        resultado = subprocess.run(
-            ["powercfg", "/setactive", guid],
-            capture_output=True, timeout=10
-        )
-        return resultado.returncode == 0
-    except Exception:
+    if not re.match(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", guid):
         return False
+    resultado = run_windows_command(
+        ["powercfg", "/setactive", guid],
+        operation_name="Restaurar plano de energia", timeout_seconds=10.0
+    )
+    return resultado.ok
 
 
 def executar_rollback(caminho_backup: str = None) -> dict:
@@ -253,8 +272,9 @@ def executar_rollback(caminho_backup: str = None) -> dict:
     try:
         with open(caminho_backup, "r", encoding="utf-8") as f:
             backup = json.load(f)
-    except Exception as e:
-        return {"ok": False, "erro": f"Falha ao ler backup: {e}"}
+    except Exception:
+        logger.debug("Falha ao ler arquivo de backup.")
+        return {"ok": False, "erro": "Falha ao ler arquivo de backup. O arquivo pode estar corrompido ou inacessível."}
 
     console.print(Panel(
         f"[bold yellow]Restaurando configurações do backup de {backup['data_hora']}...[/bold yellow]",
