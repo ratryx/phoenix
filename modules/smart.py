@@ -6,7 +6,7 @@ sem dependências externas. Classifica a saúde do disco em:
 Saudável / Atenção / Crítico — e exibe alertas visuais no terminal.
 """
 
-import subprocess
+from modules.core.windows_command import run_windows_command
 import json
 from rich.table import Table
 from rich.panel import Panel
@@ -24,20 +24,23 @@ def _consultar_discos_fisicos() -> list:
         "Get-PhysicalDisk | Select-Object DeviceId, FriendlyName, MediaType, "
         "Size, HealthStatus, OperationalStatus | ConvertTo-Json"
     )
-    try:
-        resultado = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", comando_ps],
-            capture_output=True, text=True, timeout=15
-        )
+    resultado = run_windows_command(
+        ["powershell", "-NoProfile", "-Command", comando_ps],
+        operation_name="Consultar discos físicos",
+        timeout_seconds=15.0
+    )
+    if resultado.ok:
         saida = resultado.stdout.strip()
         if not saida:
             return []
-        dados = json.loads(saida)
-        if isinstance(dados, dict):
-            dados = [dados]
-        return dados
-    except Exception:
-        return []
+        try:
+            dados = __import__('json').loads(saida)
+            if isinstance(dados, dict):
+                dados = [dados]
+            return dados
+        except Exception:
+            return []
+    return []
 
 
 def _consultar_confiabilidade_disco(device_id: str) -> dict | None:
@@ -52,20 +55,23 @@ def _consultar_confiabilidade_disco(device_id: str) -> dict | None:
         "Temperature, PowerOnHours, ReadErrorsTotal, WriteErrorsTotal, "
         "ReadErrorsCorrected, WriteErrorsCorrected, Wear | ConvertTo-Json"
     )
-    try:
-        resultado = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", comando_ps],
-            capture_output=True, text=True, timeout=15
-        )
+    resultado = run_windows_command(
+        ["powershell", "-NoProfile", "-Command", comando_ps],
+        operation_name=f"Consultar S.M.A.R.T. disco {device_id}",
+        timeout_seconds=15.0
+    )
+    if resultado.ok:
         saida = resultado.stdout.strip()
         if not saida:
             return None
-        dados = json.loads(saida)
-        if isinstance(dados, list):
-            dados = dados[0] if dados else None
-        return dados
-    except Exception:
-        return None
+        try:
+            dados = __import__('json').loads(saida)
+            if isinstance(dados, list):
+                dados = dados[0] if dados else None
+            return dados
+        except Exception:
+            return None
+    return None
 
 
 def classificar_saude(disco_info: dict, confiabilidade: dict | None) -> tuple:

@@ -7,7 +7,7 @@ confirmação do usuário antes de aplicar, e cada função é independente
 para que você possa escolher quais aplicar.
 """
 
-import subprocess
+from modules.core.windows_command import run_windows_command, to_public_result
 import ctypes
 from rich.panel import Panel
 
@@ -67,10 +67,8 @@ def verificar_status_otimizacoes() -> dict:
     
     # Check planos de energia (requires subprocess, we use a fast approach if possible, or just powercfg)
     try:
-        res = subprocess.run(["powercfg", "/getactivescheme"], capture_output=True, text=True, timeout=5)
-        # 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c is High Performance
-        # e9a42b02-d5df-448d-aa00-03f14749eb61 is Ultimate Performance
-        is_active = "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c" in res.stdout or "e9a42b02-d5df-448d-aa00-03f14749eb61" in res.stdout
+        res = run_windows_command(["powercfg", "/getactivescheme"], operation_name="Verificar plano de energia", timeout_seconds=5.0)
+        is_active = res.ok and ("8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c" in res.stdout or "e9a42b02-d5df-448d-aa00-03f14749eb61" in res.stdout)
         resultados["itens"].append({
             "id": "plano_energia",
             "descricao": "Plano de energia de Alto Desempenho",
@@ -170,7 +168,7 @@ def is_admin() -> bool:
         return False
 
 
-def criar_ponto_restauracao() -> dict:
+def criar_ponto_restauracao(cancel_event=None) -> dict:
     """
     Cria um ponto de restauração do sistema operacional Windows via PowerShell.
     Mapeia erros comuns como limite diário excedido ou restauração desativada.
@@ -191,82 +189,63 @@ def criar_ponto_restauracao() -> dict:
         "Checkpoint-Computer -Description 'Phoenix Optimizer - Pré-Otimização' -RestorePointType 'MODIFY_SETTINGS'"
     ]
 
-    try:
-        resultado = subprocess.run(comando, capture_output=True, text=True, timeout=120, shell=False)
+    resultado = run_windows_command(comando, operation_name="Criar Ponto de Restauração", timeout_seconds=120.0, cancel_event=cancel_event)
 
-        if resultado.returncode == 0:
-            return {
-                "ok": True,
-                "mensagem": "Ponto de restauração 'Phoenix Optimizer - Pré-Otimização' criado com sucesso."
-            }
-        else:
-            stderr = resultado.stderr or ""
-            stdout = resultado.stdout or ""
-            erro_str = (stderr + "\n" + stdout).strip()
-
-            if "0x80042316" in erro_str or "24 hours" in erro_str or "24 horas" in erro_str:
-                codigo = "LIMIT_EXCEEDED"
-                erro = "O Windows limita a criação de pontos de restauração a um a cada 24 horas por padrão."
-            elif "disabled" in erro_str.lower() or "desativada" in erro_str.lower() or "desativado" in erro_str.lower():
-                codigo = "RESTORE_DISABLED"
-                erro = "A Restauração do Sistema (System Protection) está desativada no Windows para a unidade C:."
-            elif "access denied" in erro_str.lower() or "permissão" in erro_str.lower() or "privilégio" in erro_str.lower():
-                codigo = "NO_ADMIN"
-                erro = "Privilégios de Administrador insuficientes."
-            else:
-                codigo = "UNKNOWN"
-                erro = f"Falha ao criar ponto de restauração do Windows: {erro_str[:150]}"
-
+    if resultado.ok:
+        return {
+            "ok": True,
+            "mensagem": "Ponto de restauração 'Phoenix Optimizer - Pré-Otimização' criado com sucesso."
+        }
+    else:
+        if resultado.timed_out:
             return {
                 "ok": False,
-                "erro": erro,
-                "codigo": codigo
+                "erro": "Tempo limite excedido ao tentar criar o ponto de restauração.",
+                "codigo": "TIMEOUT"
             }
+        
+        erro_str = (resultado.stderr + "\n" + resultado.stdout).strip()
 
-    except subprocess.TimeoutExpired:
+        if "0x80042316" in erro_str or "24 hours" in erro_str or "24 horas" in erro_str:
+            codigo = "LIMIT_EXCEEDED"
+            erro = "O Windows limita a criação de pontos de restauração a um a cada 24 horas por padrão."
+        elif "disabled" in erro_str.lower() or "desativada" in erro_str.lower() or "desativado" in erro_str.lower():
+            codigo = "RESTORE_DISABLED"
+            erro = "A Restauração do Sistema (System Protection) está desativada no Windows para a unidade C:."
+        elif "access denied" in erro_str.lower() or "permissão" in erro_str.lower() or "privilégio" in erro_str.lower():
+            codigo = "NO_ADMIN"
+            erro = "Privilégios de Administrador insuficientes."
+        else:
+            codigo = "UNKNOWN"
+            erro = "Falha ao criar ponto de restauração do Windows."
+
         return {
             "ok": False,
-            "erro": "Tempo limite excedido ao tentar criar o ponto de restauração.",
-            "codigo": "TIMEOUT"
-        }
-    except Exception as e:
-        return {
-            "ok": False,
-            "erro": f"Erro inesperado: {str(e)}",
-            "codigo": "UNKNOWN"
+            "erro": erro,
+            "codigo": codigo
         }
 
 
 
-def _executar_comando(comando: list, nome_acao: str) -> bool:
-    """Executa um comando do sistema e trata erros sem travar o programa."""
-    try:
-        resultado = subprocess.run(comando, capture_output=True, timeout=30, shell=False)
-        if resultado.returncode != 0:
-            console.print(f"  [yellow]⚠[/yellow] {nome_acao} (comando retornou código {resultado.returncode})")
-            return False
-        console.print(f"  [green]✓[/green] {nome_acao}")
-        return True
-    except FileNotFoundError:
-        console.print(f"  [red]✗[/red] {nome_acao} (comando não encontrado no sistema)")
-        return False
-    except subprocess.TimeoutExpired:
-        console.print(f"  [red]✗[/red] {nome_acao} (tempo limite excedido)")
-        return False
-    except Exception as e:
-        console.print(f"  [red]✗[/red] {nome_acao} (falhou: {e})")
-        return False
+def _executar_comando(comando: list, nome_acao: str, cancel_event=None) -> dict:
+    """Executa um comando do sistema e retorna resultado estruturado."""
+    resultado = run_windows_command(comando, operation_name=nome_acao, timeout_seconds=30.0, cancel_event=cancel_event)
+    if not resultado.ok:
+        console.print(f"  [yellow]⚠[/yellow] {nome_acao} (falhou)")
+        return to_public_result(resultado)
+    console.print(f"  [green]✓[/green] {nome_acao}")
+    return {"ok": True, "codigo": "COMMAND_OK"}
 
 
-def ativar_plano_energia_alto_desempenho():
+def ativar_plano_energia_alto_desempenho(cancel_event=None):
     """Ativa o plano de energia 'Alto desempenho' do Windows."""
     return _executar_comando(
         ["powercfg", "/setactive", "8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c"],
-        "Plano de energia: Alto desempenho ativado"
+        "Plano de energia: Alto desempenho ativado", cancel_event=cancel_event
     )
 
 
-def desativar_efeitos_visuais():
+def desativar_efeitos_visuais(cancel_event=None):
     """
     Ajusta o Windows para priorizar performance em vez de efeitos visuais
     (desativa animações, sombras e transparências).
@@ -277,11 +256,11 @@ def desativar_efeitos_visuais():
     )
     return _executar_comando(
         ["powershell", "-Command", comando_ps],
-        "Efeitos visuais reduzidos (modo performance)"
+        "Efeitos visuais reduzidos (modo performance)", cancel_event=cancel_event
     )
 
 
-def ativar_modo_jogo_windows():
+def ativar_modo_jogo_windows(cancel_event=None):
     """Garante que o Modo de Jogo do Windows está ativado via registro."""
     comando_ps = (
         "New-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\GameBar' "
@@ -289,28 +268,28 @@ def ativar_modo_jogo_windows():
         "New-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\GameBar' "
         "-Name AutoGameModeEnabled -PropertyType DWord -Value 1 -Force | Out-Null"
     )
-    return _executar_comando(["powershell", "-Command", comando_ps], "Modo de Jogo do Windows ativado")
+    return _executar_comando(["powershell", "-Command", comando_ps], "Modo de Jogo do Windows ativado", cancel_event=cancel_event)
 
 
-def desativar_gamebar_overlay():
+def desativar_gamebar_overlay(cancel_event=None):
     """Desativa a sobreposição (overlay) do Xbox Game Bar, que consome recursos."""
     comando_ps = (
         "New-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\GameDVR' "
         "-Name AppCaptureEnabled -PropertyType DWord -Value 0 -Force | Out-Null"
     )
-    return _executar_comando(["powershell", "-Command", comando_ps], "Overlay do Xbox Game Bar desativado")
+    return _executar_comando(["powershell", "-Command", comando_ps], "Overlay do Xbox Game Bar desativado", cancel_event=cancel_event)
 
 
-def limitar_processos_em_segundo_plano():
+def limitar_processos_em_segundo_plano(cancel_event=None):
     """Desativa apps em segundo plano que consomem CPU/RAM sem necessidade (UWP apps)."""
     comando_ps = (
         "New-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\BackgroundAccessApplications' "
         "-Name GlobalUserDisabled -PropertyType DWord -Value 1 -Force | Out-Null"
     )
-    return _executar_comando(["powershell", "-Command", comando_ps], "Apps em segundo plano restringidos")
+    return _executar_comando(["powershell", "-Command", comando_ps], "Apps em segundo plano restringidos", cancel_event=cancel_event)
 
 
-def otimizar_gpu_para_jogos():
+def otimizar_gpu_para_jogos(cancel_event=None):
     """
     Ativa o agendador de GPU acelerado por hardware (Hardware-Accelerated GPU Scheduling),
     disponível no Windows 10 2004+ e Windows 11 — reduz latência em jogos.
@@ -321,7 +300,7 @@ def otimizar_gpu_para_jogos():
     )
     return _executar_comando(
         ["powershell", "-Command", comando_ps],
-        "Agendador de GPU por hardware ativado (requer reinício)"
+        "Agendador de GPU por hardware ativado (requer reinício)", cancel_event=cancel_event
     )
 
 
@@ -330,34 +309,31 @@ def listar_itens_inicializacao() -> str:
     comando_ps = (
         "Get-CimInstance Win32_StartupCommand | Select-Object Name, Command, Location | Format-Table -AutoSize"
     )
-    try:
-        resultado = subprocess.run(
-            ["powershell", "-Command", comando_ps],
-            capture_output=True, text=True, timeout=30
-        )
-        saida = resultado.stdout.strip()
-        if not saida:
-            erro = resultado.stderr.strip()
-            return f"Nenhum item encontrado." + (f"\n\nDetalhe: {erro}" if erro else "")
-        return saida
-    except FileNotFoundError:
-        return "Erro: PowerShell não encontrado neste sistema."
-    except subprocess.TimeoutExpired:
-        return "Erro: a consulta demorou demais e foi interrompida."
-    except Exception as e:
-        return f"Erro ao listar: {e}"
+    resultado = run_windows_command(
+        ["powershell", "-Command", comando_ps],
+        operation_name="Listar inicialização",
+        timeout_seconds=30.0
+    )
+    if not resultado.ok:
+        if resultado.timed_out:
+            return "Erro: a consulta demorou demais e foi interrompida."
+        erro = resultado.stderr.strip()
+        return f"Erro ao listar: {erro}"
+    
+    saida = resultado.stdout.strip()
+    if not saida:
+        erro = resultado.stderr.strip()
+        return f"Nenhum item encontrado." + (f"\n\nDetalhe: {erro}" if erro else "")
+    return saida
 
 
-def otimizar_disco_principal() -> str:
+def otimizar_disco_principal(cancel_event=None) -> dict:
     """
     Executa otimização do disco C: — TRIM se for SSD, desfragmentação se for HDD.
     O Windows já decide automaticamente o método correto via /retrim ou /defrag.
     """
     try:
-        resultado = subprocess.run(
-            ["defrag", "C:", "/O"],  # /O deixa o Windows escolher o método ideal (TRIM ou defrag)
-            capture_output=True, text=True, timeout=300
-        )
+        resultado = run_windows_command(["defrag", "C:", "/O"], operation_name="Otimizar Disco", timeout_seconds=300.0, cancel_event=cancel_event)
         console.print("  [green]✓[/green] Otimização de disco (C:) executada")
         return resultado.stdout
     except subprocess.TimeoutExpired:
@@ -380,56 +356,73 @@ def executar_verificacao_integridade_sistema(id_atendimento: str = None) -> dict
     resultados = {"dism": False, "sfc": False}
 
     console.print("  [bold]Etapa 1/2 — DISM (reparando store de componentes)...[/bold]")
-    resultados["dism"] = _executar_comando(
+    res_dism = _executar_comando(
         ["DISM", "/Online", "/Cleanup-Image", "/RestoreHealth"],
         "DISM: Store de componentes verificado/reparado"
     )
+    resultados["dism"] = res_dism
 
     console.print("  [bold]Etapa 2/2 — SFC (verificando arquivos do sistema)...[/bold]")
-    resultados["sfc"] = _executar_comando(
+    res_sfc = _executar_comando(
         ["sfc", "/scannow"],
         "SFC: Arquivos do sistema verificados"
     )
+    resultados["sfc"] = res_sfc
 
-    sucesso = resultados["dism"] and resultados["sfc"]
+    sucesso = res_dism.get("ok", False) and res_sfc.get("ok", False)
+    resultados["ok"] = sucesso
     if sucesso:
+        resultados["codigo"] = "OPERATION_OK"
         console.print(Panel("[bold green]Verificação de integridade concluída com sucesso![/bold green]", border_style="green"))
     else:
+        resultados["codigo"] = "OPERATION_PARTIAL_FAILURE"
         console.print(Panel("[bold yellow]Verificação concluída com avisos. Verifique os resultados acima.[/bold yellow]", border_style="yellow"))
 
     if id_atendimento:
         from modules import logs
         logs.registrar_acao(id_atendimento, "Verificação de integridade do sistema",
-                          f"DISM: {'OK' if resultados['dism'] else 'Falha'}, SFC: {'OK' if resultados['sfc'] else 'Falha'}")
+                          f"DISM: {'OK' if res_dism.get('ok') else 'Falha'}, SFC: {'OK' if res_sfc.get('ok') else 'Falha'}")
 
     return resultados
 
 
-def limpar_dns_e_rede():
+def limpar_dns_e_rede(cancel_event=None):
     """Reinicia adaptadores e limpa configurações de rede que podem causar lentidão/ping alto."""
     comandos = [
         (["ipconfig", "/flushdns"], "Cache DNS limpo"),
         (["netsh", "winsock", "reset"], "Winsock resetado (melhora conexão em jogos online)"),
         (["netsh", "int", "ip", "reset"], "Pilha TCP/IP resetada"),
     ]
+    resultados = {}
+    todos_ok = True
     for cmd, nome in comandos:
-        _executar_comando(cmd, nome)
+        res = _executar_comando(cmd, nome)
+        resultados[nome] = res
+        if not res.get("ok"):
+            todos_ok = False
+            
+    return {
+        "ok": todos_ok,
+        "codigo": "OPERATION_OK" if todos_ok else "OPERATION_PARTIAL_FAILURE",
+        "resultados": resultados
+    }
 
 
-def executar_otimizacao_geral(id_atendimento: str = None) -> dict:
+def executar_otimizacao_geral(id_atendimento: str = None, cancel_event=None) -> dict:
     """Executa o conjunto de otimizações gerais de performance (não-destrutivas)."""
     console.print(Panel("[bold yellow]Aplicando otimizações de performance...[/bold yellow]", border_style="orange3"))
 
-    resultados = {
-        "plano_energia": ativar_plano_energia_alto_desempenho(),
-        "efeitos_visuais": desativar_efeitos_visuais(),
-        "apps_segundo_plano": limitar_processos_em_segundo_plano(),
+    resultados_cmd = {
+        "plano_energia": ativar_plano_energia_alto_desempenho(cancel_event=cancel_event),
+        "efeitos_visuais": desativar_efeitos_visuais(cancel_event=cancel_event),
+        "apps_segundo_plano": limitar_processos_em_segundo_plano(cancel_event=cancel_event),
     }
 
-    sucesso = sum(1 for v in resultados.values() if v)
-    total = len(resultados)
+    sucesso = sum(1 for v in resultados_cmd.values() if v.get("ok"))
+    total = len(resultados_cmd)
+    todos_ok = (sucesso == total)
 
-    if sucesso == total:
+    if todos_ok:
         console.print(Panel("[bold green]Todas as otimizações de performance aplicadas![/bold green]", border_style="green"))
     else:
         console.print(Panel(
@@ -442,34 +435,58 @@ def executar_otimizacao_geral(id_atendimento: str = None) -> dict:
         logs.registrar_acao(id_atendimento, "Otimização geral aplicada",
                           f"{sucesso}/{total} otimizações com sucesso")
 
-    return resultados
+    return {
+        "ok": todos_ok,
+        "codigo": "OPERATION_OK" if todos_ok else "OPERATION_PARTIAL_FAILURE",
+        "sucessos": sucesso,
+        "total": total,
+        "resultados": resultados_cmd
+    }
 
 
 def executar_otimizacao_gaming(id_atendimento: str = None, 
-                                resetar_rede: bool = False) -> dict:
+                                resetar_rede: bool = False, cancel_event=None) -> dict:
     console.print(Panel(
         "[bold yellow]Aplicando otimizações para jogos (FPS)...[/bold yellow]", 
         border_style="orange3"
     ))
-    ativar_plano_energia_alto_desempenho()
-    ativar_modo_jogo_windows()
-    desativar_gamebar_overlay()
-    otimizar_gpu_para_jogos()
+    resultados = {
+        "plano_energia": ativar_plano_energia_alto_desempenho(cancel_event=cancel_event),
+        "modo_jogo": ativar_modo_jogo_windows(cancel_event=cancel_event),
+        "gamebar": desativar_gamebar_overlay(cancel_event=cancel_event),
+        "gpu": otimizar_gpu_para_jogos(cancel_event=cancel_event)
+    }
     
     if resetar_rede:
-        limpar_dns_e_rede()
+        resultados["rede"] = limpar_dns_e_rede()
 
-    console.print(Panel(
-        "[bold green]Otimizações de FPS aplicadas! "
-        "Reinicie o PC para garantir que tudo seja aplicado.[/bold green]",
-        border_style="green"
-    ))
+    sucesso = sum(1 for v in resultados.values() if v.get("ok"))
+    total = len(resultados)
+    todos_ok = (sucesso == total)
+
+    if todos_ok:
+        console.print(Panel(
+            "[bold green]Otimizações de FPS aplicadas! "
+            "Reinicie o PC para garantir que tudo seja aplicado.[/bold green]",
+            border_style="green"
+        ))
+    else:
+        console.print(Panel(
+            f"[bold yellow]Otimizações aplicadas com falhas: {sucesso}/{total}.[/bold yellow]",
+            border_style="yellow"
+        ))
 
     if id_atendimento:
         from modules import logs
-        logs.registrar_acao(id_atendimento, "Otimização para jogos aplicada")
+        logs.registrar_acao(id_atendimento, "Otimização para jogos aplicada", f"{sucesso}/{total} sucessos")
     
-    return {"ok": True}
+    return {
+        "ok": todos_ok,
+        "codigo": "OPERATION_OK" if todos_ok else "OPERATION_PARTIAL_FAILURE",
+        "sucessos": sucesso,
+        "total": total,
+        "resultados": resultados
+    }
 
 def liberar_memoria_standby() -> bool:
     """
@@ -492,18 +509,9 @@ def desativar_suspensao_energia() -> bool:
     Configura o Windows para nunca suspender quando conectado 
     na energia elétrica. Ideal para sessões de otimização longas.
     """
-    try:
-        subprocess.run(
-            ["powercfg", "/change", "standby-timeout-ac", "0"],
-            capture_output=True, timeout=10
-        )
-        subprocess.run(
-            ["powercfg", "/change", "monitor-timeout-ac", "0"],
-            capture_output=True, timeout=10
-        )
-        return True
-    except Exception:
-        return False
+    res1 = run_windows_command(["powercfg", "/change", "standby-timeout-ac", "0"], operation_name="Desativar suspensão", timeout_seconds=10.0)
+    res2 = run_windows_command(["powercfg", "/change", "monitor-timeout-ac", "0"], operation_name="Desativar monitor timeout", timeout_seconds=10.0)
+    return {"ok": res1.ok and res2.ok, "resultados": {"standby": to_public_result(res1), "monitor": to_public_result(res2)}}
 
 def analisar_startup() -> list:
     """

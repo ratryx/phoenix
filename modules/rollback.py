@@ -7,7 +7,7 @@ Funciona independentemente do Ponto de Restauração do Windows — o backup
 """
 
 import json
-import subprocess
+from modules.core.windows_command import run_windows_command
 from datetime import datetime
 from pathlib import Path
 from rich.table import Table
@@ -85,17 +85,16 @@ def _ler_valor_registro(caminho: str, nome_valor: str) -> str | None:
         f"(Get-ItemProperty -Path '{caminho}' -Name '{nome_valor}' -ErrorAction Stop).'{nome_valor}' "
         f"}} catch {{ Write-Output 'NOT_FOUND' }}"
     )
-    try:
-        resultado = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", comando_ps],
-            capture_output=True, text=True, timeout=10
-        )
+    resultado = run_windows_command(
+        ["powershell", "-NoProfile", "-Command", comando_ps],
+        operation_name=f"Ler {nome_valor}", timeout_seconds=10.0
+    )
+    if resultado.ok:
         saida = resultado.stdout.strip()
         if saida == "NOT_FOUND" or not saida:
             return None
         return saida
-    except Exception:
-        return None
+    return None
 
 
 def _ler_valor_registro_binario(caminho: str, nome_valor: str) -> str | None:
@@ -106,35 +105,31 @@ def _ler_valor_registro_binario(caminho: str, nome_valor: str) -> str | None:
         f"($val | ForEach-Object {{ $_.ToString() }}) -join ',' "
         f"}} catch {{ Write-Output 'NOT_FOUND' }}"
     )
-    try:
-        resultado = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", comando_ps],
-            capture_output=True, text=True, timeout=10
-        )
+    resultado = run_windows_command(
+        ["powershell", "-NoProfile", "-Command", comando_ps],
+        operation_name=f"Ler binário {nome_valor}", timeout_seconds=10.0
+    )
+    if resultado.ok:
         saida = resultado.stdout.strip()
         if saida == "NOT_FOUND" or not saida:
             return None
         return saida
-    except Exception:
-        return None
+    return None
 
 
 def _ler_plano_energia_ativo() -> str | None:
     """Retorna o GUID do plano de energia ativo."""
-    try:
-        resultado = subprocess.run(
-            ["powercfg", "/getactivescheme"],
-            capture_output=True, text=True, timeout=10
-        )
-        # Formato: "Power Scheme GUID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  (Nome)"
+    resultado = run_windows_command(
+        ["powercfg", "/getactivescheme"],
+        operation_name="Ler plano de energia", timeout_seconds=10.0
+    )
+    if resultado.ok:
         saida = resultado.stdout.strip()
         if "GUID:" in saida:
             partes = saida.split("GUID:")
             guid = partes[1].strip().split()[0].strip()
             return guid
-        return None
-    except Exception:
-        return None
+    return None
 
 
 def salvar_backup_pre_otimizacao() -> dict:
@@ -217,26 +212,20 @@ def _restaurar_valor_registro(caminho: str, nome_valor: str, valor: str, tipo: s
     else:
         return False
 
-    try:
-        resultado = subprocess.run(
-            ["powershell", "-NoProfile", "-Command", comando_ps],
-            capture_output=True, text=True, timeout=15
-        )
-        return resultado.returncode == 0
-    except Exception:
-        return False
+    resultado = run_windows_command(
+        ["powershell", "-NoProfile", "-Command", comando_ps],
+        operation_name=f"Restaurar {nome_valor}", timeout_seconds=15.0
+    )
+    return resultado.ok
 
 
 def _restaurar_plano_energia(guid: str) -> bool:
     """Restaura o plano de energia original."""
-    try:
-        resultado = subprocess.run(
-            ["powercfg", "/setactive", guid],
-            capture_output=True, timeout=10
-        )
-        return resultado.returncode == 0
-    except Exception:
-        return False
+    resultado = run_windows_command(
+        ["powercfg", "/setactive", guid],
+        operation_name="Restaurar plano de energia", timeout_seconds=10.0
+    )
+    return resultado.ok
 
 
 def executar_rollback(caminho_backup: str = None) -> dict:

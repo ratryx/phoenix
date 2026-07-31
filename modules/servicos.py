@@ -10,7 +10,7 @@ recursos não usados, etc). Serviços essenciais do Windows NUNCA são
 incluídos aqui de propósito, para não travar o PC do cliente.
 """
 
-import subprocess
+from modules.core.windows_command import run_windows_command, to_public_result
 from rich.table import Table
 from rich.panel import Panel
 from rich.prompt import Confirm
@@ -39,21 +39,25 @@ def listar_status_servicos() -> list:
     """Consulta o status atual (rodando/parado) de cada serviço da lista segura."""
     resultados = []
     for nome_servico, (nome_amigavel, descricao) in SERVICOS_SEGUROS.items():
-        try:
-            saida = subprocess.run(
-                ["sc", "query", nome_servico],
-                capture_output=True, text=True, timeout=10
-            )
-            if "RUNNING" in saida.stdout:
+        res = run_windows_command(
+            ["sc", "query", nome_servico],
+            operation_name=f"Consultar {nome_servico}",
+            timeout_seconds=10.0,
+            acceptable_returncodes=(0, 1060)
+        )
+        if res.timed_out:
+            status = "Tempo limite excedido"
+        elif not res.ok:
+            status = "Erro ao consultar"
+        else:
+            if "RUNNING" in res.stdout:
                 status = "Rodando"
-            elif "STOPPED" in saida.stdout:
+            elif "STOPPED" in res.stdout:
                 status = "Parado"
-            elif saida.returncode != 0:
+            elif res.returncode == 1060 or "1060" in res.stdout:
                 status = "Não encontrado"
             else:
                 status = "Desconhecido"
-        except Exception:
-            status = "Erro ao consultar"
 
         resultados.append({
             "nome_servico": nome_servico,
@@ -92,30 +96,60 @@ def _validar_nome_servico(nome_servico: str) -> bool:
     return nome_servico in SERVICOS_SEGUROS
 
 
-def desativar_servico(nome_servico: str) -> bool:
+def desativar_servico(nome_servico: str, cancel_event=None) -> dict:
     """Para e desativa a inicialização automática de um serviço específico."""
     if not _validar_nome_servico(nome_servico):
         console.print(f"  [red]✗[/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
-        return False
-    try:
-        subprocess.run(["sc", "stop", nome_servico], capture_output=True, timeout=15)
-        subprocess.run(["sc", "config", nome_servico, "start=", "disabled"], capture_output=True, timeout=15)
-        return True
-    except Exception:
-        return False
+        return {"ok": False, "erro": "Serviço não está na lista segura.", "codigo": "INVALID_SERVICE"}
+    
+    res_stop = run_windows_command(
+        ["sc", "stop", nome_servico],
+        operation_name=f"Parar {nome_servico}",
+        timeout_seconds=15.0,
+        acceptable_returncodes=(0, 1062),
+        cancel_event=cancel_event
+    )
+    if not res_stop.ok and "1062" not in res_stop.stdout and "1062" not in res_stop.stderr:
+        return to_public_result(res_stop, error_message=f"Falha ao parar o serviço {nome_servico}.")
+        
+    res_config = run_windows_command(
+        ["sc", "config", nome_servico, "start=", "disabled"],
+        operation_name=f"Desativar {nome_servico}",
+        timeout_seconds=15.0,
+        cancel_event=cancel_event
+    )
+    if not res_config.ok:
+        return to_public_result(res_config, error_message=f"Falha ao configurar o serviço {nome_servico}.")
+        
+    return {"ok": True, "codigo": "COMMAND_OK"}
 
 
-def ativar_servico(nome_servico: str) -> bool:
+def ativar_servico(nome_servico: str, cancel_event=None) -> dict:
     """Reativa um serviço (volta para início automático e inicia o serviço)."""
     if not _validar_nome_servico(nome_servico):
         console.print(f"  [red]✗[/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
-        return False
-    try:
-        subprocess.run(["sc", "config", nome_servico, "start=", "auto"], capture_output=True, timeout=15)
-        subprocess.run(["sc", "start", nome_servico], capture_output=True, timeout=15)
-        return True
-    except Exception:
-        return False
+        return {"ok": False, "erro": "Serviço não está na lista segura.", "codigo": "INVALID_SERVICE"}
+        
+    res_config = run_windows_command(
+        ["sc", "config", nome_servico, "start=", "auto"],
+        operation_name=f"Ativar auto {nome_servico}",
+        timeout_seconds=15.0,
+        cancel_event=cancel_event
+    )
+    if not res_config.ok:
+        return to_public_result(res_config, error_message=f"Falha ao configurar o serviço {nome_servico}.")
+        
+    res_start = run_windows_command(
+        ["sc", "start", nome_servico],
+        operation_name=f"Iniciar {nome_servico}",
+        timeout_seconds=15.0,
+        acceptable_returncodes=(0, 1056),
+        cancel_event=cancel_event
+    )
+    if not res_start.ok and "1056" not in res_start.stdout and "1056" not in res_start.stderr:
+        return to_public_result(res_start, error_message=f"Falha ao iniciar o serviço {nome_servico}.")
+        
+    return {"ok": True, "codigo": "COMMAND_OK"}
 
 
 def menu_gerenciar_servicos():
@@ -146,7 +180,8 @@ def menu_gerenciar_servicos():
     for idx in indices:
         if 0 <= idx < len(servicos):
             servico = servicos[idx]
-            if desativar_servico(servico["nome_servico"]):
+            res = desativar_servico(servico["nome_servico"])
+            if res.get("ok"):
                 console.print(f"  [green]✓[/green] {servico['nome_amigavel']} desativado")
             else:
                 console.print(f"  [red]✗[/red] Falha ao desativar {servico['nome_amigavel']}")

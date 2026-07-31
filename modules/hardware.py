@@ -7,7 +7,6 @@ diagnóstico completo do programa (para mostrar ao cliente o hardware real).
 """
 
 import platform
-import subprocess
 import psutil
 import concurrent.futures
 
