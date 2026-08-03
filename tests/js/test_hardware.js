@@ -103,7 +103,7 @@ async function runTests() {
     console.log("Rodando testes test_hardware.js...");
     await Phoenix.pages.hardware.load();
     const btn = document.getElementById('btn-atualizar-hardware');
-    
+
     // 1. Fluxo de Sucesso Completo
     resetMocks();
     _jobResultMock = { ok: true, hardware: { status: "completo" } };
@@ -111,20 +111,20 @@ async function runTests() {
     assert.ok(global.inicioLoaded, "Deve chamar inicio.load no sucesso");
     assert.ok(global.visualEffectsRefreshed, "Deve atualizar efeitos no sucesso");
     assert.ok(!btn.disabled, "Botão deve ser reabilitado");
-    
+
     // 2. Fluxo de Sucesso Parcial
     resetMocks();
     _jobResultMock = { ok: true, hardware: { status: "parcial" } };
     await btn.onclick();
     assert.ok(global.inicioLoaded, "Deve atualizar UI se parcial com ok:true");
-    
+
     // 3. Resposta sem job_id
     resetMocks();
     _forcarRescanMock = { return: { } }; // missing job_id
     await btn.onclick();
     assert.ok(!global.inicioLoaded, "Não deve carregar inicio se não houve job");
     assert.ok(global.erroMostrado, "Deve mostrar erro");
-    
+
     // 4. Exceção da bridge
     resetMocks();
     _forcarRescanMock = { throw: "Timeout da bridge" };
@@ -132,14 +132,14 @@ async function runTests() {
     assert.ok(!global.inicioLoaded, "Não deve carregar inicio");
     assert.ok(global.erroMostrado, "Deve mostrar erro interno");
     assert.ok(!btn.disabled, "Botão deve continuar usável");
-    
+
     // 5. jobResult null
     resetMocks();
     _jobResultMock = null;
     await btn.onclick();
     assert.ok(!global.inicioLoaded, "Não deve carregar inicio");
     assert.ok(global.erroMostrado, "Deve mostrar erro de falha");
-    
+
     // 6. jobResult ok:false
     resetMocks();
     _jobResultMock = { ok: false, erro: "Ocorreu X" };

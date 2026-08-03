@@ -132,17 +132,17 @@ def test_hardware_service_single_flight():
 
     t1 = threading.Thread(target=worker)
     t1.start()
-    
+
     # Wait for t1 to enter the mock and block
     assert mock_hw.enter_event.wait(timeout=2.0)
-    
+
     # Start t2 while t1 is active
     t2 = threading.Thread(target=worker)
     t2.start()
-    
+
     # Release the lock
     mock_hw.resume_event.set()
-    
+
     t1.join(timeout=2.0)
     t2.join(timeout=2.0)
 
@@ -162,14 +162,14 @@ def test_hardware_service_single_flight_failure():
 
     t1 = threading.Thread(target=worker)
     t1.start()
-    
+
     assert mock_hw.enter_event.wait(timeout=2.0)
-    
+
     t2 = threading.Thread(target=worker)
     t2.start()
-    
+
     mock_hw.resume_event.set()
-    
+
     t1.join(timeout=2.0)
     t2.join(timeout=2.0)
 
@@ -179,12 +179,12 @@ def test_hardware_service_single_flight_failure():
     assert results[0]["codigo"] == "HARDWARE_RESCAN_FAILED"
     assert mock_hw.call_count == 1
     assert svc._rescan_promise is None
-    
+
     # A third call should execute a new collect and succeed (mocking it succeeds this time)
     mock_hw.should_fail = False
     mock_hw.enter_event.clear()
     mock_hw.resume_event.set() # Don't block the third call
-    
+
     res3 = svc.forcar_rescan_hardware()
     assert res3["ok"] is True
     assert res3["hardware"]["fake"] == "scan_deterministic"
