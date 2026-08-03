@@ -74,8 +74,21 @@ class PhoenixAPI:
     # ---------- Hardware / contexto inicial ----------
 
     def obter_hardware(self) -> dict:
-        """Retorna o hardware já detectado pelo launcher (evita reconsultar)."""
+        """Legado/Compatibilidade: Retorna o hardware já detectado pelo launcher."""
         return self._hardware_service.obter_hardware()
+
+    def obter_inventario_atual(self) -> dict:
+        """Retorna o contrato estático do hardware atual."""
+        return self._hardware_service.obter_hardware()
+
+    def obter_estado_coleta(self) -> dict:
+        """Retorna o status da coleta (completo, parcial, falhou, etc)."""
+        hw = self._hardware_service.obter_hardware()
+        return {
+            "status": hw.get("status", "ainda não carregado"),
+            "avisos": hw.get("avisos", []),
+            "coletado_em": hw.get("coletado_em")
+        }
 
     def obter_nivel_qualidade_visual(self) -> str:
         """
@@ -225,31 +238,43 @@ class PhoenixAPI:
         )
 
     def carregar_hardware_cache(self) -> dict:
-        """Carrega hardware do cache ou refaz scan (fire-and-forget)."""
+        """Carrega hardware do cache ou refaz scan (fire-and-forget). Alias de iniciar_atualizacao."""
+        return self.iniciar_atualizacao()
+
+    def iniciar_atualizacao(self) -> dict:
         job_id = str(uuid.uuid4())
 
         def prog_cb(msg):
             pct = self._job_manager.get_progress(job_id)
-            if "CPU" in msg: pct = 33
-            elif "RAM" in msg: pct = 66
-            elif "GPU" in msg: pct = 90
+            if "WMI" in msg or "CIM" in msg: pct = 33
+            elif "cache" in msg: pct = 66
             elif "Final" in msg: pct = 100
             self._job_manager.update_progress(job_id, pct, msg)
 
         def worker():
             return self._hardware_service.carregar_hardware_cache(progress_callback=prog_cb)
 
-        self._iniciar_job(worker, job_id=job_id, operation_name="carregar_hardware_cache")
-        # Força status inicial de progresso pro front pegar a string imediata
+        self._iniciar_job(worker, job_id=job_id, operation_name="iniciar_atualizacao")
         self._job_manager.update_progress(job_id, 0, "Iniciando detecção...")
         return {"job_id": job_id}
 
     def forcar_rescan_hardware(self) -> dict:
         """Força um scan completo de hardware (fire-and-forget)."""
-        return self._iniciar_job(
-            self._hardware_service.forcar_rescan_hardware,
-            operation_name="forcar_rescan_hardware"
-        )
+        job_id = str(uuid.uuid4())
+        
+        def prog_cb(msg):
+            pct = self._job_manager.get_progress(job_id)
+            if "WMI" in msg or "CIM" in msg: pct = 33
+            elif "cache" in msg: pct = 66
+            elif "Final" in msg: pct = 100
+            self._job_manager.update_progress(job_id, pct, msg)
+
+        def worker():
+            return self._hardware_service.forcar_rescan_hardware(progress_callback=prog_cb)
+            
+        self._iniciar_job(worker, job_id=job_id, operation_name="forcar_rescan_hardware")
+        self._job_manager.update_progress(job_id, 0, "Iniciando detecção forçada...")
+        return {"job_id": job_id}
 
     def executar_otimizacao_geral(self) -> dict:
         """Aplica otimizações gerais em segundo plano (fire-and-forget)."""
