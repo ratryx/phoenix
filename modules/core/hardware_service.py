@@ -18,6 +18,8 @@ class HardwareService:
         hardware_metrics_mod=None
     ):
         self._inventario = hw_info or {}
+        if self._inventario:
+            self._inject_dynamic_capabilities(self._inventario)
         self._boot_time = None
         self._rescan_lock = threading.Lock()
         self._rescan_promise = None
