@@ -55,43 +55,17 @@ from modules import banner, hardware
 console = Console()
 
 
-def exibir_tela_escolha_modo(hw_info: dict, recomendacao: str):
-    """Exibe a tela de escolha entre modo CLI e GUI, com recomendação baseada no hardware."""
+def exibir_tela_escolha_modo():
+    """Exibe a tela de escolha entre modo CLI e GUI."""
     console.clear()
     banner.exibir_banner(modo="Seleção inicial")
 
-    cpu = hw_info.get("cpu", {})
-    ram = hw_info.get("memoria", hw_info.get("ram", {}))
-    tem_gpu = any(g.get("tipo") == "dedicada" for g in hw_info.get("gpus", []))
-
-    threads = cpu.get('threads_logicas', cpu.get('nucleos_logicos', 'N/A'))
-    total_ram = ram.get('total_instalada_gb', ram.get('total_gb', 'N/A'))
-
-    resumo = (
-        f"CPU: {threads} núcleos lógicos   |   "
-        f"RAM: {total_ram} GB   |   "
-        f"GPU dedicada: {'Sim' if tem_gpu else 'Não detectada'}"
+    texto_rec = (
+        "O [bold]Modo GUI[/bold] oferece uma interface gráfica completa.\n"
+        "O [bold]Modo CLI[/bold] é executado diretamente no terminal (mais leve e rápido)."
     )
-    console.print(Panel(resumo, border_style=banner.COR_SECUNDARIA, title="Hardware detectado"))
-    console.print()
 
-    if recomendacao == "alto":
-        texto_rec = (
-            "[bold]Seu computador possui recursos suficientes para a interface gráfica.[/bold]\n"
-            "Recomendamos o [bold]Modo GUI[/bold], mas o Modo CLI também está disponível."
-        )
-    elif recomendacao == "medio":
-        texto_rec = (
-            "Seu computador roda bem os dois modos.\n"
-            "O [bold]Modo GUI[/bold] oferece mais visual; o [bold]Modo CLI[/bold] é mais leve e rápido."
-        )
-    else:
-        texto_rec = (
-            "[bold]Recomendamos o Modo CLI[/bold] para este computador, por consumir menos recursos.\n"
-            "O Modo GUI funciona, mas pode ficar mais lento neste hardware."
-        )
-
-    console.print(Panel(texto_rec, border_style=banner.COR_PRIMARIA, title="Recomendação"))
+    console.print(Panel(texto_rec, border_style=banner.COR_PRIMARIA, title="Modo de Execução"))
     console.print()
 
     opcoes = """
@@ -101,7 +75,7 @@ def exibir_tela_escolha_modo(hw_info: dict, recomendacao: str):
     """
     console.print(Panel(opcoes, border_style=banner.COR_SECUNDARIA, title="Como deseja continuar?"))
 
-    return Prompt.ask("[bold white]Escolha uma opção[/bold white]", default="1" if recomendacao == "baixo" else "2")
+    return Prompt.ask("[bold white]Escolha uma opção[/bold white]", default="2")
 
 
 def _iniciar_modo_portable() -> bool:
@@ -126,38 +100,14 @@ def _iniciar_modo_portable() -> bool:
     return True
 
 def main():
-    if not HAS_CONSOLE:
-        try:
-            from modules import gui_app
-            gui_app.iniciar(None)
-            return
-        except Exception as e:
-            try:
-                import traceback
-                from modules import logs
-                id_atend = logs.gerar_id_atendimento()
-                logs.registrar_acao(id_atend, f"Erro critico GUI (sem console): {str(e)}\n{traceback.format_exc()}")
-            except Exception:
-                pass
-            sys.exit(1)
-
     console.clear()
     banner.exibir_banner(modo="Iniciando...")
 
-    hw_info = None
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console
-    ) as progress:
-        task = progress.add_task("[cyan]Detectando hardware do sistema...", total=None)
+    escolha = exibir_tela_escolha_modo()
 
-        def update_progress(msg):
-            progress.update(task, description=f"[cyan]{msg}")
-
-        hw_info = hardware.obter_hardware_com_cache(progress_callback=update_progress)
-        progress.update(task, description="[green]Hardware detectado com sucesso!")
-    recomendacao = hardware.classificar_capacidade_hardware(hw_info)
+    if escolha == "0":
+        console.print(Panel("Encerrando o Phoenix Optimizer.", border_style=banner.COR_SECUNDARIA))
+        sys.exit(0)
 
     from modules.shared import IS_PORTABLE
 
@@ -165,15 +115,31 @@ def main():
         if not _iniciar_modo_portable():
             sys.exit(0)
 
-    escolha = exibir_tela_escolha_modo(hw_info, recomendacao)
-
     if escolha == "1":
+        # Modo CLI
+        hw_info = None
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            console=console
+        ) as progress:
+            task = progress.add_task("[cyan]Detectando hardware do sistema...", total=None)
+
+            def update_progress(msg):
+                progress.update(task, description=f"[cyan]{msg}")
+
+            hw_info = hardware.obter_hardware_com_cache(progress_callback=update_progress)
+            progress.update(task, description="[green]Hardware detectado com sucesso!")
+        
         from modules import cli_app
         cli_app.iniciar(hw_info)
     elif escolha == "2":
+        # Modo GUI
+        console.print("\n[cyan]Modo GUI em execução.[/cyan]")
+        console.print("[yellow]Feche a interface gráfica ou esta janela para encerrar o Phoenix Optimizer.[/yellow]\n")
         try:
             from modules import gui_app
-            gui_app.iniciar(hw_info)
+            gui_app.iniciar(None)
         except ImportError as e:
             console.print(Panel(
                 f"[bold red]Não foi possível iniciar o Modo GUI.[/bold red]\n"
@@ -183,6 +149,9 @@ def main():
                 "Iniciando Modo CLI como alternativa...",
                 border_style="red"
             ))
+            
+            # Se falhou e vai pro CLI, precisamos coletar hardware
+            hw_info = hardware.obter_hardware_com_cache()
             from modules import cli_app
             cli_app.iniciar(hw_info)
     else:
