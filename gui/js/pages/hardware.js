@@ -36,12 +36,12 @@
                         Phoenix.ui.feedback.mostrarErro("Falha ao iniciar", "Nenhum Job ID retornado.");
                         return;
                     }
-                    
+
                     Phoenix.ui.feedback.mostrarProcessando("Atualizando inventário", "Por favor aguarde...");
                     const jobResult = await Phoenix.jobs.awaitJob(res.job_id, (pct, msg) => {
                         Phoenix.ui.feedback.mostrarProcessando("Atualizando inventário", msg + " (" + pct + "%)");
                     });
-                    
+
                     if (jobResult && jobResult.ok) {
                         Phoenix.state.hardware = jobResult.hardware || Phoenix.state.hardware;
                         await carregarHardware();
@@ -64,7 +64,6 @@
                         Phoenix.ui.feedback.mostrarErro("Falha ao atualizar", msgErro);
                     }
                 } catch(e) {
-                    console.error("Erro no rescan", e);
                     Phoenix.ui.feedback.mostrarErro("Erro interno", "Ocorreu um erro inesperado.");
                 } finally {
                     Phoenix.ui.feedback.esconderOverlay();

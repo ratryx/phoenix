@@ -221,7 +221,7 @@
                 var cpuVal = document.getElementById('hw-cpu-total');
                 var cpuBar = document.getElementById('hw-cpu-bar');
                 var cpuFreq = document.getElementById('hw-cpu-freq');
-                
+
                 if (cpuVal) {
                     const valPct = safePct(res.cpu.uso_percentual);
                     cpuVal.textContent = valPct;
@@ -242,7 +242,7 @@
                     let freq = safeVal(res.cpu.frequencia_atual_mhz);
                     cpuFreq.textContent = freq !== "N/A" ? freq + ' MHz' : 'N/A';
                 }
-                
+
                 var nucleosEl = document.getElementById('hw-nucleos');
                 if (nucleosEl && res.cpu.uso_por_nucleo && Array.isArray(res.cpu.uso_por_nucleo)) {
                     // Update instead of clear if counts match
@@ -310,7 +310,7 @@
             if (res.disco) {
                 var diskRead = document.getElementById('hw-disk-read');
                 var diskWrite = document.getElementById('hw-disk-write');
-                
+
                 if (diskRead) {
                     let r = safeVal(res.disco.leitura_mb_s);
                     diskRead.textContent = r;
@@ -342,12 +342,12 @@
                 // Compare IDs to see if we need a rebuild
                 const incomingIds = gpusToProcess.map((g, i) => String(safeVal(g.id, "gpu_"+i))).join("|");
                 const currentIds = _gpusRenderizadas.join("|");
-                
+
                 if (incomingIds !== currentIds) {
                     // Rebuild
                     gpusContainer.innerHTML = '';
                     _gpusRenderizadas = gpusToProcess.map((g, i) => String(safeVal(g.id, "gpu_"+i)));
-                    
+
                     if (gpusToProcess.length === 0) {
                         const noGpuCard = createEl('div', 'card');
                         const noGpuText = createEl('div', 'texto-secundario', 'Métricas de GPU não suportadas ou não disponíveis.');
@@ -359,19 +359,19 @@
                             const gc = createEl('div', 'card');
                             gc.style.marginBottom = '16px';
                             gc.id = 'gpu-card-' + gid;
-                            
+
                             const gt = createEl('div', '', g.nome || 'GPU');
                             gt.style.color = 'var(--cor-primaria)';
                             gt.style.fontWeight = '600';
                             gt.style.marginBottom = '12px';
                             gc.appendChild(gt);
-                            
+
                             const gu = createEl('div');
                             gu.id = 'gpu-uso-' + gid;
                             gu.style.fontSize = '36px';
                             gu.style.fontWeight = '700';
                             gc.appendChild(gu);
-                            
+
                             const gb = createEl('div', 'barra-progresso');
                             gb.style.margin = '8px 0';
                             const gbf = createEl('div', 'preenchimento');
@@ -380,13 +380,13 @@
                             gbf.style.transition = 'width 0.5s';
                             gb.appendChild(gbf);
                             gc.appendChild(gb);
-                            
+
                             const gm = createEl('div');
                             gm.style.display = 'grid';
                             gm.style.gridTemplateColumns = '1fr 1fr';
                             gm.style.gap = '8px';
                             gm.style.marginTop = '12px';
-                            
+
                             const gmt = createEl('div', 'card-metrica');
                             gmt.style.padding = '12px';
                             gmt.appendChild(createEl('div', 'rotulo', 'Temperatura'));
