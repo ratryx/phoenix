@@ -20,8 +20,8 @@ class JobContext:
         if self.is_cancel_requested():
             raise JobCancelledError("Job cancelled cooperatively")
 
-    def update_progress(self, pct: int, msg: str):
-        self._update_progress_fn(self.job_id, pct, msg)
+    def update_progress(self, pct: int, msg: str, details: dict = None):
+        self._update_progress_fn(self.job_id, pct, msg, details)
 
 class JobManager:
     """
@@ -198,7 +198,7 @@ class JobManager:
         self._cleanup_expired()
         return job_id
 
-    def update_progress(self, job_id, pct, msg):
+    def update_progress(self, job_id, pct, msg, details=None):
         """Atualiza estado de progresso de forma segura."""
         with self._lock:
             job = self._jobs.get(job_id)
@@ -222,6 +222,8 @@ class JobManager:
 
                 job["progresso"] = pct
                 job["mensagem"] = safe_msg
+                if details is not None:
+                    job["detalhes_progresso"] = details
 
     def get_progress(self, job_id):
         """Lê o progresso de forma segura."""

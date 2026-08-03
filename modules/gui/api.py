@@ -264,7 +264,7 @@ class PhoenixAPI:
             from modules.core.cleanup_service import executar_limpeza as do_limpeza
             
             def prog_cb(mensagem, progresso, detalhes):
-                job_context.update_progress(progresso, message=mensagem, details=detalhes)
+                job_context.update_progress(progresso, msg=mensagem, details=detalhes)
                 
             res = do_limpeza(
                 progress_callback=prog_cb,

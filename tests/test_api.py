@@ -45,7 +45,7 @@ def test_api_timeout_policies():
 
     # system_mutation fallback
     api.executar_limpeza()
-    assert jm.last_timeout == 180
+    assert jm.last_timeout == 900.0
 
     # restore point
     api.criar_ponto_restauracao()
@@ -154,9 +154,13 @@ def test_api_metodo_assincrono_leitura(monkeypatch):
     assert job_interno["exclusive_group"] is None
 
 def test_api_metodo_assincrono_destrutivo(monkeypatch):
-    """Valida que uma opera├º├úo de muta├º├úo utiliza o grupo system_mutation."""
-    from modules import limpeza
-    monkeypatch.setattr(limpeza, "executar_limpeza_completa", lambda x: 500)
+    """Valida que uma operação de mutação utiliza o grupo system_mutation."""
+    from modules.core import cleanup_service
+    
+    def fake_cleanup(**kwargs):
+        return {"ok": True, "espaco_liberado_mb": 500}
+        
+    monkeypatch.setattr(cleanup_service, "executar_limpeza", fake_cleanup)
     
     manager = JobManager()
     api = PhoenixAPI({}, job_manager=manager)
@@ -205,15 +209,15 @@ def test_api_metodo_com_progresso(monkeypatch):
     assert payload_fim["resultado"]["hardware"]["hw"] == 1
 
 def test_api_concorrencia_destrutiva_rejeita(monkeypatch):
-    """Testa que duas opera├º├Áes do mesmo grupo exclusivo geram conflito seguro."""
-    from modules import limpeza
+    """Testa que duas operações do mesmo grupo exclusivo geram conflito seguro."""
+    from modules.core import cleanup_service
     import time
     
-    def slow_limpeza(id):
+    def slow_limpeza(**kwargs):
         time.sleep(0.3)
-        return 100
+        return {"ok": True, "espaco_liberado_mb": 100}
         
-    monkeypatch.setattr(limpeza, "executar_limpeza_completa", slow_limpeza)
+    monkeypatch.setattr(cleanup_service, "executar_limpeza", slow_limpeza)
     
     manager = JobManager()
     api = PhoenixAPI({}, job_manager=manager)

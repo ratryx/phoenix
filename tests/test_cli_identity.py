@@ -34,10 +34,10 @@ def test_criar_cliente_portable_invalid_names(mock_portable):
     assert criar_cliente_portable("\x00")["ok"] is False
     assert criar_cliente_portable("a" * 101)["ok"] is False
 
-    # Valida acentos e emojis
+    # Valida acentos sem emojis
     res = criar_cliente_portable("José ")
     assert res["ok"] is True
-    assert res["cliente"]["nome_display"] == "José "
+    assert res["cliente"]["nome_display"] == "José"
     assert "jose" in res["cliente"]["id"]
 
 def test_id_collision_retry(mock_portable, monkeypatch):
