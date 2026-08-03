@@ -1,7 +1,34 @@
+import csv
+import io
+import math
 import logging
 from modules.core.windows_command import run_windows_command
 
 logger = logging.getLogger(__name__)
+
+def _parse_numeric(val_str, min_val=0, max_val=None, allow_zero=True):
+    val_str = val_str.strip() if val_str else ""
+    if not val_str or val_str.upper() in ("N/A", "[N/A]", "NOT SUPPORTED", "NAN", "INF", "+INF", "-INF", "INFINITY"):
+        return None
+        
+    try:
+        val = float(val_str)
+    except ValueError:
+        return None
+        
+    if not math.isfinite(val):
+        return None
+        
+    if not allow_zero and val == 0:
+        return None
+        
+    if val < min_val:
+        return None
+        
+    if max_val is not None and val > max_val:
+        return None
+        
+    return int(val)
 
 def obter_metricas_gpu() -> list:
     """Extrai métricas das GPUs usando nvidia-smi de forma silenciosa e controlada."""
@@ -25,20 +52,20 @@ def obter_metricas_gpu() -> list:
         if not result.ok or not result.stdout.strip():
             return []
 
-        for line in result.stdout.strip().split("\n"):
-            partes = [p.strip() for p in line.split(",")]
+        reader = csv.reader(io.StringIO(result.stdout.strip()))
+        for partes in reader:
             if len(partes) < 6:
                 continue
                 
             try:
-                gpu_id = partes[0]
-                nome = partes[1]
+                gpu_id = partes[0].strip()
+                nome = partes[1].strip()
                 
                 # Valores numéricos
-                uso = int(partes[2]) if partes[2].isdigit() else 0
-                temp = int(partes[3]) if partes[3].isdigit() else 0
-                vram_usada = int(partes[4]) if partes[4].isdigit() else 0
-                vram_total = int(partes[5]) if partes[5].isdigit() else 0
+                uso = _parse_numeric(partes[2], min_val=0, max_val=100, allow_zero=True)
+                temp = _parse_numeric(partes[3], min_val=0, max_val=None, allow_zero=True)
+                vram_usada = _parse_numeric(partes[4], min_val=0, max_val=None, allow_zero=True)
+                vram_total = _parse_numeric(partes[5], min_val=0.0001, max_val=None, allow_zero=False)
                 
                 gpus_metrics.append({
                     "id": gpu_id,
@@ -49,7 +76,7 @@ def obter_metricas_gpu() -> list:
                     "vram_total_mb": vram_total
                 })
             except Exception as e:
-                logger.debug(f"Erro ao parsear linha nvidia-smi '{line}': {e}")
+                logger.debug(f"Erro ao parsear linha nvidia-smi: {e}")
                 
     except Exception as ex:
         logger.warning(f"Erro inesperado ao obter dados dinâmicos da GPU: {ex}")
