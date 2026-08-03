@@ -38,7 +38,6 @@
                 Phoenix.state.hardware = hw;
 
                 // Recalcular qualidade visual
-                const qual = await Phoenix.bridge.call("obter_nivel_qualidade_visual");
                 if (Phoenix.ui && Phoenix.ui.visualEffects && typeof Phoenix.ui.visualEffects.refresh === 'function') {
                     Phoenix.ui.visualEffects.refresh();
                 }
@@ -244,8 +243,10 @@
             container.appendChild(barContainer);
 
             let txt = uso + '%';
-            if (gpu.temperatura_c !== null && gpu.temperatura_c !== undefined) {
+            if (gpu.temperatura_c !== null && gpu.temperatura_c !== undefined && !isNaN(gpu.temperatura_c) && gpu.temperatura_c >= 0) {
                 txt += ' · ' + gpu.temperatura_c + '°C';
+            } else {
+                txt += ' · N/A';
             }
 
             const sub = createEl('div', 'texto-secundario', txt);

@@ -368,18 +368,11 @@ def coletar_inventario() -> dict:
         })
 
     # Verifica capacidades dinâmicas (isso é preenchido depois no metrics ou só como flag)
-    # GPU metrics support checking - try GPUtil
-    has_gputil = False
-    try:
-        import GPUtil
-        has_gputil = len(GPUtil.getGPUs()) > 0
-    except ImportError:
-        has_gputil = False
-        
+    # hardware_inventory não deve importar GPUtil diretamente. O serviço reconstruirá essas flags.
     capacidades = {
-        "metricas_gpu_disponiveis": has_gputil,
-        "temperatura_gpu_disponivel": has_gputil,
-        "vram_gpu_disponivel": has_gputil
+        "metricas_gpu_disponiveis": False,
+        "temperatura_gpu_disponivel": False,
+        "vram_gpu_disponivel": False
     }
 
     if status == "parcial" and not cpu.get("modelo"):

@@ -32,28 +32,44 @@
                 btn.textContent = "Atualizando...";
                 try {
                     const res = await Phoenix.bridge.call("forcar_rescan_hardware");
-                    if (res && res.job_id) {
-                        Phoenix.ui.feedback.mostrarProcessando("Atualizando inventário", "Por favor aguarde...");
-                        const jobResult = await Phoenix.jobs.awaitJob(res.job_id, (pct, msg) => {
-                            Phoenix.ui.feedback.mostrarProcessando("Atualizando inventário", msg + " (" + pct + "%)");
-                        });
-                        if (!jobResult || !jobResult.ok) {
-                            Phoenix.ui.feedback.mostrarErro("Falha ao atualizar", jobResult && jobResult.erro ? jobResult.erro : "Não foi possível concluir a varredura.");
+                    if (!res || !res.job_id) {
+                        Phoenix.ui.feedback.mostrarErro("Falha ao iniciar", "Nenhum Job ID retornado.");
+                        return;
+                    }
+                    
+                    Phoenix.ui.feedback.mostrarProcessando("Atualizando inventário", "Por favor aguarde...");
+                    const jobResult = await Phoenix.jobs.awaitJob(res.job_id, (pct, msg) => {
+                        Phoenix.ui.feedback.mostrarProcessando("Atualizando inventário", msg + " (" + pct + "%)");
+                    });
+                    
+                    if (jobResult && jobResult.ok) {
+                        Phoenix.state.hardware = jobResult.hardware || Phoenix.state.hardware;
+                        await carregarHardware();
+                        if (Phoenix.pages.inicio && typeof Phoenix.pages.inicio.load === 'function') {
+                            Phoenix.pages.inicio.load();
                         }
+                        if (Phoenix.ui && Phoenix.ui.visualEffects && typeof Phoenix.ui.visualEffects.refresh === 'function') {
+                            Phoenix.ui.visualEffects.refresh();
+                        }
+                        const hwStatus = jobResult.hardware && jobResult.hardware.status;
+                        if (hwStatus === "completo") {
+                            Phoenix.ui.feedback.mostrarNotificacao("Sucesso", "Inventário de hardware atualizado.");
+                        } else if (hwStatus === "parcial") {
+                            Phoenix.ui.feedback.mostrarNotificacao("Alerta", "Inventário atualizado parcialmente.");
+                        } else {
+                            Phoenix.ui.feedback.mostrarNotificacao("Sucesso", "Inventário de hardware atualizado.");
+                        }
+                    } else {
+                        const msgErro = jobResult && jobResult.erro ? jobResult.erro : "Não foi possível concluir a varredura.";
+                        Phoenix.ui.feedback.mostrarErro("Falha ao atualizar", msgErro);
                     }
                 } catch(e) {
                     console.error("Erro no rescan", e);
+                    Phoenix.ui.feedback.mostrarErro("Erro interno", "Ocorreu um erro inesperado.");
                 } finally {
                     Phoenix.ui.feedback.esconderOverlay();
                     btn.disabled = false;
                     btn.textContent = "Atualizar inventário";
-                    await carregarHardware();
-                    if (Phoenix.pages.inicio && typeof Phoenix.pages.inicio.load === 'function') {
-                        Phoenix.pages.inicio.load(); // atualiza o inicio tbm
-                    }
-                    if (Phoenix.ui && Phoenix.ui.visualEffects && typeof Phoenix.ui.visualEffects.refresh === 'function') {
-                        Phoenix.ui.visualEffects.refresh();
-                    }
                 }
             });
             btn.dataset.ev = "1";

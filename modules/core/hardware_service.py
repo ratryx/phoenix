@@ -50,6 +50,22 @@ class HardwareService:
         """Retorna o inventário estático."""
         return self._inventario
 
+    def _inject_dynamic_capabilities(self, hw: dict):
+        if not hw: return
+        has_gputil = False
+        try:
+            import GPUtil
+            has_gputil = len(GPUtil.getGPUs()) > 0
+        except Exception:
+            has_gputil = False
+            
+        if "capacidades" not in hw:
+            hw["capacidades"] = {}
+            
+        hw["capacidades"]["metricas_gpu_disponiveis"] = has_gputil
+        hw["capacidades"]["temperatura_gpu_disponivel"] = has_gputil
+        hw["capacidades"]["vram_gpu_disponivel"] = has_gputil
+
     def obter_nivel_qualidade_visual(self) -> str:
         return self._hardware_mod.classificar_capacidade_hardware(self._inventario)
 
@@ -115,6 +131,7 @@ class HardwareService:
 
     def carregar_hardware_cache(self, progress_callback=None) -> dict:
         hw = self._hardware_mod.obter_hardware_com_cache(progress_callback=progress_callback)
+        self._inject_dynamic_capabilities(hw)
         self._inventario = hw
         return {"ok": True, "hardware": hw}
 
@@ -129,6 +146,7 @@ class HardwareService:
         if is_leader:
             try:
                 hw = self._hardware_mod.coletar_hardware_completo(progress_callback=progress_callback)
+                self._inject_dynamic_capabilities(hw)
                 self._inventario = hw
                 promise["result"] = {"ok": True, "hardware": hw}
             except Exception as e:

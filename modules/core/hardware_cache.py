@@ -18,7 +18,7 @@ def _has_dynamic_metrics(obj, path=""):
         for k, v in obj.items():
             if k in BLOCKED:
                 return True
-            if k == "percentual_uso" and not path.endswith("armazenamento.volumes"):
+            if k == "percentual_uso" and path != "armazenamento.volumes":
                 return True
             if _has_dynamic_metrics(v, f"{path}.{k}" if path else k):
                 return True
