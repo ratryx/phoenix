@@ -10,6 +10,14 @@
         return el;
     }
 
+    function safePct(val) {
+        if (val === null || val === undefined || Number.isNaN(val)) return "N/A";
+        let num = Number(val);
+        if (num < 0) num = 0;
+        if (num > 100) num = 100;
+        return num;
+    }
+
     // ──────────────────────────────────────────────
     //  Carregar hardware inicial
     // ──────────────────────────────────────────────
@@ -66,6 +74,11 @@
     page.load = function () {
         page.carregarHardwareInicial();
         page.iniciarAtualizacaoTempoReal();
+    };
+
+    page.leave = function () {
+        Phoenix.lifecycle.clearInterval("tempoRealInicio");
+        page._atualizandoTempoReal = false;
     };
 
     function atualizarRodapeMensagem(msg) {
@@ -159,13 +172,17 @@
     // ──────────────────────────────────────────────
 
     page.iniciarAtualizacaoTempoReal = function () {
-        var atualizando = false;
+        page._atualizandoTempoReal = false;
         Phoenix.lifecycle.setInterval("tempoRealInicio", async function () {
-            if (atualizando) return;
-            atualizando = true;
+            if (page._atualizandoTempoReal || Phoenix.state.paginaAtual !== "inicio") return;
+            page._atualizandoTempoReal = true;
             try {
                 // Atualiza CPU e RAM rápidas
                 var resRapida = await Phoenix.bridge.call("obter_metricas_rapidas");
+                if (Phoenix.state.paginaAtual !== "inicio") {
+                    page._atualizandoTempoReal = false;
+                    return;
+                }
                 if (resRapida && resRapida.ok) {
                     atualizarCardsTempoReal({
                         cpu: { uso_percentual: resRapida.cpu_percent },
@@ -177,6 +194,10 @@
                 var hw = Phoenix.state.hardware;
                 if (hw && hw.capacidades && hw.capacidades.metricas_gpu_disponiveis) {
                     var resGpu = await Phoenix.bridge.call("obter_gpu_rapida");
+                    if (Phoenix.state.paginaAtual !== "inicio") {
+                        page._atualizandoTempoReal = false;
+                        return;
+                    }
                     if (resGpu && resGpu.ok && resGpu.gpu) {
                         atualizarCardGPU(resGpu.gpu);
                     }
@@ -184,7 +205,7 @@
             } catch (e) {
                 // Silencioso
             }
-            atualizando = false;
+            page._atualizandoTempoReal = false;
         }, 3000);
     };
 
@@ -193,32 +214,36 @@
         var cardRAM = document.querySelector('[data-card="ram"]');
 
         if (cardCPU && dados.cpu) {
-            var pct = dados.cpu.uso_percentual;
-            var cor = Phoenix.ui.corPorPercentual(pct);
+            var pct = safePct(dados.cpu.uso_percentual);
+            var cor = pct !== "N/A" ? Phoenix.ui.corPorPercentual(pct) : "";
 
             // Segurança DOM
             cardCPU.querySelector('.valor').textContent = pct;
-            const unit = createEl('span', 'unidade', '%');
-            cardCPU.querySelector('.valor').appendChild(unit);
+            if (pct !== "N/A") {
+                const unit = createEl('span', 'unidade', '%');
+                cardCPU.querySelector('.valor').appendChild(unit);
+            }
 
             var barra = cardCPU.querySelector('.preenchimento');
             if (barra) {
-                barra.style.width = pct + '%';
+                barra.style.width = (pct !== "N/A" ? pct : 0) + '%';
                 barra.className = 'preenchimento ' + cor;
             }
         }
 
         if (cardRAM && dados.memoria) {
-            var pct = dados.memoria.percentual_uso;
-            var cor = Phoenix.ui.corPorPercentual(pct);
+            var pct = safePct(dados.memoria.percentual_uso);
+            var cor = pct !== "N/A" ? Phoenix.ui.corPorPercentual(pct) : "";
 
             cardRAM.querySelector('.valor').textContent = pct;
-            const unit = createEl('span', 'unidade', '%');
-            cardRAM.querySelector('.valor').appendChild(unit);
+            if (pct !== "N/A") {
+                const unit = createEl('span', 'unidade', '%');
+                cardRAM.querySelector('.valor').appendChild(unit);
+            }
 
             var barra = cardRAM.querySelector('.preenchimento');
             if (barra) {
-                barra.style.width = pct + '%';
+                barra.style.width = (pct !== "N/A" ? pct : 0) + '%';
                 barra.className = 'preenchimento ' + cor;
             }
         }

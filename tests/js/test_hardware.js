@@ -137,7 +137,7 @@ async function runTests() {
     resetMocks();
     _jobResultMock = { ok: true, hardware: { status: "completo" } };
     await btn.onclick();
-    assert.ok(global.inicioLoaded, "Deve chamar inicio.load no sucesso");
+    assert.ok(!global.inicioLoaded, "NÃO deve chamar inicio.load no sucesso");
     assert.ok(global.visualEffectsRefreshed, "Deve atualizar efeitos no sucesso");
     assert.ok(!btn.disabled, "Botão deve ser reabilitado");
     assert.ok(sucessoFoiMostrado(), "Deve mostrar overlay de sucesso");

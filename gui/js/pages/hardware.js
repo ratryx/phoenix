@@ -46,9 +46,6 @@
                     if (jobResult && jobResult.ok) {
                         Phoenix.state.hardware = jobResult.hardware || Phoenix.state.hardware;
                         await carregarHardware();
-                        if (Phoenix.pages.inicio && typeof Phoenix.pages.inicio.load === 'function') {
-                            Phoenix.pages.inicio.load();
-                        }
                         if (Phoenix.ui && Phoenix.ui.visualEffects && typeof Phoenix.ui.visualEffects.refresh === 'function') {
                             Phoenix.ui.visualEffects.refresh();
                         }

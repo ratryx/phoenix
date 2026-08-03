@@ -108,7 +108,7 @@ async function runTests() {
         assert.ok(ctx.metrics.windowControlsInitialized, "Deve inicializar window controls");
         assert.ok(ctx.metrics.clientSessionInitialized, "Deve inicializar client session");
         assert.ok(ctx.metrics.hardwareCarregado, "Deve carregar hardware inicial");
-        assert.ok(ctx.metrics.tempoReal, "Deve iniciar att tempo real");
+        assert.ok(!ctx.metrics.tempoReal, "NÃO deve iniciar att tempo real no bootstrap");
         assert.ok(ctx.metrics.routerInitialized, "Deve inicializar o router");
         assert.ok(ctx.metrics.visualEffectsInitialized, "Deve inicializar efeitos visuais");
         

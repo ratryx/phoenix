@@ -12,6 +12,9 @@
         
         // Notifica o ciclo de vida sobre a saída da página atual
         Phoenix.lifecycle.leavePage(STATE.paginaAtual);
+        if (STATE.paginaAtual && Phoenix.pages && Phoenix.pages[STATE.paginaAtual] && typeof Phoenix.pages[STATE.paginaAtual].leave === 'function') {
+            Phoenix.pages[STATE.paginaAtual].leave();
+        }
 
         document
             .querySelectorAll(".pagina")

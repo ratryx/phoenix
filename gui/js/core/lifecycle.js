@@ -26,10 +26,7 @@
     };
 
     Phoenix.lifecycle.leavePage = function (pageName) {
-        if (pageName === 'hwmonitor') {
-            Phoenix.lifecycle.clearInterval('sensores');
-        }
-        // Outros tratamentos específicos de página poderiam ser adicionados aqui
+        // Obsoleto: substituído por chamadas genéricas no router
     };
 
 })(window.Phoenix);

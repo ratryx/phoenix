@@ -79,7 +79,6 @@
     
     // 3. Router e Handlers finais
     registrarBotoesAcao();
-    Phoenix.pages.inicio.iniciarAtualizacaoTempoReal();
 
     // 4. Inicia Navegação (avalia Hash inicial ou "inicio")
     Phoenix.router.initialize();
