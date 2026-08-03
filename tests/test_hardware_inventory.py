@@ -2,6 +2,7 @@ import pytest
 import json
 from unittest.mock import patch, MagicMock
 from modules.core import hardware_inventory
+from modules.core.windows_command import CommandResult
 
 def test_coletar_inventario_sucesso_completo():
     mock_raw = {
@@ -39,7 +40,8 @@ def test_coletar_inventario_sucesso_completo():
         ]
     }
     
-    with patch("modules.core.hardware_inventory.run_windows_command", return_value={"ok": True, "stdout": json.dumps(mock_raw)}):
+    mock_res = CommandResult(ok=True, code="SUCCESS", returncode=0, stdout=json.dumps(mock_raw), stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    with patch("modules.core.hardware_inventory.run_windows_command", return_value=mock_res):
         with patch("modules.core.hardware_inventory.psutil") as mock_psutil:
             mock_psutil.virtual_memory.return_value.total = 34359738368
             inv = hardware_inventory.coletar_inventario()
@@ -73,14 +75,16 @@ def test_coletar_inventario_gpu_dedicada_e_truncamento_vram():
             {"nome": "NVIDIA GeForce RTX 4090", "fabricante": "NVIDIA", "vram_bytes": 4294967295} # VRAM truncada comum em WMI 32-bit uint (-1)
         ]
     }
-    with patch("modules.core.hardware_inventory.run_windows_command", return_value={"ok": True, "stdout": json.dumps(mock_raw)}):
+    mock_res = CommandResult(ok=True, code="SUCCESS", returncode=0, stdout=json.dumps(mock_raw), stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    with patch("modules.core.hardware_inventory.run_windows_command", return_value=mock_res):
         inv = hardware_inventory.coletar_inventario()
         assert inv["gpus"][0]["tipo"] == "dedicada"
         assert inv["gpus"][0]["vram_status"] == "estimada"
         assert inv["gpus"][0]["vram_total_mb"] is None
 
 def test_coletar_inventario_fallback():
-    with patch("modules.core.hardware_inventory.run_windows_command", return_value={"ok": False, "stdout": ""}):
+    mock_res = CommandResult(ok=False, code="ERROR", returncode=1, stdout="", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    with patch("modules.core.hardware_inventory.run_windows_command", return_value=mock_res):
         with patch("modules.core.hardware_inventory.platform") as p:
             p.processor.return_value = "Fallback CPU"
             p.system.return_value = "Windows"
@@ -92,6 +96,19 @@ def test_coletar_inventario_fallback():
             assert inv["sistema"]["os_nome"] == "Windows 10"
 
 def test_json_invalido():
-    with patch("modules.core.hardware_inventory.run_windows_command", return_value={"ok": True, "stdout": "{"}):
+    mock_res = CommandResult(ok=True, code="SUCCESS", returncode=0, stdout="{", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    with patch("modules.core.hardware_inventory.run_windows_command", return_value=mock_res):
         inv = hardware_inventory.coletar_inventario()
         assert inv["status"] == "parcial"
+
+def test_timeout():
+    mock_res = CommandResult(ok=False, code='TIMEOUT', returncode=None, stdout='', stderr='', timed_out=True, cancelled=False, duration_ms=15000, termination_ok=True)
+    with patch('modules.core.hardware_inventory.run_windows_command', return_value=mock_res):
+        inv = hardware_inventory.coletar_inventario()
+        assert inv['status'] == 'parcial'
+
+def test_codigo_nao_zero():
+    mock_res = CommandResult(ok=False, code='ERROR', returncode=1, stdout='', stderr='erro', timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    with patch('modules.core.hardware_inventory.run_windows_command', return_value=mock_res):
+        inv = hardware_inventory.coletar_inventario()
+        assert inv['status'] == 'parcial'

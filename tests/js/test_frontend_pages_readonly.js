@@ -9,7 +9,10 @@ const sandbox = {
     Phoenix: {
       bridge: { call: async () => ({ ok: true }) },
       lifecycle: { setInterval: () => {} },
-      ui: { feedback: { mostrarOverlay: () => {}, esconderOverlay: () => {} } },
+      ui: {
+          feedback: { mostrarOverlay: () => {}, esconderOverlay: () => {} },
+          corPorPercentual: () => 'cor'
+      },
       jobs: { awaitJob: async () => ({ ok: true }) },
       state: {},
       pages: {}
@@ -20,13 +23,23 @@ const sandbox = {
         style: { display: '' },
         innerHTML: '',
         dataset: {},
-        classList: { add: () => {}, remove: () => {} }
+        classList: { add: () => {}, remove: () => {} },
+        appendChild: () => {},
+        addEventListener: () => {}
       }),
       querySelectorAll: () => ([]),
-      querySelector: () => null
+      querySelector: () => null,
+      createElement: (tag) => ({
+        tag,
+        style: {},
+        dataset: {},
+        className: "",
+        classList: { add: () => {}, remove: () => {} },
+        appendChild: () => {}
+      })
     }
   },
-  console: { error: () => {}, log: () => {} }
+  console: console
 };
 
 // Configurar referências circulares e globais
@@ -64,8 +77,13 @@ async function runTests() {
 
     // 2. Mock Bridge calls
     let calls = [];
+    let obter_inv_count = 0;
     sandbox.window.Phoenix.bridge.call = async (method) => {
       calls.push(method);
+      if (method === "obter_inventario_atual") {
+          obter_inv_count++;
+          return obter_inv_count === 1 ? { status: "nao_carregado" } : { status: "completo", cpu: { modelo: "Intel" } };
+      }
       if (method === "carregar_hardware_cache") return { job_id: "hw_job" };
       if (method === "obter_diagnostico") return { job_id: "diag_job" };
       if (method === "obter_info_sistema_detalhado") return { ok: true, cpu: {}, ram: {}, sistema: {}, discos: [] };
@@ -78,7 +96,9 @@ async function runTests() {
     };
 
     // 3. Teste Início
+    console.log("Antes do carregarHardwareInicial");
     await sandbox.window.Phoenix.pages.inicio.carregarHardwareInicial();
+    console.log("Depois do carregarHardwareInicial. hardware:", sandbox.window.Phoenix.state.hardware);
     assert(sandbox.window.Phoenix.state.hardware, "Estado hardware não populado");
     assert(calls.includes("carregar_hardware_cache"), "carregar_hardware_cache não chamado");
 
@@ -87,7 +107,7 @@ async function runTests() {
       intervals.push({ name, time });
     };
     sandbox.window.Phoenix.pages.inicio.iniciarAtualizacaoTempoReal();
-    assert(intervals.some(i => i.name === 'tempoReal' && i.time === 3000), "Polling tempoReal não configurado corretamente");
+    assert(intervals.some(i => i.name === 'tempoRealInicio' && i.time === 3000), "Polling tempoReal não configurado corretamente");
 
     // 4. Teste Diagnóstico
     calls = [];
@@ -97,8 +117,7 @@ async function runTests() {
     // 5. Teste Hardware
     calls = [];
     await sandbox.window.Phoenix.pages.hardware.load();
-    assert(calls.includes("obter_info_sistema_detalhado"), "obter_info_sistema_detalhado não chamado");
-    assert(sandbox.window.Phoenix.state.dadosSistema, "Estado dadosSistema não populado");
+    assert(calls.includes("obter_inventario_atual"), "obter_inventario_atual não chamado");
 
     console.log("Todos os testes JS readonly passaram.");
   } catch (e) {

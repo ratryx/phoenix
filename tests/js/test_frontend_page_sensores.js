@@ -94,10 +94,12 @@ async function runAsyncTests() {
           style: { display: '', width: '' },
           innerHTML: '',
           dataset: {},
-          classList: { add: () => {}, remove: () => {} }
+          classList: { add: () => {}, remove: () => {} },
+          appendChild: () => {}
         }),
         querySelectorAll: () => ([]),
-        querySelector: () => null
+        querySelector: () => null,
+        createElement: (tag) => ({ tag, style: {}, classList: { add: () => {}, remove: () => {} }, appendChild: () => {} })
       }
     },
     console: { error: () => {}, log: () => {} },
