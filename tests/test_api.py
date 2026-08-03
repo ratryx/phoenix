@@ -190,8 +190,17 @@ def test_api_metodo_com_progresso(monkeypatch):
     # Testa se a mensagem pre-worker "Iniciando detec├º├úo..." entrou em vigor r├ípido (antes do worker)
     payload_inicio = api.verificar_tarefa(job_id)
     
-    time.sleep(0.1)
+    deadline = time.monotonic() + 5.0
     payload_fim = api.verificar_tarefa(job_id)
+
+    while (
+        payload_fim["status"]
+        not in {"done", "failed", "cancelled", "timed_out"}
+        and time.monotonic() < deadline
+    ):
+        time.sleep(0.01)
+        payload_fim = api.verificar_tarefa(job_id)
+
     assert payload_fim["status"] == "done"
     assert payload_fim["resultado"]["hardware"]["hw"] == 1
 
