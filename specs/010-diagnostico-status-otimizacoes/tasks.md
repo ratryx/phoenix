@@ -30,7 +30,7 @@ description: "Task list for feature 010 and 011 implementation"
 
 **Purpose**: Core infrastructure that MUST be complete before ANY user story can be implemented
 
-**⚠️ CRITICAL**: No user story work can begin until this phase is complete
+**[AVISO] CRITICAL**: No user story work can begin until this phase is complete
 
 - [X] T003 Implementar funções de leitura rápida WMI/psutil (para modelo CPU e RAM total) em `modules/hardware.py`
 - [X] T004 Criar estrutura de dados (dicionário/lista) mapeando chaves de registro e serviços a serem verificados em `modules/otimizacao.py`
@@ -39,7 +39,7 @@ description: "Task list for feature 010 and 011 implementation"
 
 ---
 
-## Phase 3: User Story 1 & 4 (Priority: P1) 🎯 MVP
+## Phase 3: User Story 1 & 4 (Priority: P1)  MVP
 
 **Goal**: Verificar estado das otimizações ativas (US1) e Abertura instantânea com cache (US4)
 

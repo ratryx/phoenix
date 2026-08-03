@@ -327,7 +327,7 @@ def exportar_relatorio_html(snapshot_antes: dict, snapshot_depois: dict, espaco_
         }}
 
         .resumo li::before {{
-            content: "✓ ";
+            content: "[OK] ";
             color: #6FAE7C;
             font-weight: bold;
         }}
@@ -356,7 +356,7 @@ def exportar_relatorio_html(snapshot_antes: dict, snapshot_depois: dict, espaco_
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔥 PHOENIX OPTIMIZER</h1>
+            <h1> PHOENIX OPTIMIZER</h1>
             <div class="subtitle">Relatório de Atendimento</div>
         </div>
 

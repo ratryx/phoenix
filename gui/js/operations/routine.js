@@ -30,7 +30,7 @@
                         await feedback.confirmarModal(
                             'Erro na Rotina',
                             "Erro ao executar rotina completa: " + (resultado && resultado.erro || "Erro desconhecido"),
-                            '🚨'
+                            ''
                         );
                         return;
                     }
@@ -43,7 +43,7 @@
                         await feedback.confirmarModal(
                             'Erro',
                             'Ocorreu um erro ao processar a rotina.',
-                            '🚨'
+                            ''
                         );
                     }
                 } finally {

@@ -28,7 +28,7 @@
 
 **Purpose**: Core infrastructure that MUST be complete before ANY user story can be implemented
 
-**⚠️ CRITICAL**: No user story work can begin until this phase is complete
+**[AVISO] CRITICAL**: No user story work can begin until this phase is complete
 
 - [x] T002 Implement core restore point cmdlet call in [modules/otimizacao.py](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/modules/otimizacao.py)
 - [x] T003 Implement error parsing and classification in [modules/otimizacao.py](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/modules/otimizacao.py)
@@ -38,7 +38,7 @@
 
 ---
 
-## Phase 3: User Story 1 - Criação e Confirmação do Ponto de Restauração (Priority: P1) 🎯 MVP
+## Phase 3: User Story 1 - Criação e Confirmação do Ponto de Restauração (Priority: P1)  MVP
 
 **Goal**: Automatically trigger system restore point creation, show progress, and request confirmation before applying optimizations in CLI and GUI.
 

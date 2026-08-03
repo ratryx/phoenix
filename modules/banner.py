@@ -87,15 +87,15 @@ def exibir_separador():
 
 
 def msg_sucesso(texto: str):
-    console.print(f"[{COR_SUCESSO}]✓[/{COR_SUCESSO}] {texto}")
+    console.print(f"[{COR_SUCESSO}][OK][/{COR_SUCESSO}] {texto}")
 
 
 def msg_alerta(texto: str):
-    console.print(f"[{COR_ALERTA}]⚠[/{COR_ALERTA}] {texto}")
+    console.print(f"[{COR_ALERTA}][AVISO][/{COR_ALERTA}] {texto}")
 
 
 def msg_erro(texto: str):
-    console.print(f"[{COR_ERRO}]✗[/{COR_ERRO}] {texto}")
+    console.print(f"[{COR_ERRO}][ERRO][/{COR_ERRO}] {texto}")
 
 
 def msg_info(texto: str):

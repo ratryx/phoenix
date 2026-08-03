@@ -194,7 +194,7 @@
                             </tbody>
                         </table>
                         <p class="texto-secundario" style="margin-top:12px">
-                            💡 Use o Gerenciador de Tarefas (Ctrl+Shift+Esc → 
+                             Use o Gerenciador de Tarefas (Ctrl+Shift+Esc → 
                             Inicializar) para desativar programas desnecessários.
                         </p>
                         </div>

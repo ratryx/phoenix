@@ -26,9 +26,9 @@ To avoid a persistent black console window when running in GUI mode, the applica
 
 | Principle | Check/Status | Rationale |
 | :--- | :--- | :--- |
-| **Principle I: Cirúrgico e Não Destrutivo** | ✅ Pass | The changes are strictly confined to `launcher.py` (for console attachment) and `phoenix.spec` (packaging config). |
-| **Principle VI: Dual-Interface CLI/GUI** | ✅ Pass | The design ensures both CLI and GUI modes remain fully operational and share the same code logic. |
-| **Principle VII: Validação de Empacotamento** | ✅ Pass | We have defined a strict Windows validation checklist in [quickstart.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/001-validate-gui-windows/quickstart.md) to test the built executable on native Windows. |
+| **Principle I: Cirúrgico e Não Destrutivo** | [OK] Pass | The changes are strictly confined to `launcher.py` (for console attachment) and `phoenix.spec` (packaging config). |
+| **Principle VI: Dual-Interface CLI/GUI** | [OK] Pass | The design ensures both CLI and GUI modes remain fully operational and share the same code logic. |
+| **Principle VII: Validação de Empacotamento** | [OK] Pass | We have defined a strict Windows validation checklist in [quickstart.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/001-validate-gui-windows/quickstart.md) to test the built executable on native Windows. |
 
 ## Project Structure
 

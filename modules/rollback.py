@@ -173,7 +173,7 @@ def salvar_backup_pre_otimizacao() -> dict:
     with open(caminho, "w", encoding="utf-8") as f:
         json.dump(backup, f, ensure_ascii=False, indent=2)
 
-    console.print(f"  [green]✓[/green] Backup salvo: {caminho.name}")
+    console.print(f"  [green][OK][/green] Backup salvo: {caminho.name}")
 
     return {"ok": True, "caminho": str(caminho), "timestamp": backup["timestamp"]}
 
@@ -309,10 +309,10 @@ def executar_rollback(caminho_backup: str = None) -> dict:
             )
 
         if sucesso:
-            console.print(f"  [green]✓[/green] {descricao}: restaurado")
+            console.print(f"  [green][OK][/green] {descricao}: restaurado")
             restaurados += 1
         else:
-            console.print(f"  [red]✗[/red] {descricao}: falha ao restaurar")
+            console.print(f"  [red][ERRO][/red] {descricao}: falha ao restaurar")
             falhas += 1
 
     if falhas == 0:

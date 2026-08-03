@@ -160,14 +160,14 @@ def _executar_fluxo_restauracao_cli() -> bool:
         res = otimizacao.criar_ponto_restauracao()
 
     if res.get("ok"):
-        console.print(f"  [green]✓[/green] {res['mensagem']}")
+        console.print(f"  [green][OK][/green] {res['mensagem']}")
         if Confirm.ask("\nDeseja prosseguir com a aplicação das otimizações?", default=True):
             return True
         else:
             console.print("[yellow]Operação cancelada pelo usuário. Nenhuma otimização foi aplicada.[/yellow]")
             return False
     else:
-        console.print(f"  [red]✗[/red] Falha ao criar ponto de restauração.")
+        console.print(f"  [red][ERRO][/red] Falha ao criar ponto de restauração.")
         console.print(f"    [yellow]Motivo:[/yellow] {res['erro']}")
 
         if res.get("codigo") == "NO_ADMIN":
@@ -276,7 +276,7 @@ def fluxo_status_otimizacoes():
     tabela.add_column("ID", style="dim")
 
     for item in status["itens"]:
-        icone = "[green]✅ Ativo[/green]" if item["ativo"] else "[red]❌ Inativo[/red]"
+        icone = "[green][OK] Ativo[/green]" if item["ativo"] else "[red][ERRO] Inativo[/red]"
         tabela.add_row(icone, item["descricao"], item["detalhe"], item["id"])
 
     console.print(tabela)

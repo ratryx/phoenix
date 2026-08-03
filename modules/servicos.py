@@ -99,7 +99,7 @@ def _validar_nome_servico(nome_servico: str) -> bool:
 def desativar_servico(nome_servico: str, cancel_event=None) -> dict:
     """Para e desativa a inicialização automática de um serviço específico."""
     if not _validar_nome_servico(nome_servico):
-        console.print(f"  [red]✗[/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
+        console.print(f"  [red][ERRO][/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
         return {"ok": False, "erro": "Serviço não está na lista segura.", "codigo": "INVALID_SERVICE"}
     
     res_stop = run_windows_command(
@@ -127,7 +127,7 @@ def desativar_servico(nome_servico: str, cancel_event=None) -> dict:
 def ativar_servico(nome_servico: str, cancel_event=None) -> dict:
     """Reativa um serviço (volta para início automático e inicia o serviço)."""
     if not _validar_nome_servico(nome_servico):
-        console.print(f"  [red]✗[/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
+        console.print(f"  [red][ERRO][/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
         return {"ok": False, "erro": "Serviço não está na lista segura.", "codigo": "INVALID_SERVICE"}
         
     res_config = run_windows_command(
@@ -182,9 +182,9 @@ def menu_gerenciar_servicos():
             servico = servicos[idx]
             res = desativar_servico(servico["nome_servico"])
             if res.get("ok"):
-                console.print(f"  [green]✓[/green] {servico['nome_amigavel']} desativado")
+                console.print(f"  [green][OK][/green] {servico['nome_amigavel']} desativado")
             else:
-                console.print(f"  [red]✗[/red] Falha ao desativar {servico['nome_amigavel']}")
+                console.print(f"  [red][ERRO][/red] Falha ao desativar {servico['nome_amigavel']}")
 
     console.print(Panel("[bold green]Serviços atualizados![/bold green]", border_style="green"))
 

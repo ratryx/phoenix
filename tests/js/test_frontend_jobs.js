@@ -59,7 +59,7 @@ function runTest() {
 
     function assertEq(a, b, msg) {
         if (a !== b) {
-            console.error(`❌ [FALHA] ${msg}: esperado ${b}, obtido ${a}`);
+            console.error(`[ERRO] [FALHA] ${msg}: esperado ${b}, obtido ${a}`);
             failed++;
         } else {
             passed++;
@@ -74,12 +74,12 @@ function runTest() {
             bridge.mockCancelar = (id) => ({ ok: true });
             await fn();
         } catch (err) {
-            console.error(`❌ [FALHA] ${name}: exceção não tratada - ${err}`);
+            console.error(`[ERRO] [FALHA] ${name}: exceção não tratada - ${err}`);
             failed++;
         } finally {
             const activeTimers = timers.filter(t => t.active).length;
             if (activeTimers > 0) {
-                console.error(`❌ [FALHA] ${name}: vazou ${activeTimers} timer(s) ativo(s)`);
+                console.error(`[ERRO] [FALHA] ${name}: vazou ${activeTimers} timer(s) ativo(s)`);
                 failed++;
             }
         }

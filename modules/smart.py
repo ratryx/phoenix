@@ -253,7 +253,7 @@ def executar_verificacao_smart(id_atendimento: str = None) -> list:
 
         # Exibir alertas, se houver
         for alerta in disco.get("alertas", []):
-            console.print(f"  [bold {cor}]⚠[/bold {cor}] {alerta}")
+            console.print(f"  [bold {cor}][AVISO][/bold {cor}] {alerta}")
 
         console.print()
 
@@ -263,17 +263,17 @@ def executar_verificacao_smart(id_atendimento: str = None) -> list:
 
     if criticos > 0:
         console.print(Panel(
-            f"[bold red]⚠ {criticos} disco(s) em estado CRÍTICO! Faça backup dos dados imediatamente.[/bold red]",
+            f"[bold red][AVISO] {criticos} disco(s) em estado CRÍTICO! Faça backup dos dados imediatamente.[/bold red]",
             border_style="red"
         ))
     elif atencao > 0:
         console.print(Panel(
-            f"[bold yellow]⚠ {atencao} disco(s) requerem atenção. Monitore regularmente.[/bold yellow]",
+            f"[bold yellow][AVISO] {atencao} disco(s) requerem atenção. Monitore regularmente.[/bold yellow]",
             border_style="yellow"
         ))
     else:
         console.print(Panel(
-            "[bold green]✓ Todos os discos estão saudáveis![/bold green]",
+            "[bold green][OK] Todos os discos estão saudáveis![/bold green]",
             border_style="green"
         ))
 

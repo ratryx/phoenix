@@ -26,7 +26,7 @@
 
 **Purpose**: Core infrastructure that MUST be complete before ANY user story can be implemented
 
-**⚠️ CRITICAL**: No user story work can begin until this phase is complete. The backend API must be asynchronous before frontend polling is implemented.
+**[AVISO] CRITICAL**: No user story work can begin until this phase is complete. The backend API must be asynchronous before frontend polling is implemented.
 
 - [ ] T002 Refatorar `listar_inicializacao()` para retornar `job_id` via `_iniciar_job()` em `modules/gui_app.py`
 - [ ] T003 Refatorar `listar_servicos()` para retornar `job_id` via `_iniciar_job()` em `modules/gui_app.py`
@@ -37,7 +37,7 @@
 
 ---
 
-## Phase 3: User Story 1 - Interface Responsiva durante Operações Pesadas (Priority: P1) 🎯 MVP
+## Phase 3: User Story 1 - Interface Responsiva durante Operações Pesadas (Priority: P1)  MVP
 
 **Goal**: O técnico clica para executar operações demoradas e o spinner gira fluidamente sem travar a thread principal, mantendo a janela arrastável.
 

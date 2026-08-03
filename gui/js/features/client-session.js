@@ -40,7 +40,7 @@
                 
                 const iconDiv = document.createElement('div');
                 iconDiv.style.fontSize = '28px';
-                iconDiv.textContent = '👤';
+                iconDiv.textContent = '';
                 card.appendChild(iconDiv);
                 
                 const contentDiv = document.createElement('div');
@@ -73,7 +73,7 @@
                     event.stopPropagation();
                     feature.removeClient(c.id, c.nome);
                 });
-                removeBtn.textContent = '🗑️';
+                removeBtn.textContent = '';
                 card.appendChild(removeBtn);
                 
                 const arrowDiv = document.createElement('div');
@@ -101,7 +101,7 @@
         const confirm = await feedback.confirmarModal(
             "Remover Cliente",
             `Deseja realmente apagar o histórico de "${nome}"?`,
-            "🗑️"
+            ""
         );
         if (!confirm) return;
         

@@ -76,10 +76,10 @@ Um botão "Reaplicar Todos" permite corrigir todas as otimizações que estivere
   - Serviços desativados pelo Phoenix (verificar status atual de cada serviço da lista segura)
   - SysMain/Prefetch (verificar estado do serviço)
   - Efeitos visuais (verificar UserPreferencesMask no registro)
-- **FR-003**: O sistema DEVE exibir cada item com indicador visual claro: verde (✅ = ativo/otimizado) ou vermelho (❌ = inativo/não otimizado).
+- **FR-003**: O sistema DEVE exibir cada item com indicador visual claro: verde ([OK] = ativo/otimizado) ou vermelho ([ERRO] = inativo/não otimizado).
 - **FR-004**: O sistema DEVE oferecer um botão "Reaplicar" ao lado de cada item individual que estiver inativo.
 - **FR-005**: O sistema DEVE oferecer um botão "Reaplicar Todos" que aplica todas as otimizações atualmente inativas de uma vez.
-- **FR-006**: O sistema DEVE estar disponível tanto no modo CLI (lista textual com símbolos ✅/❌) quanto no modo GUI (cards visuais).
+- **FR-006**: O sistema DEVE estar disponível tanto no modo CLI (lista textual com símbolos [OK]/[ERRO]) quanto no modo GUI (cards visuais).
 - **FR-007**: O sistema DEVE seguir o princípio Dual-Interface CLI/GUI — a lógica de verificação e reaplicação deve estar em módulo compartilhado.
 - **FR-008**: O sistema DEVE criar um ponto de restauração antes de reaplicar otimizações (conforme Princípio II da Constituição).
 - **FR-009**: O sistema DEVE registrar as ações de reaplicação no log de atendimento quando um atendimento estiver ativo.

@@ -247,9 +247,9 @@ def _executar_comando(comando: list, nome_acao: str, cancel_event=None) -> dict:
     if resultado.code == "COMMAND_CANCELLED":
         return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
     if not resultado.ok:
-        console.print(f"  [yellow]⚠[/yellow] {nome_acao} (falhou)")
+        console.print(f"  [yellow][AVISO][/yellow] {nome_acao} (falhou)")
         return to_public_result(resultado)
-    console.print(f"  [green]✓[/green] {nome_acao}")
+    console.print(f"  [green][OK][/green] {nome_acao}")
     return {"ok": True, "codigo": "COMMAND_OK"}
 
 
@@ -375,7 +375,7 @@ def otimizar_disco_principal(cancel_event=None) -> dict:
         }
 
     if resultado.ok:
-        console.print("  [green]✓[/green] Otimização de disco (C:) executada")
+        console.print("  [green][OK][/green] Otimização de disco (C:) executada")
         return {
             "ok": True,
             "codigo": "COMMAND_OK",

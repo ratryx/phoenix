@@ -62,21 +62,21 @@
         if (numProblemas === 0) {
             corFundo = 'rgba(111, 174, 124, 0.1)';
             corBorda = 'rgba(111, 174, 124, 0.2)';
-            icone = '✅';
+            icone = '[OK]';
             titulo = 'PC em bom estado — nenhuma ação necessária';
             subtitulo = 'Todos os parâmetros estão dentro da normalidade.';
             corTexto = 'var(--cor-sucesso)';
         } else if (numProblemas === 1 || numProblemas === 2) {
             corFundo = 'rgba(217, 162, 59, 0.1)';
             corBorda = 'rgba(217, 162, 59, 0.2)';
-            icone = '⚠️';
+            icone = '[AVISO]';
             titulo = 'Atenção — ' + numProblemas + ' pontos de melhoria detectados';
             subtitulo = problemas.join(', ') + '.';
             corTexto = 'var(--cor-alerta)';
         } else {
             corFundo = 'rgba(194, 85, 74, 0.1)';
             corBorda = 'rgba(194, 85, 74, 0.2)';
-            icone = '🚨';
+            icone = '';
             titulo = 'PC sobrecarregado — ação recomendada';
             subtitulo = problemas.join(', ') + '.';
             corTexto = 'var(--cor-erro)';
@@ -187,7 +187,7 @@
         if (cpuPct > 80) {
             acoesHtml += `
                 <div class="card" style="border-left: 3px solid var(--cor-primaria); display:flex; align-items:center; gap:16px; cursor:pointer" onclick="document.getElementById('secao-processos') && document.getElementById('secao-processos').scrollIntoView({behavior: 'smooth'})">
-                    <div style="font-size:24px">⚙️</div>
+                    <div style="font-size:24px"></div>
                     <div style="flex:1">
                         <div style="font-weight:600">Ver processos em segundo plano</div>
                         <div class="texto-secundario">O uso da CPU está elevado. Verifique os processos ativos.</div>
@@ -199,7 +199,7 @@
         if (acoesHtml === '') {
             acoesHtml = `
                 <div class="card" style="border-left: 3px solid var(--cor-primaria); display:flex; align-items:center; gap:16px; cursor:pointer" onclick="if(window.irParaPagina) window.irParaPagina('otimizacao'); else document.querySelector('.item-menu[data-pagina=\\'otimizacao\\']').click()">
-                    <div style="font-size:24px">⚡</div>
+                    <div style="font-size:24px"></div>
                     <div style="flex:1">
                         <div style="font-weight:600">Aplicar otimizações</div>
                         <div class="texto-secundario">Melhore o desempenho geral com ajustes no sistema.</div>

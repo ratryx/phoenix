@@ -260,19 +260,19 @@ def executar_verificacao_drivers(id_atendimento: str = None) -> list:
 
     if desatualizados > 0:
         console.print(Panel(
-            f"[bold red]⚠ {desatualizados} driver(s) desatualizado(s)! "
+            f"[bold red][AVISO] {desatualizados} driver(s) desatualizado(s)! "
             f"Atualizar drivers é a forma mais eficaz de melhorar o desempenho em jogos.[/bold red]",
             border_style="red"
         ))
     elif possiveis > 0:
         console.print(Panel(
-            f"[bold yellow]⚠ {possiveis} driver(s) podem estar desatualizados. "
+            f"[bold yellow][AVISO] {possiveis} driver(s) podem estar desatualizados. "
             f"Verifique nos links acima.[/bold yellow]",
             border_style="yellow"
         ))
     else:
         console.print(Panel(
-            "[bold green]✓ Todos os drivers de GPU estão atualizados![/bold green]",
+            "[bold green][OK] Todos os drivers de GPU estão atualizados![/bold green]",
             border_style="green"
         ))
 

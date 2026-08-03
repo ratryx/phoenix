@@ -35,7 +35,7 @@
 
 ---
 
-## Phase 3: User Story 1 - Executar a GUI sem console visível (Priority: P1) 🎯 MVP
+## Phase 3: User Story 1 - Executar a GUI sem console visível (Priority: P1)  MVP
 
 **Goal**: Open GUI via launcher.py / built executable without spawning a cmd terminal popup.
 

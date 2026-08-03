@@ -26,9 +26,9 @@
         // Reset classes e ícone
         iconEl.className = "modal-status-icon " + tipo;
         if (tipo === "sucesso") {
-            iconEl.textContent = "✓";
+            iconEl.textContent = "[OK]";
         } else if (tipo === "erro" || tipo === "alerta") {
-            iconEl.textContent = "⚠";
+            iconEl.textContent = "[AVISO]";
         }
 
         // Ajustar textos dos botões

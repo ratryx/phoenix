@@ -55,7 +55,7 @@ def exibir_selecao_cli() -> dict | None:
             idx = int(escolha)
             if 1 <= idx <= len(clientes):
                 cliente = clientes[idx - 1]
-                console.print(f"\n[green]✓[/green] Cliente selecionado: [bold]{cliente['nome']}[/bold]")
+                console.print(f"\n[green][OK][/green] Cliente selecionado: [bold]{cliente['nome']}[/bold]")
                 return {"id": cliente["id"], "nome": cliente["nome"]}
     else:
         console.print(Panel(
@@ -88,7 +88,7 @@ def exibir_selecao_cli() -> dict | None:
         sys.exit(1)
         
     cliente = res.get("cliente", {})
-    console.print(f"\n[green]✓ Novo cliente: {nome}[/green]")
+    console.print(f"\n[green][OK] Novo cliente: {nome}[/green]")
     return {"id": cliente.get("id"), "nome": cliente.get("nome_display")}
 
 

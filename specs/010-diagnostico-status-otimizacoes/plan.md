@@ -39,13 +39,13 @@ Este plano aborda a implementação simultânea de duas funcionalidades crítica
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-- **Principle I: Cirúrgico e Não Destrutivo** ✅ (Consultas são apenas leitura, reaplicação já segue métodos validados).
-- **Principle II: Ponto de Restauração Obrigatório** ✅ (A reaplicação chamará a rotina de backup/rollback implementada).
-- **Principle III: Controle de Serviços Fixos** ✅ (Validação manter-se-á restrita a `SERVICOS_SEGUROS`).
-- **Principle IV: Isolamento de Logs** ✅ (Cache será armazenado em `%PROGRAMDATA%\PhoenixOptimizer\cache\`, seguindo o padrão).
-- **Principle V: Transparência de Performance** ✅ (Não promete ganhos adicionais).
-- **Principle VI: Dual-Interface CLI/GUI** ✅ (Lógica será encapsulada em `modules/` e exposta para ambas).
-- **Principle VII: Validação de Empacotamento** ✅ (Será validado pós-implementação).
+- **Principle I: Cirúrgico e Não Destrutivo** [OK] (Consultas são apenas leitura, reaplicação já segue métodos validados).
+- **Principle II: Ponto de Restauração Obrigatório** [OK] (A reaplicação chamará a rotina de backup/rollback implementada).
+- **Principle III: Controle de Serviços Fixos** [OK] (Validação manter-se-á restrita a `SERVICOS_SEGUROS`).
+- **Principle IV: Isolamento de Logs** [OK] (Cache será armazenado em `%PROGRAMDATA%\PhoenixOptimizer\cache\`, seguindo o padrão).
+- **Principle V: Transparência de Performance** [OK] (Não promete ganhos adicionais).
+- **Principle VI: Dual-Interface CLI/GUI** [OK] (Lógica será encapsulada em `modules/` e exposta para ambas).
+- **Principle VII: Validação de Empacotamento** [OK] (Será validado pós-implementação).
 
 ## Project Structure
 

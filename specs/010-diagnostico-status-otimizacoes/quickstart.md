@@ -9,10 +9,10 @@
    - Desative o Modo de Jogo nas Configurações do Windows.
 2. **Executar Verificação**
    - Na CLI, selecione a nova opção "Verificar Status das Otimizações".
-   - **Resultado Esperado**: O console lista os itens, e aponta o Plano de Energia e Modo de Jogo como inativos (❌ vermelho).
+   - **Resultado Esperado**: O console lista os itens, e aponta o Plano de Energia e Modo de Jogo como inativos ([ERRO] vermelho).
 3. **Reaplicar**
    - Na GUI ou CLI, execute o comando de "Reaplicar Todos" ou escolha individualmente a reaplicação.
-   - **Resultado Esperado**: O sistema emite log de que as configurações foram ajustadas. Uma nova verificação mostra os itens como ativos (✅ verde).
+   - **Resultado Esperado**: O sistema emite log de que as configurações foram ajustadas. Uma nova verificação mostra os itens como ativos ([OK] verde).
 
 ## Validação do Cache de Hardware (011)
 
