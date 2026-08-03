@@ -33,13 +33,14 @@
                 try {
                     const res = await Phoenix.bridge.call("forcar_rescan_hardware");
                     if (!res || !res.job_id) {
-                        Phoenix.ui.feedback.mostrarErro("Falha ao iniciar", "Nenhum Job ID retornado.");
+                        Phoenix.ui.feedback.mostrarOverlay("Falha ao iniciar", true);
+                        Phoenix.ui.feedback.esconderOverlay(true, false);
                         return;
                     }
 
-                    Phoenix.ui.feedback.mostrarProcessando("Atualizando inventário", "Por favor aguarde...");
+                    Phoenix.ui.feedback.mostrarOverlay("Atualizando inventário", true);
                     const jobResult = await Phoenix.jobs.awaitJob(res.job_id, (pct, msg) => {
-                        Phoenix.ui.feedback.mostrarProcessando("Atualizando inventário", msg + " (" + pct + "%)");
+                        Phoenix.ui.feedback.atualizarOverlay(msg, pct);
                     });
 
                     if (jobResult && jobResult.ok) {
@@ -51,22 +52,21 @@
                         if (Phoenix.ui && Phoenix.ui.visualEffects && typeof Phoenix.ui.visualEffects.refresh === 'function') {
                             Phoenix.ui.visualEffects.refresh();
                         }
+
                         const hwStatus = jobResult.hardware && jobResult.hardware.status;
-                        if (hwStatus === "completo") {
-                            Phoenix.ui.feedback.mostrarNotificacao("Sucesso", "Inventário de hardware atualizado.");
-                        } else if (hwStatus === "parcial") {
-                            Phoenix.ui.feedback.mostrarNotificacao("Alerta", "Inventário atualizado parcialmente.");
-                        } else {
-                            Phoenix.ui.feedback.mostrarNotificacao("Sucesso", "Inventário de hardware atualizado.");
+                        if (hwStatus === "parcial") {
+                            Phoenix.ui.feedback.atualizarOverlay("Atualizado parcialmente.", 100);
                         }
+                        Phoenix.ui.feedback.esconderOverlay(true, true);
                     } else {
                         const msgErro = jobResult && jobResult.erro ? jobResult.erro : "Não foi possível concluir a varredura.";
-                        Phoenix.ui.feedback.mostrarErro("Falha ao atualizar", msgErro);
+                        Phoenix.ui.feedback.atualizarOverlay(msgErro);
+                        Phoenix.ui.feedback.esconderOverlay(true, false);
                     }
                 } catch(e) {
-                    Phoenix.ui.feedback.mostrarErro("Erro interno", "Ocorreu um erro inesperado.");
+                    Phoenix.ui.feedback.mostrarOverlay("Erro interno", true);
+                    Phoenix.ui.feedback.esconderOverlay(true, false);
                 } finally {
-                    Phoenix.ui.feedback.esconderOverlay();
                     btn.disabled = false;
                     btn.textContent = "Atualizar inventário";
                 }
