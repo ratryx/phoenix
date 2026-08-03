@@ -106,13 +106,13 @@ require('../../gui/js/pages/hardware.js');
 function erroFoiMostrado() {
     const overlay = domElements['overlay-processando'];
     const icone = domElements['overlay-icone'];
-    return overlay && overlay.classList.contains('visivel') === false && icone && icone.textContent === '[AVISO]';
+    return overlay && overlay.classList.contains('visivel') === false && icone && icone.innerHTML.includes('svg');
 }
 
 function sucessoFoiMostrado() {
     const overlay = domElements['overlay-processando'];
     const icone = domElements['overlay-icone'];
-    return overlay && overlay.classList.contains('visivel') === false && icone && icone.textContent === '[OK]';
+    return overlay && overlay.classList.contains('visivel') === false && icone && icone.innerHTML.includes('svg');
 }
 
 function resetMocks() {

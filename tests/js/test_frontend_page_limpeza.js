@@ -50,7 +50,8 @@ async function runTests() {
         },
         mockContainer: { 
             innerHTML: '', 
-            appendChild: function(child) { this.innerHTML += child.textContent || child.innerHTML || ''; }
+            appendChild: function(child) { this.innerHTML += child.textContent || child.innerHTML || ''; },
+            replaceChildren: function() { this.innerHTML = ''; }
         }
     };
 
