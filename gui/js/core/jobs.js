@@ -80,7 +80,7 @@
                         if (settled) return; // Se abortou no meio da chamada in-flight
                         
                         if (progressCallback && estado.progresso !== undefined) {
-                            progressCallback(estado.progresso, estado.mensagem);
+                            progressCallback(estado.progresso, estado.mensagem, estado.detalhes_progresso);
                         }
                         
                         if (["done", "failed", "cancelled", "timed_out"].includes(estado.status)) {

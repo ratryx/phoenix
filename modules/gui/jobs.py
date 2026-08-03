@@ -286,6 +286,8 @@ class JobManager:
                 payload["progresso"] = job["progresso"]
             if "mensagem" in job:
                 payload["mensagem"] = job["mensagem"]
+            if "detalhes_progresso" in job:
+                payload["detalhes_progresso"] = job["detalhes_progresso"]
 
             return payload
 
