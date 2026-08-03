@@ -35,11 +35,6 @@ def iniciar(hw_info: dict = None):
     from modules.hardware import obter_hardware_com_cache
     
     # 1. Preparar Bridge e serviços base
-    # Se hw_info for None ou falso, significa que o launcher não o coletou
-    # Carregaremos do cache para exibir rapidamente, depois disparamos um rescan em background
-    if not hw_info:
-        hw_info = obter_hardware_com_cache()
-
     hardware_service = HardwareService(hw_info=hw_info)
     hardware_service.preparar_metricas()
 

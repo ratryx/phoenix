@@ -47,7 +47,7 @@ class PhoenixAPI:
                 timeout = 300
             elif exclusive_group == "system_mutation":
                 timeout = 180
-            elif operation_name in ("carregar_hardware_cache", "forcar_rescan_hardware"):
+            elif operation_name in ("carregar_hardware_cache", "iniciar_atualizacao", "forcar_rescan_hardware"):
                 timeout = 45
             else:
                 timeout = 30
@@ -85,7 +85,7 @@ class PhoenixAPI:
         """Retorna o status da coleta (completo, parcial, falhou, etc)."""
         hw = self._hardware_service.obter_hardware()
         return {
-            "status": hw.get("status", "ainda não carregado"),
+            "status": hw.get("status", "nao_carregado"),
             "avisos": hw.get("avisos", []),
             "coletado_em": hw.get("coletado_em")
         }
