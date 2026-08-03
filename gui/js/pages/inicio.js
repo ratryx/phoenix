@@ -2,36 +2,49 @@
     "use strict";
 
     const page = {};
+
+    function createEl(tag, className, textContent) {
+        const el = document.createElement(tag);
+        if (className) el.className = className;
+        if (textContent !== undefined) el.textContent = textContent;
+        return el;
+    }
     
     // ──────────────────────────────────────────────
-    //  Carregar hardware inicial (cache)
+    //  Carregar hardware inicial
     // ──────────────────────────────────────────────
 
     page.carregarHardwareInicial = async function () {
+        // Agora busca o inventário que já foi carregado no bootstrap do app
         try {
-            var jobRes = await Phoenix.bridge.call("carregar_hardware_cache");
-            if (jobRes && jobRes.job_id) {
-                var hw = await Phoenix.jobs.awaitJob(jobRes.job_id);
-                if (hw && hw.ok && hw.hardware) {
-                    Phoenix.state.hardware = hw.hardware;
-                    atualizarCardsHardware(hw.hardware);
+            var hw = await Phoenix.bridge.call("obter_inventario_atual");
+            if (hw && hw.status !== "falhou" && hw.status !== "ainda não carregado") {
+                Phoenix.state.hardware = hw;
+                atualizarCardsHardware(hw);
 
-                    var textoRodape = document.getElementById("texto-rodape");
-                    if (textoRodape) {
-                        textoRodape.textContent =
-                            hw.hardware.cpu && hw.hardware.cpu.modelo
-                                ? hw.hardware.cpu.modelo
-                                : "Hardware detectado";
-                    }
-                    var barraRodape = document.getElementById("barra-progresso-rodape");
-                    if (barraRodape) barraRodape.style.display = "none";
-                } else {
-                    atualizarRodapeFalha("Hardware não detectado");
+                var textoRodape = document.getElementById("texto-rodape");
+                if (textoRodape) {
+                    textoRodape.textContent =
+                        hw.cpu && hw.cpu.modelo
+                            ? hw.cpu.modelo
+                            : "Hardware detectado";
                 }
+                var barraRodape = document.getElementById("barra-progresso-rodape");
+                if (barraRodape) barraRodape.style.display = "none";
+            } else {
+                atualizarRodapeFalha("Hardware não detectado");
+                // Inicializa cards vazios
+                atualizarCardsHardware(null);
             }
         } catch (e) {
             atualizarRodapeFalha("Erro ao detectar hardware");
         }
+    };
+    
+    // page.load é chamado pelo router quando a página Início é exibida
+    page.load = function () {
+        page.carregarHardwareInicial();
+        page.iniciarAtualizacaoTempoReal();
     };
 
     function atualizarRodapeFalha(msg) {
@@ -45,72 +58,103 @@
     //  Renderização dos cards de hardware (início)
     // ──────────────────────────────────────────────
 
+    function buildCard(id, title, valueStr, unitStr, pct) {
+        const card = createEl('div', 'card-metrica');
+        card.dataset.card = id;
+        
+        card.appendChild(createEl('div', 'rotulo', title));
+        
+        const valDiv = createEl('div', 'valor', valueStr);
+        if (unitStr) {
+            const unitEl = createEl('span', 'unidade', unitStr);
+            valDiv.appendChild(unitEl);
+        }
+        card.appendChild(valDiv);
+        
+        if (pct != null) {
+            const barContainer = createEl('div', 'barra-progresso');
+            const fill = createEl('div', 'preenchimento ' + Phoenix.ui.corPorPercentual(pct));
+            fill.style.width = pct + '%';
+            barContainer.appendChild(fill);
+            card.appendChild(barContainer);
+        }
+        
+        return card;
+    }
+
     function atualizarCardsHardware(hw) {
-        if (!hw) return;
-        var cpu = hw.cpu, ram = hw.ram, gpus = hw.gpus || [];
         var cards = document.getElementById("cards-resumo-inicio");
         if (!cards) return;
-
-        var corCPU = Phoenix.ui.corPorPercentual(cpu.uso_percentual);
-        var corRAM = Phoenix.ui.corPorPercentual(ram.percentual_uso);
-        var nomeGPU = gpus.length > 0 ? gpus[0].nome : 'Não detectada';
-
-        cards.innerHTML =
-            '<div class="card-metrica" data-card="cpu">' +
-            '<div class="rotulo">CPU</div>' +
-            '<div class="valor">' + cpu.uso_percentual + '<span class="unidade">%</span></div>' +
-            '<div class="barra-progresso">' +
-            '<div class="preenchimento ' + corCPU + '" style="width:' + cpu.uso_percentual + '%"></div>' +
-            '</div>' +
-            '</div>' +
-            '<div class="card-metrica" data-card="ram">' +
-            '<div class="rotulo">Memória RAM</div>' +
-            '<div class="valor">' + ram.percentual_uso + '<span class="unidade">%</span></div>' +
-            '<div class="barra-progresso">' +
-            '<div class="preenchimento ' + corRAM + '" style="width:' + ram.percentual_uso + '%"></div>' +
-            '</div>' +
-            '</div>' +
-            '<div class="card-metrica" data-card="gpu-uso">' +
-            '<div class="rotulo">GPU</div>' +
-            '<div class="valor" style="font-size:15px">' + nomeGPU + '</div>' +
-            (gpus.length > 0 && gpus[0].uso_percentual != null ?
-                '<div class="barra-progresso">' +
-                '<div class="preenchimento ' + Phoenix.ui.corPorPercentual(gpus[0].uso_percentual) +
-                '" style="width:' + gpus[0].uso_percentual + '%"></div>' +
-                '</div>' +
-                '<div style="font-size:11px;color:var(--cor-texto-secundario);margin-top:4px">' +
-                gpus[0].uso_percentual + '% · ' +
-                (gpus[0].temperatura_c != null ? gpus[0].temperatura_c + '°C' : '') +
-                '</div>'
-                : '') +
-            '</div>';
+        
+        cards.innerHTML = '';
+        
+        // 1. CPU
+        const cpuCard = buildCard('cpu', 'CPU', '--', '%', 0);
+        cards.appendChild(cpuCard);
+        
+        // 2. RAM
+        const ramCard = buildCard('ram', 'Memória RAM', '--', '%', 0);
+        cards.appendChild(ramCard);
+        
+        // 3. GPU
+        let nomeGPU = "Não detectada";
+        if (hw && hw.gpus && hw.gpus.length > 0) {
+            nomeGPU = hw.gpus[0].nome;
+        }
+        
+        const gpuCard = createEl('div', 'card-metrica');
+        gpuCard.dataset.card = 'gpu-uso';
+        gpuCard.appendChild(createEl('div', 'rotulo', 'GPU'));
+        const valGPU = createEl('div', 'valor', nomeGPU);
+        valGPU.style.fontSize = '15px';
+        gpuCard.appendChild(valGPU);
+        
+        // Espaço reservado para as métricas da GPU que virão via polling
+        const gpuMetricasContainer = createEl('div');
+        gpuMetricasContainer.className = 'gpu-metrics-container';
+        if (hw && hw.capacidades && !hw.capacidades.metricas_gpu_disponiveis) {
+            const ind = createEl('div', 'texto-secundario', 'Métricas não suportadas');
+            ind.style.fontSize = '11px';
+            ind.style.marginTop = '4px';
+            gpuMetricasContainer.appendChild(ind);
+        }
+        gpuCard.appendChild(gpuMetricasContainer);
+        
+        cards.appendChild(gpuCard);
 
         var rodape = document.getElementById("texto-rodape");
-        if (rodape) {
-            rodape.textContent =
-                cpu.nucleos_logicos + ' núcleos · ' + ram.total_gb + ' GB RAM';
+        if (rodape && hw && hw.cpu) {
+            const ramTotal = hw.memoria ? hw.memoria.total_instalada_gb : "?";
+            rodape.textContent = hw.cpu.threads_logicas + ' threads · ' + ramTotal + ' GB RAM';
         }
     }
 
     // ──────────────────────────────────────────────
-    //  Atualização em tempo real (2s)
+    //  Atualização em tempo real (3s)
     // ──────────────────────────────────────────────
 
     page.iniciarAtualizacaoTempoReal = function () {
         var atualizando = false;
-        Phoenix.lifecycle.setInterval("tempoReal", async function () {
+        Phoenix.lifecycle.setInterval("tempoRealInicio", async function () {
             if (atualizando) return;
             atualizando = true;
             try {
-                var res = await Phoenix.bridge.call("obter_metricas_rapidas");
-                if (res && res.ok) {
+                // Atualiza CPU e RAM rápidas
+                var resRapida = await Phoenix.bridge.call("obter_metricas_rapidas");
+                if (resRapida && resRapida.ok) {
                     atualizarCardsTempoReal({
-                        cpu: { uso_percentual: res.cpu_percent },
-                        memoria: {
-                            percentual_uso: res.ram_percent,
-                            disponivel_gb: res.ram_disponivel_gb,
-                        },
+                        cpu: { uso_percentual: resRapida.cpu_percent },
+                        memoria: { percentual_uso: resRapida.ram_percent }
                     });
+                }
+                
+                // Atualiza GPU
+                var hw = Phoenix.state.hardware;
+                if (hw && hw.capacidades && hw.capacidades.metricas_gpu_disponiveis) {
+                    var resGpu = await Phoenix.bridge.call("obter_gpu_rapida");
+                    if (resGpu && resGpu.ok && resGpu.gpu) {
+                        atualizarCardGPU(resGpu.gpu);
+                    }
                 }
             } catch (e) {
                 // Silencioso
@@ -126,8 +170,12 @@
         if (cardCPU && dados.cpu) {
             var pct = dados.cpu.uso_percentual;
             var cor = Phoenix.ui.corPorPercentual(pct);
-            cardCPU.querySelector('.valor').innerHTML =
-                pct + '<span class="unidade">%</span>';
+            
+            // Segurança DOM
+            cardCPU.querySelector('.valor').textContent = pct;
+            const unit = createEl('span', 'unidade', '%');
+            cardCPU.querySelector('.valor').appendChild(unit);
+            
             var barra = cardCPU.querySelector('.preenchimento');
             if (barra) {
                 barra.style.width = pct + '%';
@@ -138,13 +186,44 @@
         if (cardRAM && dados.memoria) {
             var pct = dados.memoria.percentual_uso;
             var cor = Phoenix.ui.corPorPercentual(pct);
-            cardRAM.querySelector('.valor').innerHTML =
-                pct + '<span class="unidade">%</span>';
+            
+            cardRAM.querySelector('.valor').textContent = pct;
+            const unit = createEl('span', 'unidade', '%');
+            cardRAM.querySelector('.valor').appendChild(unit);
+            
             var barra = cardRAM.querySelector('.preenchimento');
             if (barra) {
                 barra.style.width = pct + '%';
                 barra.className = 'preenchimento ' + cor;
             }
+        }
+    }
+    
+    function atualizarCardGPU(gpu) {
+        var card = document.querySelector('[data-card="gpu-uso"]');
+        if (!card) return;
+        
+        var container = card.querySelector('.gpu-metrics-container');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        if (gpu.uso != null) {
+            const barContainer = createEl('div', 'barra-progresso');
+            const fill = createEl('div', 'preenchimento ' + Phoenix.ui.corPorPercentual(gpu.uso));
+            fill.style.width = gpu.uso + '%';
+            barContainer.appendChild(fill);
+            container.appendChild(barContainer);
+            
+            let txt = gpu.uso + '%';
+            if (gpu.temp != null) {
+                txt += ' · ' + gpu.temp + '°C';
+            }
+            
+            const sub = createEl('div', 'texto-secundario', txt);
+            sub.style.fontSize = '11px';
+            sub.style.marginTop = '4px';
+            container.appendChild(sub);
         }
     }
 

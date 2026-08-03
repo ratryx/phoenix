@@ -4,92 +4,183 @@
     const page = {};
     let atualizando = false;
 
+    function createEl(tag, className, textContent) {
+        const el = document.createElement(tag);
+        if (className) el.className = className;
+        if (textContent !== undefined) el.textContent = textContent;
+        return el;
+    }
+
     page.load = async function () {
         var container = document.getElementById('pagina-hwmonitor');
         if (!container) return;
         var hw = Phoenix.state.hardware;
-        if (!hw) return;
-
-        var gpus = hw.gpus || [];
-        var gpuNome = gpus.length > 0 ? gpus[0].nome : 'GPU';
         
-        container.innerHTML =
-            '<div class="cabecalho-pagina">' +
-            '<div>' +
-            '<h1>Monitor de Sensores</h1>' +
-            '<p>Monitoramento em tempo real — atualiza a cada 3s</p>' +
-            '</div>' +
-            '</div>' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">' +
-            
-            '<!-- CPU -->' +
-            '<div class="card">' +
-            '<div style="color:var(--cor-primaria);font-weight:600;margin-bottom:12px">CPU</div>' +
-            '<div style="font-size:36px;font-weight:700" id="hw-cpu-total">--<span style="font-size:16px">%</span></div>' +
-            '<div class="barra-progresso" style="margin:8px 0">' +
-            '<div class="preenchimento" id="hw-cpu-bar" style="width:0%;transition:width 0.5s"></div>' +
-            '</div>' +
-            '<div class="texto-secundario" id="hw-cpu-freq">-- MHz</div>' +
-            '<div style="margin-top:16px">' +
-            '<div style="font-size:11px;color:var(--cor-texto-terciario);text-transform:uppercase;margin-bottom:8px">Por núcleo</div>' +
-            '<div id="hw-nucleos" style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px"></div>' +
-            '</div>' +
-            '</div>' +
-
-            '<!-- GPU -->' +
-            '<div class="card">' +
-            '<div style="color:var(--cor-primaria);font-weight:600;margin-bottom:12px" id="hw-gpu-nome">' + gpuNome + '</div>' +
-            '<div style="font-size:36px;font-weight:700" id="hw-gpu-uso">--<span style="font-size:16px">%</span></div>' +
-            '<div class="barra-progresso" style="margin:8px 0">' +
-            '<div class="preenchimento" id="hw-gpu-bar" style="width:0%;transition:width 0.5s"></div>' +
-            '</div>' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">' +
-            '<div class="card-metrica" style="padding:12px">' +
-            '<div class="rotulo">Temperatura</div>' +
-            '<div class="valor" id="hw-gpu-temp" style="font-size:20px">--°C</div>' +
-            '</div>' +
-            '<div class="card-metrica" style="padding:12px">' +
-            '<div class="rotulo">VRAM</div>' +
-            '<div class="valor" id="hw-gpu-vram" style="font-size:16px">-- / -- MB</div>' +
-            '</div>' +
-            '</div>' +
-            '</div>' +
-
-            '<!-- RAM -->' +
-            '<div class="card">' +
-            '<div style="color:var(--cor-primaria);font-weight:600;margin-bottom:12px">Memória RAM</div>' +
-            '<div style="font-size:36px;font-weight:700" id="hw-ram-pct">--<span style="font-size:16px">%</span></div>' +
-            '<div class="barra-progresso" style="margin:8px 0">' +
-            '<div class="preenchimento" id="hw-ram-bar" style="width:0%;transition:width 0.5s"></div>' +
-            '</div>' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px">' +
-            '<div class="card-metrica" style="padding:12px">' +
-            '<div class="rotulo">Em uso</div>' +
-            '<div class="valor" id="hw-ram-usada" style="font-size:18px">-- GB</div>' +
-            '</div>' +
-            '<div class="card-metrica" style="padding:12px">' +
-            '<div class="rotulo">Disponível</div>' +
-            '<div class="valor" id="hw-ram-livre" style="font-size:18px">-- GB</div>' +
-            '</div>' +
-            '</div>' +
-            '</div>' +
-
-            '<!-- Disco I/O -->' +
-            '<div class="card">' +
-            '<div style="color:var(--cor-primaria);font-weight:600;margin-bottom:12px">Disco — Atividade em tempo real</div>' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:8px">' +
-            '<div>' +
-            '<div class="texto-secundario">Leitura</div>' +
-            '<div style="font-size:28px;font-weight:700;color:var(--cor-info)" id="hw-disk-read">--<span style="font-size:13px"> MB/s</span></div>' +
-            '</div>' +
-            '<div>' +
-            '<div class="texto-secundario">Escrita</div>' +
-            '<div style="font-size:28px;font-weight:700;color:var(--cor-alerta)" id="hw-disk-write">--<span style="font-size:13px"> MB/s</span></div>' +
-            '</div>' +
-            '</div>' +
-            '</div>' +
-
-            '</div>';
+        container.innerHTML = '';
+        
+        const header = createEl('div', 'cabecalho-pagina');
+        const hTitleDiv = createEl('div');
+        hTitleDiv.appendChild(createEl('h1', '', 'Monitor de Sensores'));
+        hTitleDiv.appendChild(createEl('p', '', 'Monitoramento em tempo real — atualiza a cada 3s'));
+        header.appendChild(hTitleDiv);
+        container.appendChild(header);
+        
+        const grid = createEl('div');
+        grid.style.display = 'grid';
+        grid.style.gridTemplateColumns = '1fr 1fr';
+        grid.style.gap = '16px';
+        
+        // 1. CPU
+        const cpuCard = createEl('div', 'card');
+        const cpuTitle = createEl('div', '', 'CPU');
+        cpuTitle.style.color = 'var(--cor-primaria)';
+        cpuTitle.style.fontWeight = '600';
+        cpuTitle.style.marginBottom = '12px';
+        cpuCard.appendChild(cpuTitle);
+        
+        const cpuTotal = createEl('div', '', '--');
+        cpuTotal.style.fontSize = '36px';
+        cpuTotal.style.fontWeight = '700';
+        cpuTotal.id = 'hw-cpu-total';
+        const cpuUnit = createEl('span', '', '%');
+        cpuUnit.style.fontSize = '16px';
+        cpuTotal.appendChild(cpuUnit);
+        cpuCard.appendChild(cpuTotal);
+        
+        const cpuBarCont = createEl('div', 'barra-progresso');
+        cpuBarCont.style.margin = '8px 0';
+        const cpuBar = createEl('div', 'preenchimento');
+        cpuBar.id = 'hw-cpu-bar';
+        cpuBar.style.width = '0%';
+        cpuBar.style.transition = 'width 0.5s';
+        cpuBarCont.appendChild(cpuBar);
+        cpuCard.appendChild(cpuBarCont);
+        
+        const cpuFreq = createEl('div', 'texto-secundario', '-- MHz');
+        cpuFreq.id = 'hw-cpu-freq';
+        cpuCard.appendChild(cpuFreq);
+        
+        const cpuCoresDiv = createEl('div');
+        cpuCoresDiv.style.marginTop = '16px';
+        const cpuCoresLabel = createEl('div', 'texto-secundario', 'POR NÚCLEO');
+        cpuCoresLabel.style.fontSize = '11px';
+        cpuCoresLabel.style.textTransform = 'uppercase';
+        cpuCoresLabel.style.marginBottom = '8px';
+        cpuCoresDiv.appendChild(cpuCoresLabel);
+        
+        const coresGrid = createEl('div');
+        coresGrid.id = 'hw-nucleos';
+        coresGrid.style.display = 'grid';
+        coresGrid.style.gridTemplateColumns = 'repeat(4, 1fr)';
+        coresGrid.style.gap = '6px';
+        cpuCoresDiv.appendChild(coresGrid);
+        cpuCard.appendChild(cpuCoresDiv);
+        
+        grid.appendChild(cpuCard);
+        
+        // 2. RAM
+        const ramCard = createEl('div', 'card');
+        const ramTitle = createEl('div', '', 'Memória RAM');
+        ramTitle.style.color = 'var(--cor-primaria)';
+        ramTitle.style.fontWeight = '600';
+        ramTitle.style.marginBottom = '12px';
+        ramCard.appendChild(ramTitle);
+        
+        const ramPct = createEl('div', '', '--');
+        ramPct.style.fontSize = '36px';
+        ramPct.style.fontWeight = '700';
+        ramPct.id = 'hw-ram-pct';
+        const ramUnit = createEl('span', '', '%');
+        ramUnit.style.fontSize = '16px';
+        ramPct.appendChild(ramUnit);
+        ramCard.appendChild(ramPct);
+        
+        const ramBarCont = createEl('div', 'barra-progresso');
+        ramBarCont.style.margin = '8px 0';
+        const ramBar = createEl('div', 'preenchimento');
+        ramBar.id = 'hw-ram-bar';
+        ramBar.style.width = '0%';
+        ramBar.style.transition = 'width 0.5s';
+        ramBarCont.appendChild(ramBar);
+        ramCard.appendChild(ramBarCont);
+        
+        const ramMetrics = createEl('div');
+        ramMetrics.style.display = 'grid';
+        ramMetrics.style.gridTemplateColumns = '1fr 1fr';
+        ramMetrics.style.gap = '8px';
+        ramMetrics.style.marginTop = '12px';
+        
+        const ramU = createEl('div', 'card-metrica');
+        ramU.style.padding = '12px';
+        ramU.appendChild(createEl('div', 'rotulo', 'Em uso'));
+        const ramUVal = createEl('div', 'valor', '-- GB');
+        ramUVal.id = 'hw-ram-usada';
+        ramUVal.style.fontSize = '18px';
+        ramU.appendChild(ramUVal);
+        ramMetrics.appendChild(ramU);
+        
+        const ramL = createEl('div', 'card-metrica');
+        ramL.style.padding = '12px';
+        ramL.appendChild(createEl('div', 'rotulo', 'Disponível'));
+        const ramLVal = createEl('div', 'valor', '-- GB');
+        ramLVal.id = 'hw-ram-livre';
+        ramLVal.style.fontSize = '18px';
+        ramL.appendChild(ramLVal);
+        ramMetrics.appendChild(ramL);
+        
+        ramCard.appendChild(ramMetrics);
+        grid.appendChild(ramCard);
+        
+        // 3. Disco I/O
+        const diskCard = createEl('div', 'card');
+        const diskTitle = createEl('div', '', 'Disco — Atividade em tempo real');
+        diskTitle.style.color = 'var(--cor-primaria)';
+        diskTitle.style.fontWeight = '600';
+        diskTitle.style.marginBottom = '12px';
+        diskCard.appendChild(diskTitle);
+        
+        const diskMetrics = createEl('div');
+        diskMetrics.style.display = 'grid';
+        diskMetrics.style.gridTemplateColumns = '1fr 1fr';
+        diskMetrics.style.gap = '16px';
+        diskMetrics.style.marginTop = '8px';
+        
+        const dRead = createEl('div');
+        dRead.appendChild(createEl('div', 'texto-secundario', 'Leitura'));
+        const dReadVal = createEl('div', '', '--');
+        dReadVal.id = 'hw-disk-read';
+        dReadVal.style.fontSize = '28px';
+        dReadVal.style.fontWeight = '700';
+        dReadVal.style.color = 'var(--cor-info)';
+        const dReadU = createEl('span', '', ' MB/s');
+        dReadU.style.fontSize = '13px';
+        dReadVal.appendChild(dReadU);
+        dRead.appendChild(dReadVal);
+        diskMetrics.appendChild(dRead);
+        
+        const dWrite = createEl('div');
+        dWrite.appendChild(createEl('div', 'texto-secundario', 'Escrita'));
+        const dWriteVal = createEl('div', '', '--');
+        dWriteVal.id = 'hw-disk-write';
+        dWriteVal.style.fontSize = '28px';
+        dWriteVal.style.fontWeight = '700';
+        dWriteVal.style.color = 'var(--cor-alerta)';
+        const dWriteU = createEl('span', '', ' MB/s');
+        dWriteU.style.fontSize = '13px';
+        dWriteVal.appendChild(dWriteU);
+        dWrite.appendChild(dWriteVal);
+        diskMetrics.appendChild(dWrite);
+        
+        diskCard.appendChild(diskMetrics);
+        grid.appendChild(diskCard);
+        
+        // 4. GPUs - container to be populated dynamically
+        const gpusContainer = createEl('div');
+        gpusContainer.id = 'hw-gpus-container';
+        // Will place it below the main grid, or inside it if fits
+        
+        container.appendChild(grid);
+        container.appendChild(gpusContainer);
 
         page.enter();
     };
@@ -112,22 +203,35 @@
             var cpuBar = document.getElementById('hw-cpu-bar');
             var cpuFreq = document.getElementById('hw-cpu-freq');
             
-            if (cpuVal) cpuVal.innerHTML = res.cpu.total + '<span style="font-size:16px">%</span>';
-            if (cpuBar) {
-                cpuBar.style.width = res.cpu.total + '%';
-                cpuBar.className = 'preenchimento ' + Phoenix.ui.corPorPercentual(res.cpu.total);
+            if (cpuVal) {
+                cpuVal.textContent = res.cpu.uso_percentual;
+                const un = createEl('span', '', '%');
+                un.style.fontSize = '16px';
+                cpuVal.appendChild(un);
             }
-            if (cpuFreq) cpuFreq.textContent = res.cpu.freq_mhz ? res.cpu.freq_mhz + ' MHz' : '-- MHz';
+            if (cpuBar) {
+                cpuBar.style.width = res.cpu.uso_percentual + '%';
+                cpuBar.className = 'preenchimento ' + Phoenix.ui.corPorPercentual(res.cpu.uso_percentual);
+            }
+            if (cpuFreq) cpuFreq.textContent = res.cpu.frequencia_atual_mhz ? res.cpu.frequencia_atual_mhz + ' MHz' : '-- MHz';
             
             var nucleosEl = document.getElementById('hw-nucleos');
-            if (nucleosEl && res.cpu.por_nucleo) {
-                nucleosEl.innerHTML = res.cpu.por_nucleo.map(function(pct, i) {
+            if (nucleosEl && res.cpu.uso_por_nucleo) {
+                nucleosEl.innerHTML = ''; // Limpa seguro
+                res.cpu.uso_por_nucleo.forEach((pct, i) => {
                     var cor = pct > 90 ? 'var(--cor-erro)' : pct > 70 ? 'var(--cor-alerta)' : 'var(--cor-texto)';
-                    return '<div style="text-align:center">' +
-                        '<div style="font-size:10px;color:var(--cor-texto-terciario)">C' + (i+1) + '</div>' +
-                        '<div style="font-size:13px;font-weight:600;color:' + cor + '">' + pct + '%</div>' +
-                        '</div>';
-                }).join('');
+                    const nd = createEl('div');
+                    nd.style.textAlign = 'center';
+                    const nTitle = createEl('div', 'texto-secundario', 'C' + (i+1));
+                    nTitle.style.fontSize = '10px';
+                    const nPct = createEl('div', '', pct + '%');
+                    nPct.style.fontSize = '13px';
+                    nPct.style.fontWeight = '600';
+                    nPct.style.color = cor;
+                    nd.appendChild(nTitle);
+                    nd.appendChild(nPct);
+                    nucleosEl.appendChild(nd);
+                });
             }
 
             // Atualiza RAM
@@ -136,40 +240,112 @@
             var ramUsada = document.getElementById('hw-ram-usada');
             var ramLivre = document.getElementById('hw-ram-livre');
 
-            if (ramPct) ramPct.innerHTML = res.ram.percent + '<span style="font-size:16px">%</span>';
+            if (ramPct) {
+                ramPct.textContent = res.memoria.percentual_uso;
+                const un = createEl('span', '', '%');
+                un.style.fontSize = '16px';
+                ramPct.appendChild(un);
+            }
             if (ramBar) {
-                ramBar.style.width = res.ram.percent + '%';
-                ramBar.className = 'preenchimento ' + Phoenix.ui.corPorPercentual(res.ram.percent);
+                ramBar.style.width = res.memoria.percentual_uso + '%';
+                ramBar.className = 'preenchimento ' + Phoenix.ui.corPorPercentual(res.memoria.percentual_uso);
             }
-            if (ramUsada) ramUsada.textContent = res.ram.usada_gb + ' GB';
-            if (ramLivre) ramLivre.textContent = res.ram.disponivel_gb + ' GB';
-
-            // Atualiza GPU
-            var gpuUso = document.getElementById('hw-gpu-uso');
-            var gpuBar = document.getElementById('hw-gpu-bar');
-            var gpuTemp = document.getElementById('hw-gpu-temp');
-            var gpuVram = document.getElementById('hw-gpu-vram');
-
-            if (res.gpu) {
-                var g = res.gpu;
-                if (gpuUso) gpuUso.innerHTML = g.uso + '<span style="font-size:16px">%</span>';
-                if (gpuBar) {
-                    gpuBar.style.width = g.uso + '%';
-                    gpuBar.className = 'preenchimento ' + Phoenix.ui.corPorPercentual(g.uso);
-                }
-                if (gpuTemp) {
-                    var corTemp = g.temp >= 85 ? 'var(--cor-erro)' : g.temp >= 70 ? 'var(--cor-alerta)' : 'var(--cor-sucesso)';
-                    gpuTemp.innerHTML = '<span style="color:' + corTemp + '">' + g.temp + '°C</span>';
-                }
-                if (gpuVram) gpuVram.textContent = g.vram_usada + ' / ' + g.vram_total + ' MB';
-            }
+            if (ramUsada) ramUsada.textContent = res.memoria.usada_gb + ' GB';
+            if (ramLivre) ramLivre.textContent = res.memoria.disponivel_gb + ' GB';
 
             // Atualiza Disco I/O
             var diskRead = document.getElementById('hw-disk-read');
             var diskWrite = document.getElementById('hw-disk-write');
             
-            if (diskRead) diskRead.innerHTML = res.disco.leitura_mb + '<span style="font-size:13px"> MB/s</span>';
-            if (diskWrite) diskWrite.innerHTML = res.disco.escrita_mb + '<span style="font-size:13px"> MB/s</span>';
+            if (diskRead) {
+                diskRead.textContent = res.disco.leitura_mb_s;
+                const un = createEl('span', '', ' MB/s');
+                un.style.fontSize = '13px';
+                diskRead.appendChild(un);
+            }
+            if (diskWrite) {
+                diskWrite.textContent = res.disco.escrita_mb_s;
+                const un = createEl('span', '', ' MB/s');
+                un.style.fontSize = '13px';
+                diskWrite.appendChild(un);
+            }
+            
+            // Atualiza GPUs
+            var gpusContainer = document.getElementById('hw-gpus-container');
+            if (gpusContainer) {
+                gpusContainer.innerHTML = ''; // refaz a cada tick pra suportar N gpus seguras
+                gpusContainer.style.marginTop = '16px';
+                
+                if (!res.gpus || res.gpus.length === 0) {
+                    const noGpuCard = createEl('div', 'card');
+                    const noGpuText = createEl('div', 'texto-secundario', 'Métricas de GPU não suportadas ou não disponíveis.');
+                    noGpuCard.appendChild(noGpuText);
+                    gpusContainer.appendChild(noGpuCard);
+                } else {
+                    res.gpus.forEach((g) => {
+                        const gc = createEl('div', 'card');
+                        gc.style.marginBottom = '16px';
+                        
+                        const gt = createEl('div', '', g.nome || 'GPU');
+                        gt.style.color = 'var(--cor-primaria)';
+                        gt.style.fontWeight = '600';
+                        gt.style.marginBottom = '12px';
+                        gc.appendChild(gt);
+                        
+                        const gu = createEl('div', '', String(g.uso_percentual));
+                        gu.style.fontSize = '36px';
+                        gu.style.fontWeight = '700';
+                        const guu = createEl('span', '', '%');
+                        guu.style.fontSize = '16px';
+                        gu.appendChild(guu);
+                        gc.appendChild(gu);
+                        
+                        const gb = createEl('div', 'barra-progresso');
+                        gb.style.margin = '8px 0';
+                        const gbf = createEl('div', 'preenchimento ' + Phoenix.ui.corPorPercentual(g.uso_percentual));
+                        gbf.style.width = g.uso_percentual + '%';
+                        gbf.style.transition = 'width 0.5s';
+                        gb.appendChild(gbf);
+                        gc.appendChild(gb);
+                        
+                        const gm = createEl('div');
+                        gm.style.display = 'grid';
+                        gm.style.gridTemplateColumns = '1fr 1fr';
+                        gm.style.gap = '8px';
+                        gm.style.marginTop = '12px';
+                        
+                        const gmt = createEl('div', 'card-metrica');
+                        gmt.style.padding = '12px';
+                        gmt.appendChild(createEl('div', 'rotulo', 'Temperatura'));
+                        
+                        let tempTxt = '--°C';
+                        let corTemp = '';
+                        if (g.temperatura_c > 0) {
+                            tempTxt = g.temperatura_c + '°C';
+                            corTemp = g.temperatura_c >= 85 ? 'var(--cor-erro)' : g.temperatura_c >= 70 ? 'var(--cor-alerta)' : 'var(--cor-sucesso)';
+                        } else {
+                            tempTxt = 'N/A';
+                        }
+                        
+                        const gmtv = createEl('div', 'valor', tempTxt);
+                        gmtv.style.fontSize = '20px';
+                        if (corTemp) gmtv.style.color = corTemp;
+                        gmt.appendChild(gmtv);
+                        gm.appendChild(gmt);
+                        
+                        const gmv = createEl('div', 'card-metrica');
+                        gmv.style.padding = '12px';
+                        gmv.appendChild(createEl('div', 'rotulo', 'VRAM'));
+                        const gmvv = createEl('div', 'valor', `${g.vram_usada_mb} / ${g.vram_total_mb} MB`);
+                        gmvv.style.fontSize = '16px';
+                        gmv.appendChild(gmvv);
+                        gm.appendChild(gmv);
+                        
+                        gc.appendChild(gm);
+                        gpusContainer.appendChild(gc);
+                    });
+                }
+            }
 
         } catch (e) {
             console.error("Erro no hwmonitor:", e);

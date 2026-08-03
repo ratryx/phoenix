@@ -3,142 +3,385 @@
 
     const page = {};
 
+    function safeText(text) {
+        return text != null ? String(text) : "N/A";
+    }
+
+    function createEl(tag, className, textContent) {
+        const el = document.createElement(tag);
+        if (className) el.className = className;
+        if (textContent !== undefined) el.textContent = textContent;
+        return el;
+    }
+
+    function formatData(isoString) {
+        if (!isoString) return "Desconhecida";
+        try {
+            const date = new Date(isoString);
+            return date.toLocaleString('pt-BR');
+        } catch {
+            return isoString;
+        }
+    }
+
     page.load = async function () {
+        const btn = document.getElementById('btn-atualizar-hardware');
+        if (btn && !btn.dataset.ev) {
+            btn.addEventListener('click', async () => {
+                btn.disabled = true;
+                btn.textContent = "Atualizando...";
+                try {
+                    const res = await Phoenix.bridge.call("iniciar_atualizacao");
+                    if (res && res.job_id) {
+                        Phoenix.ui.feedback.mostrarProcessando("Atualizando inventário", "Por favor aguarde...");
+                        await Phoenix.jobs.waitFor(res.job_id);
+                    }
+                } catch(e) {
+                    console.error("Erro no rescan", e);
+                } finally {
+                    Phoenix.ui.feedback.esconderOverlay();
+                    btn.disabled = false;
+                    btn.textContent = "Atualizar inventário";
+                    await carregarHardware();
+                    if (Phoenix.pages.inicio && typeof Phoenix.pages.inicio.load === 'function') {
+                        Phoenix.pages.inicio.load(); // atualiza o inicio tbm
+                    }
+                }
+            });
+            btn.dataset.ev = "1";
+        }
         await carregarHardware();
     };
 
     async function carregarHardware() {
-        // Registrar abas internas (somente se ainda não registrados, pra evitar duplicação)
-        // Usaremos uma delegação no container ou um atributo de flag
-        var container = document.getElementById('hw-conteudo');
-        if (container && !container.dataset.eventosRegistrados) {
-            document.querySelectorAll('.hw-aba').forEach(aba => {
-                aba.addEventListener('click', () => {
-                    document.querySelectorAll('.hw-aba').forEach(a => a.classList.remove('ativa'));
-                    aba.classList.add('ativa');
-                    page.renderTab(aba.dataset.aba);
-                });
-            });
-            container.dataset.eventosRegistrados = 'true';
-        }
+        const container = document.getElementById('hw-conteudo');
+        container.innerHTML = ''; // safe clear
         
-        Phoenix.ui.feedback.mostrarOverlay('Coletando informações do sistema...');
+        const badge = document.getElementById('hw-status-badge');
+        const dataLbl = document.getElementById('hw-data-coleta');
+
         try {
-            const res = await Phoenix.bridge.call("obter_info_sistema_detalhado");
-            Phoenix.ui.feedback.esconderOverlay();
-            if (res && res.ok) {
-                Phoenix.state.dadosSistema = res;
-                page.renderTab('cpu');
-            } else {
-                document.getElementById('hw-conteudo').innerHTML = 
-                    '<p class="texto-secundario">Erro ao coletar dados.</p>';
+            const hw = await Phoenix.bridge.call("obter_inventario_atual");
+            
+            if (!hw || !hw.sistema) {
+                container.appendChild(createEl('p', 'texto-secundario', 'Inventário não disponível. Tente atualizar.'));
+                badge.textContent = "Não carregado";
+                badge.style.background = "#555";
+                dataLbl.textContent = "";
+                return;
             }
+
+            // Atualiza cabeçalho
+            if (hw.status === 'completo') {
+                badge.textContent = "Completo";
+                badge.style.background = "var(--cor-sucesso, #2e7d32)";
+            } else if (hw.status === 'parcial') {
+                badge.textContent = "Parcial";
+                badge.style.background = "var(--cor-alerta, #f57c00)";
+            } else {
+                badge.textContent = "Falha";
+                badge.style.background = "var(--cor-erro, #d32f2f)";
+            }
+            dataLbl.textContent = "Atualizado em: " + formatData(hw.coletado_em);
+
+            renderizarResumo(hw, container);
+            renderizarSistema(hw, container);
+            renderizarCPU(hw, container);
+            renderizarMemoria(hw, container);
+            renderizarGPUs(hw, container);
+            renderizarArmazenamento(hw, container);
+
         } catch(e) {
-            Phoenix.ui.feedback.esconderOverlay();
-            document.getElementById('hw-conteudo').innerHTML = 
-                '<p class="texto-secundario">Erro ao coletar dados.</p>';
+            container.appendChild(createEl('p', 'texto-secundario', 'Erro ao carregar inventário.'));
+            console.error(e);
         }
     }
 
-    page.renderTab = function (aba) {
-        const d = Phoenix.state.dadosSistema;
-        if (!d) return;
-        const container = document.getElementById('hw-conteudo');
+    function renderizarResumo(hw, container) {
+        const grid = createEl('div', 'grade-cards');
+        grid.style.marginBottom = '24px';
         
-        if (aba === 'cpu') {
-            container.innerHTML = `
-                <div class="card" style="margin-bottom:16px">
-                    <div class="hw-secao-titulo">Processador</div>
-                    <table class="tabela-dados">
-                        <tr><td>Modelo</td><td>${d.cpu.modelo}</td></tr>
-                        <tr><td>Núcleos físicos</td><td>${d.cpu.nucleos_fisicos}</td></tr>
-                        <tr><td>Threads lógicas</td><td>${d.cpu.nucleos_logicos}</td></tr>
-                        <tr><td>Frequência atual</td><td>${d.cpu.freq_atual ? d.cpu.freq_atual + ' MHz' : 'N/A'}</td></tr>
-                        <tr><td>Frequência máxima</td><td>${d.cpu.freq_max ? d.cpu.freq_max + ' MHz' : 'N/A'}</td></tr>
-                        <tr><td>Frequência mínima</td><td>${d.cpu.freq_min ? d.cpu.freq_min + ' MHz' : 'N/A'}</td></tr>
-                        <tr><td>Arquitetura</td><td>${d.cpu.arquitetura}</td></tr>
-                    </table>
-                </div>`;
+        const sysCard = createEl('div', 'card');
+        sysCard.appendChild(createEl('div', 'hw-secao-titulo', 'Sistema'));
+        sysCard.appendChild(createEl('div', '', hw.sistema.modelo || hw.sistema.placa_mae.modelo || 'Computador genérico'));
+        sysCard.appendChild(createEl('div', 'texto-secundario', `${hw.sistema.os_nome} · Build ${safeText(hw.sistema.os_build)}`));
+        grid.appendChild(sysCard);
+
+        const cpuCard = createEl('div', 'card');
+        cpuCard.appendChild(createEl('div', 'hw-secao-titulo', 'Processador'));
+        cpuCard.appendChild(createEl('div', '', safeText(hw.cpu.modelo)));
+        cpuCard.appendChild(createEl('div', 'texto-secundario', `${safeText(hw.cpu.nucleos_fisicos)} núcleos / ${safeText(hw.cpu.threads_logicas)} threads`));
+        grid.appendChild(cpuCard);
+
+        const ramCard = createEl('div', 'card');
+        ramCard.appendChild(createEl('div', 'hw-secao-titulo', 'Memória'));
+        ramCard.appendChild(createEl('div', '', `${safeText(hw.memoria.total_instalada_gb)} GB RAM`));
+        const slotsText = hw.memoria.slots_usados != null ? `${hw.memoria.slots_usados} módulo(s)` : '';
+        ramCard.appendChild(createEl('div', 'texto-secundario', slotsText));
+        grid.appendChild(ramCard);
+
+        if (hw.gpus && hw.gpus.length > 0) {
+            const gpuCard = createEl('div', 'card');
+            gpuCard.appendChild(createEl('div', 'hw-secao-titulo', 'GPU Principal'));
+            gpuCard.appendChild(createEl('div', '', hw.gpus[0].nome));
+            const tipoText = hw.gpus[0].tipo === 'dedicada' ? 'Dedicada' : (hw.gpus[0].tipo === 'integrada' ? 'Integrada' : 'Desconhecida');
+            gpuCard.appendChild(createEl('div', 'texto-secundario', tipoText));
+            grid.appendChild(gpuCard);
+        }
+
+        container.appendChild(grid);
+    }
+
+    function createList(dataObj) {
+        const wrapper = createEl('div', 'hw-lista-dados');
+        for (const [key, val] of Object.entries(dataObj)) {
+            const row = createEl('div', 'hw-lista-item');
+            const lbl = createEl('div', 'hw-lista-rotulo', key);
+            const valEl = createEl('div', 'hw-lista-valor', val);
+            row.appendChild(lbl);
+            row.appendChild(valEl);
+            wrapper.appendChild(row);
+        }
+        return wrapper;
+    }
+
+    function renderizarSistema(hw, container) {
+        const card = createEl('div', 'card');
+        card.style.marginBottom = '16px';
+        card.appendChild(createEl('div', 'hw-secao-titulo', 'Detalhes do Sistema'));
+        
+        card.appendChild(createList({
+            "Fabricante": safeText(hw.sistema.fabricante),
+            "Modelo": safeText(hw.sistema.modelo),
+            "Dispositivo": safeText(hw.sistema.nome_dispositivo),
+            "SO": safeText(hw.sistema.os_nome),
+            "Build": safeText(hw.sistema.os_build),
+            "Arquitetura": safeText(hw.sistema.arquitetura),
+            "Placa-mãe": safeText(hw.sistema.placa_mae.modelo),
+            "Fabricante Placa-mãe": safeText(hw.sistema.placa_mae.fabricante),
+            "Versão BIOS": safeText(hw.sistema.bios.versao),
+            "Data BIOS": safeText(hw.sistema.bios.data)
+        }));
+        
+        container.appendChild(card);
+    }
+
+    function renderizarCPU(hw, container) {
+        const card = createEl('div', 'card');
+        card.style.marginBottom = '16px';
+        card.appendChild(createEl('div', 'hw-secao-titulo', 'Processador (CPU)'));
+        
+        card.appendChild(createList({
+            "Nome": safeText(hw.cpu.modelo),
+            "Fabricante": safeText(hw.cpu.fabricante),
+            "Arquitetura": safeText(hw.cpu.arquitetura),
+            "Núcleos Físicos": safeText(hw.cpu.nucleos_fisicos),
+            "Threads Lógicas": safeText(hw.cpu.threads_logicas),
+            "Frequência Máxima": hw.cpu.frequencia_max_mhz ? hw.cpu.frequencia_max_mhz + " MHz" : "N/A"
+        }));
+        container.appendChild(card);
+    }
+
+    function renderizarMemoria(hw, container) {
+        const card = createEl('div', 'card');
+        card.style.marginBottom = '16px';
+        card.appendChild(createEl('div', 'hw-secao-titulo', 'Memória RAM'));
+        
+        card.appendChild(createList({
+            "Total Instalada": safeText(hw.memoria.total_instalada_gb) + " GB",
+            "Total Utilizável": safeText(hw.memoria.total_utilizavel_gb) + " GB",
+            "Slots Usados": safeText(hw.memoria.slots_usados)
+        }));
+        
+        if (hw.memoria.modulos && hw.memoria.modulos.length > 0) {
+            const ul = createEl('ul');
+            ul.style.listStyleType = 'none';
+            ul.style.padding = '0';
+            ul.style.marginTop = '12px';
+            
+            hw.memoria.modulos.forEach(m => {
+                const li = createEl('li');
+                li.style.background = 'rgba(255,255,255,0.03)';
+                li.style.padding = '8px 12px';
+                li.style.borderRadius = '4px';
+                li.style.marginBottom = '8px';
+                
+                const title = createEl('div', '', m.slot ? m.slot : "Módulo");
+                title.style.fontWeight = 'bold';
+                li.appendChild(title);
+                
+                let details = `${safeText(m.capacidade_gb)} GB`;
+                if (m.velocidade_mhz) details += ` · ${m.velocidade_mhz} MHz`;
+                if (m.fabricante) details += ` · ${m.fabricante}`;
+                if (m.part_number) details += ` (PN: ${m.part_number})`;
+                
+                const desc = createEl('div', 'texto-secundario', details);
+                desc.style.fontSize = '13px';
+                li.appendChild(desc);
+                ul.appendChild(li);
+            });
+            card.appendChild(ul);
         }
         
-        else if (aba === 'gpu') {
-            if (!d.gpus || d.gpus.length === 0) {
-                container.innerHTML = '<p class="texto-secundario">Nenhuma GPU detectada.</p>';
-                return;
+        container.appendChild(card);
+    }
+
+    function renderizarGPUs(hw, container) {
+        if (!hw.gpus || hw.gpus.length === 0) {
+            const card = createEl('div', 'card');
+            card.style.marginBottom = '16px';
+            card.appendChild(createEl('div', 'hw-secao-titulo', 'Adaptadores de Vídeo (GPU)'));
+            card.appendChild(createEl('div', 'badge', 'Não detectado'));
+            container.appendChild(card);
+            return;
+        }
+
+        hw.gpus.forEach((gpu, index) => {
+            const card = createEl('div', 'card');
+            card.style.marginBottom = '16px';
+            
+            const titleRow = createEl('div');
+            titleRow.style.display = 'flex';
+            titleRow.style.justifyContent = 'space-between';
+            titleRow.style.alignItems = 'center';
+            titleRow.style.marginBottom = '12px';
+            
+            const title = createEl('div', 'hw-secao-titulo', gpu.nome || `GPU ${index+1}`);
+            title.style.margin = '0';
+            titleRow.appendChild(title);
+            
+            let tipoColor = "#555";
+            if (gpu.tipo === 'dedicada') tipoColor = "var(--cor-primaria)";
+            if (gpu.tipo === 'integrada') tipoColor = "var(--cor-painel-borda)";
+            
+            const tipoBadge = createEl('span', 'badge', gpu.tipo.toUpperCase());
+            tipoBadge.style.background = tipoColor;
+            tipoBadge.style.padding = '4px 8px';
+            tipoBadge.style.borderRadius = '4px';
+            tipoBadge.style.fontSize = '11px';
+            titleRow.appendChild(tipoBadge);
+            
+            card.appendChild(titleRow);
+            
+            let vramText = "N/A";
+            if (gpu.vram_total_mb) {
+                if (gpu.vram_status === "exata") {
+                    vramText = `${gpu.vram_total_mb} MB (${(gpu.vram_total_mb/1024).toFixed(1)} GB)`;
+                } else if (gpu.vram_status === "estimada") {
+                    vramText = `Estimada / Acima de 4GB`;
+                } else {
+                    vramText = "Indisponível";
+                }
             }
-            container.innerHTML = d.gpus.map(gpu => `
-                <div class="card" style="margin-bottom:16px">
-                    <div class="hw-secao-titulo">${gpu.nome}</div>
-                    <table class="tabela-dados">
-                        <tr><td>Fabricante</td><td>${gpu.fabricante || 'N/A'}</td></tr>
-                        <tr><td>VRAM total</td><td>${gpu.vram_total_mb ? (gpu.vram_total_mb/1024).toFixed(1) + ' GB (' + gpu.vram_total_mb + ' MB)' : 'N/A'}</td></tr>
-                        <tr><td>VRAM em uso</td><td>${gpu.vram_usada_mb ? gpu.vram_usada_mb + ' MB' : 'N/A'}</td></tr>
-                        <tr><td>Uso atual</td><td>${gpu.uso_percentual != null ? gpu.uso_percentual + '%' : 'N/A'}</td></tr>
-                        <tr><td>Temperatura</td><td>${gpu.temperatura_c != null ? gpu.temperatura_c + '°C' : 'N/A'}</td></tr>
-                        <tr><td>Driver</td><td>${gpu.driver_versao || 'N/A'}</td></tr>
-                        <tr><td>Fonte dos dados</td><td>${gpu.fonte_dados || 'N/A'}</td></tr>
-                    </table>
-                </div>`).join('');
-        }
+            
+            card.appendChild(createList({
+                "Fabricante": safeText(gpu.fabricante),
+                "VRAM": vramText,
+                "Driver Versão": safeText(gpu.driver_versao),
+                "Driver Data": safeText(gpu.driver_data),
+            }));
+            
+            container.appendChild(card);
+        });
+    }
+
+    function renderizarArmazenamento(hw, container) {
+        // Discos Físicos
+        const dCard = createEl('div', 'card');
+        dCard.style.marginBottom = '16px';
+        dCard.appendChild(createEl('div', 'hw-secao-titulo', 'Discos Físicos'));
         
-        else if (aba === 'memoria') {
-            container.innerHTML = `
-                <div class="card" style="margin-bottom:16px">
-                    <div class="hw-secao-titulo">Memória RAM</div>
-                    <table class="tabela-dados">
-                        <tr><td>Total instalada</td><td>${d.ram.total_gb} GB</td></tr>
-                        <tr><td>Em uso</td><td>${d.ram.usada_gb} GB (${d.ram.percentual}%)</td></tr>
-                        <tr><td>Disponível</td><td>${d.ram.disponivel_gb} GB</td></tr>
-                    </table>
-                    <div class="barra-progresso" style="margin-top:16px">
-                        <div class="preenchimento ${d.ram.percentual > 90 ? 'erro' : d.ram.percentual > 70 ? 'alerta' : ''}" 
-                            style="width:${d.ram.percentual}%"></div>
-                    </div>
-                    <div class="texto-secundario" style="margin-top:6px">${d.ram.percentual}% em uso</div>
-                </div>`;
+        if (!hw.armazenamento.discos_fisicos || hw.armazenamento.discos_fisicos.length === 0) {
+            dCard.appendChild(createEl('p', 'texto-secundario', 'Nenhum disco detectado.'));
+        } else {
+            hw.armazenamento.discos_fisicos.forEach(d => {
+                const inner = createEl('div');
+                inner.style.background = 'rgba(255,255,255,0.02)';
+                inner.style.padding = '12px';
+                inner.style.borderRadius = '6px';
+                inner.style.marginBottom = '8px';
+                
+                const title = createEl('div', '', safeText(d.modelo));
+                title.style.fontWeight = 'bold';
+                title.style.marginBottom = '6px';
+                inner.appendChild(title);
+                
+                inner.appendChild(createList({
+                    "Tipo": safeText(d.tipo_midia),
+                    "Barramento": safeText(d.barramento),
+                    "Capacidade": d.capacidade_gb ? d.capacidade_gb + " GB" : "N/A",
+                    "Saúde": safeText(d.saude)
+                }));
+                dCard.appendChild(inner);
+            });
         }
+        container.appendChild(dCard);
+
+        // Volumes
+        const vCard = createEl('div', 'card');
+        vCard.style.marginBottom = '16px';
+        vCard.appendChild(createEl('div', 'hw-secao-titulo', 'Volumes'));
         
-        else if (aba === 'sistema') {
-            container.innerHTML = `
-                <div class="card" style="margin-bottom:16px">
-                    <div class="hw-secao-titulo">Sistema Operacional</div>
-                    <table class="tabela-dados">
-                        <tr><td>Sistema</td><td>${d.sistema.os}</td></tr>
-                        <tr><td>Versão</td><td>${d.sistema.versao}</td></tr>
-                        <tr><td>Arquitetura</td><td>${d.sistema.arquitetura}</td></tr>
-                        <tr><td>Tempo ligado</td><td>${d.sistema.uptime}</td></tr>
-                    </table>
-                </div>`;
+        if (!hw.armazenamento.volumes || hw.armazenamento.volumes.length === 0) {
+            vCard.appendChild(createEl('p', 'texto-secundario', 'Nenhum volume detectado.'));
+        } else {
+            hw.armazenamento.volumes.forEach(v => {
+                const inner = createEl('div');
+                inner.style.background = 'rgba(255,255,255,0.02)';
+                inner.style.padding = '12px';
+                inner.style.borderRadius = '6px';
+                inner.style.marginBottom = '8px';
+                
+                const header = createEl('div');
+                header.style.display = 'flex';
+                header.style.justifyContent = 'space-between';
+                header.style.fontWeight = 'bold';
+                header.style.marginBottom = '8px';
+                
+                const nm = v.rotulo ? `${v.unidade} (${v.rotulo})` : v.unidade;
+                header.appendChild(createEl('span', '', nm));
+                
+                if (v.tipo) {
+                    const badge = createEl('span', 'badge', v.tipo.toUpperCase());
+                    badge.style.background = '#444';
+                    badge.style.padding = '3px 6px';
+                    badge.style.borderRadius = '4px';
+                    badge.style.fontSize = '10px';
+                    header.appendChild(badge);
+                }
+                inner.appendChild(header);
+                
+                inner.appendChild(createList({
+                    "Sistema de Arquivos": safeText(v.sistema_arquivos),
+                    "Capacidade": v.total_gb ? v.total_gb + " GB" : "N/A",
+                    "Livre": v.livre_gb ? v.livre_gb + " GB" : "N/A"
+                }));
+                
+                if (v.percentual_uso != null) {
+                    const barContainer = createEl('div', 'barra-progresso');
+                    barContainer.style.marginTop = '12px';
+                    
+                    const fill = createEl('div', 'preenchimento');
+                    if (v.percentual_uso > 90) fill.classList.add('erro');
+                    else if (v.percentual_uso > 75) fill.classList.add('alerta');
+                    
+                    fill.style.width = v.percentual_uso + '%';
+                    barContainer.appendChild(fill);
+                    inner.appendChild(barContainer);
+                    
+                    const pctText = createEl('div', 'texto-secundario', v.percentual_uso + '% ocupado');
+                    pctText.style.marginTop = '6px';
+                    pctText.style.fontSize = '12px';
+                    inner.appendChild(pctText);
+                }
+                
+                vCard.appendChild(inner);
+            });
         }
-        
-        else if (aba === 'discos') {
-            container.innerHTML = d.discos.map(disco => `
-                <div class="card" style="margin-bottom:16px">
-                    <div class="hw-secao-titulo">${disco.unidade}</div>
-                    <table class="tabela-dados">
-                        <tr><td>Total</td><td>${disco.total_gb} GB</td></tr>
-                        <tr><td>Usado</td><td>${disco.usado_gb} GB</td></tr>
-                        <tr><td>Livre</td><td>${disco.livre_gb} GB</td></tr>
-                        <tr><td>Sistema de arquivos</td><td>${disco.fstype}</td></tr>
-                    </table>
-                    <div class="barra-progresso" style="margin-top:12px">
-                        <div class="preenchimento ${disco.percentual > 90 ? 'erro' : disco.percentual > 70 ? 'alerta' : ''}"
-                            style="width:${disco.percentual}%"></div>
-                    </div>
-                    <div class="texto-secundario" style="margin-top:6px">${disco.percentual}% ocupado</div>
-                </div>`).join('');
-        }
-    };
+        container.appendChild(vCard);
+    }
 
     Phoenix.pages = Phoenix.pages || {};
     Phoenix.pages.hardware = page;
-
-    // Globais para compatibilidade temporária de manipulação de HTML inline (onclicks)
-    window.renderizarAbaHardware = function (aba) {
-        document.querySelectorAll('.hw-aba').forEach(a => a.classList.remove('ativa'));
-        var el = document.querySelector('.hw-aba[data-aba="' + aba + '"]');
-        if (el) el.classList.add('ativa');
-        page.renderTab(aba);
-    };
 
 })(window.Phoenix);

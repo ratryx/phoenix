@@ -187,15 +187,12 @@
             <h1>Hardware</h1>
             <p>Informações detalhadas do sistema</p>
           </div>
+          <button class="botao primario" id="btn-atualizar-hardware">Atualizar inventário</button>
         </div>
         
-        <!-- Abas internas -->
-        <div class="hw-abas" id="hw-abas">
-          <button class="hw-aba ativa" data-aba="cpu">CPU</button>
-          <button class="hw-aba" data-aba="gpu">GPU</button>
-          <button class="hw-aba" data-aba="memoria">Memória</button>
-          <button class="hw-aba" data-aba="sistema">Sistema</button>
-          <button class="hw-aba" data-aba="discos">Discos</button>
+        <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+           <span id="hw-status-badge" class="badge" style="padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;">--</span>
+           <span id="hw-data-coleta" class="texto-secundario" style="font-size: 13px;"></span>
         </div>
         
         <div id="hw-conteudo"></div>
