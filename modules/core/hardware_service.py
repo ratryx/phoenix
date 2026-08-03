@@ -17,7 +17,8 @@ class HardwareService:
         hardware_mod=None,
         hardware_metrics_mod=None
     ):
-        self._inventario = hw_info or {}
+        import copy
+        self._inventario = copy.deepcopy(hw_info) if hw_info else {}
         if self._inventario:
             self._inject_dynamic_capabilities(self._inventario)
         self._boot_time = None

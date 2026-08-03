@@ -288,3 +288,47 @@ def test_api_hardware_service_integration():
     res_hw = api.obter_metricas_completas()
     assert res_hw["ok"] is True
     assert res_hw["cpu"]["uso_percentual"] == 15.0
+
+def test_hardware_service_dynamic_capabilities():
+    import sys
+    from unittest.mock import patch, MagicMock
+    
+    inventario = {
+        "cpu": {"modelo": "Fake CPU"},
+        "memoria": {"total_instalada_gb": 16}
+    }
+    
+    mock_gputil = MagicMock()
+    mock_gputil.getGPUs.return_value = ["GPU1"]
+    
+    mock_gputil_empty = MagicMock()
+    mock_gputil_empty.getGPUs.return_value = []
+    
+    mock_gputil_fail = MagicMock()
+    mock_gputil_fail.getGPUs.side_effect = Exception("Fail")
+    
+    mock_ps = MockPsutil()
+    mock_ps.cpu_percent = MagicMock(return_value=[15.0])
+    
+    # 1. GPUs existem
+    with patch.dict(sys.modules, {"GPUtil": mock_gputil}):
+        svc1 = HardwareService(hw_info=inventario.copy(), psutil_module=mock_ps)
+        assert svc1.obter_hardware()["capacidades"]["metricas_gpu_disponiveis"] is True
+        
+    # 2. Sem GPUs
+    with patch.dict(sys.modules, {"GPUtil": mock_gputil_empty}):
+        svc2 = HardwareService(hw_info=inventario.copy(), psutil_module=mock_ps)
+        assert svc2.obter_hardware()["capacidades"]["metricas_gpu_disponiveis"] is False
+        
+    # 3. Falha no GPUtil
+    with patch.dict(sys.modules, {"GPUtil": mock_gputil_fail}):
+        svc3 = HardwareService(hw_info=inventario.copy(), psutil_module=mock_ps)
+        assert svc3.obter_hardware()["capacidades"]["metricas_gpu_disponiveis"] is False
+        
+    # 4. Confirme que o dicionario original injetado continua sem capacidades dinâmicas
+    # O HardwareService deve operar em uma cópia.
+    original_injetado = inventario.copy()
+    with patch.dict(sys.modules, {"GPUtil": mock_gputil}):
+        svc4 = HardwareService(hw_info=original_injetado, psutil_module=mock_ps)
+        assert svc4.obter_hardware()["capacidades"]["metricas_gpu_disponiveis"] is True
+        assert "capacidades" not in original_injetado
