@@ -62,7 +62,7 @@ def exibir_tela_escolha_modo(hw_info: dict, recomendacao: str):
 
     cpu = hw_info.get("cpu", {})
     ram = hw_info.get("memoria", hw_info.get("ram", {}))
-    tem_gpu = len(hw_info.get("gpus", [])) > 0
+    tem_gpu = any(g.get("tipo") == "dedicada" for g in hw_info.get("gpus", []))
 
     threads = cpu.get('threads_logicas', cpu.get('nucleos_logicos', 'N/A'))
     total_ram = ram.get('total_instalada_gb', ram.get('total_gb', 'N/A'))

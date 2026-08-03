@@ -264,10 +264,18 @@ def coletar_inventario() -> dict:
         
         tipo = "desconhecida"
         nome_l = nome.lower()
-        if "intel" in nome_l or "uhd" in nome_l or "vega" in nome_l or "radeon(tm) graphics" in nome_l or "radeon graphics" in nome_l:
-            tipo = "integrada"
-        elif "nvidia" in nome_l or "rtx" in nome_l or "gtx" in nome_l or "geforce" in nome_l or "rx " in nome_l or "arc " in nome_l:
+        if "arc " in nome_l or "intel arc" in nome_l:
             tipo = "dedicada"
+        elif "uhd" in nome_l or "iris" in nome_l or "hd graphics" in nome_l:
+            tipo = "integrada"
+        elif "intel" in nome_l:
+            tipo = "integrada"
+        elif "nvidia" in nome_l or "rtx" in nome_l or "gtx" in nome_l or "geforce" in nome_l:
+            tipo = "dedicada"
+        elif "rx " in nome_l or "radeon rx" in nome_l:
+            tipo = "dedicada"
+        elif "vega" in nome_l or "radeon(tm) graphics" in nome_l or "radeon graphics" in nome_l or "amd radeon" in nome_l or "radeon" in nome_l:
+            tipo = "integrada"
             
         vram_b = _int_or_none(g.get("vram_bytes"))
         # VRAM from WMI is unreliable above 4GB because of 32-bit uint truncation.

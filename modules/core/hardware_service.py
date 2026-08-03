@@ -133,7 +133,11 @@ class HardwareService:
                 promise["result"] = {"ok": True, "hardware": hw}
             except Exception as e:
                 logger.exception("Falha no rescan_hardware")
-                promise["result"] = {"ok": False, "erro": str(e)}
+                promise["result"] = {
+                    "ok": False,
+                    "codigo": "HARDWARE_RESCAN_FAILED",
+                    "erro": "Não foi possível atualizar o inventário de hardware."
+                }
             finally:
                 promise["event"].set()
                 with self._rescan_lock:

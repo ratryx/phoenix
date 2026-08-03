@@ -34,7 +34,6 @@
                 hw = await Phoenix.bridge.call("obter_inventario_atual");
             }
 
-            console.log("NO INICIO hw is: ", JSON.stringify(hw));
             if (hw && (hw.status === "completo" || hw.status === "parcial" || hw.status === "cache")) {
                 Phoenix.state.hardware = hw;
 
@@ -60,7 +59,6 @@
                 atualizarCardsHardware(null);
             }
         } catch (e) {
-            console.log("ERRO NO INICIO:", e);
             atualizarRodapeMensagem("Erro ao detectar hardware");
         }
     };
@@ -236,19 +234,26 @@
 
         container.innerHTML = '';
 
-        if (gpu.uso != null) {
+        let uso = gpu.uso_percentual;
+        if (uso !== null && uso !== undefined && !isNaN(uso)) {
+            uso = Math.max(0, Math.min(100, Number(uso)));
             const barContainer = createEl('div', 'barra-progresso');
-            const fill = createEl('div', 'preenchimento ' + Phoenix.ui.corPorPercentual(gpu.uso));
-            fill.style.width = gpu.uso + '%';
+            const fill = createEl('div', 'preenchimento ' + Phoenix.ui.corPorPercentual(uso));
+            fill.style.width = uso + '%';
             barContainer.appendChild(fill);
             container.appendChild(barContainer);
 
-            let txt = gpu.uso + '%';
-            if (gpu.temp != null) {
-                txt += ' · ' + gpu.temp + '°C';
+            let txt = uso + '%';
+            if (gpu.temperatura_c !== null && gpu.temperatura_c !== undefined) {
+                txt += ' · ' + gpu.temperatura_c + '°C';
             }
 
             const sub = createEl('div', 'texto-secundario', txt);
+            sub.style.fontSize = '11px';
+            sub.style.marginTop = '4px';
+            container.appendChild(sub);
+        } else {
+            const sub = createEl('div', 'texto-secundario', 'N/A');
             sub.style.fontSize = '11px';
             sub.style.marginTop = '4px';
             container.appendChild(sub);

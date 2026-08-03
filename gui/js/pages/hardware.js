@@ -34,9 +34,12 @@
                     const res = await Phoenix.bridge.call("forcar_rescan_hardware");
                     if (res && res.job_id) {
                         Phoenix.ui.feedback.mostrarProcessando("Atualizando inventário", "Por favor aguarde...");
-                        await Phoenix.jobs.awaitJob(res.job_id, (pct, msg) => {
+                        const jobResult = await Phoenix.jobs.awaitJob(res.job_id, (pct, msg) => {
                             Phoenix.ui.feedback.mostrarProcessando("Atualizando inventário", msg + " (" + pct + "%)");
                         });
+                        if (!jobResult || !jobResult.ok) {
+                            Phoenix.ui.feedback.mostrarErro("Falha ao atualizar", jobResult && jobResult.erro ? jobResult.erro : "Não foi possível concluir a varredura.");
+                        }
                     }
                 } catch(e) {
                     console.error("Erro no rescan", e);
@@ -272,9 +275,11 @@
             if (gpu.vram_status === "exata" && gpu.vram_total_mb != null) {
                 vramText = `${gpu.vram_total_mb} MB (${(gpu.vram_total_mb/1024).toFixed(1)} GB)`;
             } else if (gpu.vram_status === "estimada") {
-                vramText = `Estimada / Acima de 4GB`;
+                vramText = `Capacidade não confirmada`;
             } else if (gpu.vram_status === "compartilhada") {
-                vramText = `Memória Compartilhada (Integrada)`;
+                vramText = `Memória compartilhada`;
+            } else if (gpu.vram_status === "indisponivel") {
+                vramText = `Indisponível`;
             } else if (gpu.vram_total_mb) {
                 vramText = `${gpu.vram_total_mb} MB (${(gpu.vram_total_mb/1024).toFixed(1)} GB)`;
             } else {

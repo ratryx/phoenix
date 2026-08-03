@@ -18,8 +18,17 @@
             gerarParticulas();
         } else if (nivel === "medio") {
             document.body.classList.add("qualidade-media");
+            limparParticulas();
         } else {
             document.body.classList.add("qualidade-baixa");
+            limparParticulas();
+        }
+    }
+
+    function limparParticulas() {
+        var camada = document.getElementById("camada-particulas");
+        if (camada) {
+            camada.innerHTML = "";
         }
     }
 
@@ -52,7 +61,9 @@
         }
     };
 
-    visualEffects.refresh = visualEffects.initialize;
+    visualEffects.refresh = async function() {
+        await visualEffects.initialize();
+    };
 
     Phoenix.ui = Phoenix.ui || {};
     Phoenix.ui.visualEffects = visualEffects;

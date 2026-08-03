@@ -35,10 +35,15 @@ def classificar_capacidade_hardware(hardware: dict) -> str:
         ram_gb = hardware.get("memoria", {}).get("total_instalada_gb") or 0
         tem_gpu_dedicada = False
         for g in hardware.get("gpus", []):
-            # Só considera dedicada se o status de confiabilidade permitir e for "dedicada"
-            if g.get("tipo") == "dedicada" and g.get("vram_status") in ("exata", "estimada") and g.get("vram_total_mb", 0) >= 1024:
-                tem_gpu_dedicada = True
-                break
+            if g.get("tipo") == "dedicada":
+                status = g.get("vram_status")
+                vram = g.get("vram_total_mb")
+                if status == "exata" and vram is not None and vram >= 1024:
+                    tem_gpu_dedicada = True
+                    break
+                elif status == "estimada":
+                    tem_gpu_dedicada = True
+                    break
 
     if nucleos >= 8:
         pontos += 2

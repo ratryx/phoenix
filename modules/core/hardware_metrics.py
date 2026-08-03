@@ -60,16 +60,36 @@ def reset_io_counters():
 
 def coletar_metricas_completas() -> dict:
     """Coleta uso de CPU, freqüência, memória, disco (stateful) e GPUs."""
-    cpu_total = psutil.cpu_percent(interval=None) # Assume warmup elsewhere or use 0 on first call
-    cpu_por_nucleo = psutil.cpu_percent(interval=None, percpu=True)
+    try:
+        cpu_total = psutil.cpu_percent(interval=None)
+        cpu_por_nucleo = psutil.cpu_percent(interval=None, percpu=True)
+    except Exception as e:
+        logger.warning(f"Erro ao obter métricas de CPU: {e}")
+        cpu_total = None
+        cpu_por_nucleo = []
 
     try:
         freq = psutil.cpu_freq()
         freq_atual = round(freq.current, 0) if freq else None
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Erro ao obter frequencia da CPU: {e}")
         freq_atual = None
 
-    mem = psutil.virtual_memory()
+    try:
+        mem = psutil.virtual_memory()
+        memoria_dict = {
+            "percentual_uso": round(mem.percent, 1),
+            "usada_gb": round(mem.used / (1024**3), 1),
+            "disponivel_gb": round(mem.available / (1024**3), 1)
+        }
+    except Exception as e:
+        logger.warning(f"Erro ao obter métricas de memória: {e}")
+        memoria_dict = {
+            "percentual_uso": None,
+            "usada_gb": None,
+            "disponivel_gb": None
+        }
+
     read_mb, write_mb = _get_disk_io_stateful()
 
     gpus_metrics = []
@@ -78,7 +98,7 @@ def coletar_metricas_completas() -> dict:
         gpus = GPUtil.getGPUs()
         for g in gpus:
             gpus_metrics.append({
-                "id": str(g.id), # Try to map with inventory if possible, but just rely on index/name for now
+                "id": str(g.id),
                 "nome": g.name,
                 "uso_percentual": int(g.load * 100),
                 "temperatura_c": int(g.temperature),
@@ -90,21 +110,24 @@ def coletar_metricas_completas() -> dict:
     except Exception as ex:
         logger.warning(f"Erro ao obter dados dinâmicos da GPU: {ex}")
 
+    cpu_dict = {}
+    if cpu_total is not None:
+        cpu_dict["uso_percentual"] = cpu_total
+    if cpu_por_nucleo:
+        cpu_dict["uso_por_nucleo"] = cpu_por_nucleo
+    if freq_atual is not None:
+        cpu_dict["frequencia_atual_mhz"] = freq_atual
+
+    disco_dict = {}
+    if read_mb is not None:
+        disco_dict["leitura_mb_s"] = read_mb
+    if write_mb is not None:
+        disco_dict["escrita_mb_s"] = write_mb
+
     return {
         "ok": True,
-        "cpu": {
-            "uso_percentual": cpu_total,
-            "uso_por_nucleo": cpu_por_nucleo,
-            "frequencia_atual_mhz": freq_atual
-        },
-        "memoria": {
-            "percentual_uso": round(mem.percent, 1),
-            "usada_gb": round(mem.used / (1024**3), 1),
-            "disponivel_gb": round(mem.available / (1024**3), 1)
-        },
-        "disco": {
-            "leitura_mb_s": read_mb,
-            "escrita_mb_s": write_mb
-        },
+        "cpu": cpu_dict,
+        "memoria": memoria_dict,
+        "disco": disco_dict,
         "gpus": gpus_metrics
     }

@@ -123,9 +123,11 @@ def fluxo_hardware_detalhado(hw_info: dict):
             if v_status == "exata" and gpu.get("vram_total_mb") is not None:
                 tabela_gpu.add_row("VRAM total", f"{gpu['vram_total_mb']/1024:.1f} GB")
             elif v_status == "estimada":
-                tabela_gpu.add_row("VRAM total", "Estimada / Incompleta")
+                tabela_gpu.add_row("VRAM total", "Capacidade não confirmada")
             elif v_status == "compartilhada":
-                tabela_gpu.add_row("VRAM total", "Memória Compartilhada (Integrada)")
+                tabela_gpu.add_row("VRAM total", "Memória compartilhada")
+            elif v_status == "indisponivel":
+                tabela_gpu.add_row("VRAM total", "Indisponível")
             elif gpu.get("vram_total_mb"):
                 tabela_gpu.add_row("VRAM total", f"{gpu['vram_total_mb']/1024:.1f} GB")
 

@@ -9,6 +9,31 @@ logger = logging.getLogger(__name__)
 CACHE_FILE = CACHE_DIR / "hardware.json"
 _cache_lock = threading.Lock()
 
+def _has_dynamic_metrics(obj, path=""):
+    BLOCKED = {
+        "uso_percentual", "temperatura_c", "frequencia_atual_mhz", "uso_por_nucleo",
+        "vram_usada_mb", "leitura_mb_s", "escrita_mb_s", "uptime", "ram_percent", "cpu_percent"
+    }
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k in BLOCKED:
+                return True
+            if k == "percentual_uso" and not path.endswith("armazenamento.volumes"):
+                return True
+            if _has_dynamic_metrics(v, f"{path}.{k}" if path else k):
+                return True
+    elif isinstance(obj, list):
+        for item in obj:
+            if _has_dynamic_metrics(item, path):
+                return True
+    return False
+
+def _strip_gpu_capacities(inventario):
+    # Não persiste no cache
+    if "capacidades" in inventario:
+        for k in ["metricas_gpu_disponiveis", "temperatura_gpu_disponivel", "vram_gpu_disponivel"]:
+            inventario["capacidades"].pop(k, None)
+
 def carregar_cache_estatico() -> dict:
     """Carrega o inventário do cache de forma segura. Ignora caches de versão antiga ou com métricas."""
     with _cache_lock:
@@ -19,27 +44,12 @@ def carregar_cache_estatico() -> dict:
             with open(CACHE_FILE, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 
-            # Verifica se é a versão 2 do schema
             if data.get("schema_version") != 2:
                 return None
                 
-            # Validação anti-métricas: se encontrar campos dinâmicos, o cache é inválido
-            # No v2, o cache é o próprio contrato.
-            if "dados" in data: 
-                # Este é o formato v1, rejeita.
+            if _has_dynamic_metrics(data):
+                logger.warning("Cache rejeitado: contém métricas dinâmicas recursivas.")
                 return None
-                
-            # Verifica se tem métricas persistidas acidentalmente na CPU ou GPU
-            cpu = data.get("cpu", {})
-            if "uso_percentual" in cpu or "frequencia_atual_mhz" in cpu:
-                logger.warning("Cache rejeitado: contém métricas dinâmicas de CPU.")
-                return None
-                
-            gpus = data.get("gpus", [])
-            for g in gpus:
-                if "uso_percentual" in g or "temperatura_c" in g or "vram_usada_mb" in g:
-                    logger.warning("Cache rejeitado: contém métricas dinâmicas de GPU.")
-                    return None
                     
             return data
         except Exception as e:
@@ -51,13 +61,12 @@ def salvar_cache_estatico(inventario: dict) -> bool:
     if inventario.get("schema_version") != 2:
         return False
         
-    cpu = inventario.get("cpu", {})
-    if "uso_percentual" in cpu or "frequencia_atual_mhz" in cpu:
-        raise ValueError("Tentativa de salvar métricas dinâmicas no cache (CPU)")
-        
-    for g in inventario.get("gpus", []):
-        if "uso_percentual" in g or "temperatura_c" in g or "vram_usada_mb" in g:
-             raise ValueError("Tentativa de salvar métricas dinâmicas no cache (GPU)")
+    if _has_dynamic_metrics(inventario):
+        raise ValueError("Tentativa de salvar métricas dinâmicas no cache")
+
+    import copy
+    inv_to_save = copy.deepcopy(inventario)
+    _strip_gpu_capacities(inv_to_save)
 
     with _cache_lock:
         try:
@@ -65,7 +74,7 @@ def salvar_cache_estatico(inventario: dict) -> bool:
             temp_file = str(CACHE_FILE) + ".tmp"
             
             with open(temp_file, "w", encoding="utf-8") as f:
-                json.dump(inventario, f, ensure_ascii=False, indent=2)
+                json.dump(inv_to_save, f, ensure_ascii=False, indent=2)
                 f.flush()
                 os.fsync(f.fileno())
                 
