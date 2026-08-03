@@ -29,19 +29,12 @@ def _caminho_recurso(caminho_relativo: str) -> str:
 
 def iniciar(hw_info: dict = None):
     """Ponto de entrada do modo GUI, chamado pelo launcher.py."""
-    if hw_info is None:
-        hw_info = {
-            "sistema_operacional": "",
-            "cpu": {"modelo": "", "nucleos_fisicos": 0, "nucleos_logicos": 0, 
-                    "frequencia_atual_mhz": None, "frequencia_max_mhz": None, 
-                    "uso_percentual": 0},
-            "ram": {"total_gb": 0, "disponivel_gb": 0, "percentual_uso": 0},
-            "gpus": []
-        }
 
     from modules.core.hardware_service import HardwareService
     from modules.gui.window_controller import WindowController
+    from modules.hardware import obter_hardware_com_cache
     
+    # 1. Preparar Bridge e serviços base
     hardware_service = HardwareService(hw_info=hw_info)
     hardware_service.preparar_metricas()
 

@@ -72,51 +72,78 @@ def iniciar_atendimento():
 
 def fluxo_hardware_detalhado(hw_info: dict):
     """Exibe informações detalhadas de hardware, incluindo GPU."""
-    cpu = hw_info["cpu"]
-    ram = hw_info["ram"]
-    gpus = hw_info["gpus"]
+    cpu = hw_info.get("cpu", {})
+    ram = hw_info.get("memoria", hw_info.get("ram", {}))
+    gpus = hw_info.get("gpus", [])
 
     tabela_cpu = Table(title="Processador", box=box.ROUNDED, border_style=banner.COR_PRIMARIA)
     tabela_cpu.add_column("Item", style="bold white")
     tabela_cpu.add_column("Valor")
-    tabela_cpu.add_row("Modelo", cpu["modelo"])
-    tabela_cpu.add_row("Núcleos físicos / lógicos", f"{cpu['nucleos_fisicos']} / {cpu['nucleos_logicos']}")
+    tabela_cpu.add_row("Modelo", cpu.get("modelo", "Desconhecido"))
+    threads = cpu.get('threads_logicas', cpu.get('nucleos_logicos', 'N/A'))
+    nucleos = cpu.get('nucleos_fisicos', 'N/A')
+    tabela_cpu.add_row("Núcleos físicos / lógicos", f"{nucleos} / {threads}")
+
+    # Métricas dinâmicas da CPU (se existirem via serviço real-time)
     if cpu.get("frequencia_atual_mhz"):
         tabela_cpu.add_row("Frequência atual", f"{cpu['frequencia_atual_mhz']:.0f} MHz")
-    tabela_cpu.add_row("Uso atual", f"{cpu['uso_percentual']}%")
+    elif cpu.get("frequencia_max_mhz"):
+        tabela_cpu.add_row("Frequência máx", f"{cpu['frequencia_max_mhz']:.0f} MHz")
+
+    if cpu.get("uso_percentual") is not None:
+        tabela_cpu.add_row("Uso atual", f"{cpu['uso_percentual']}%")
     console.print(tabela_cpu)
 
     tabela_ram = Table(title="Memória RAM", box=box.ROUNDED, border_style=banner.COR_PRIMARIA)
     tabela_ram.add_column("Item", style="bold white")
     tabela_ram.add_column("Valor")
-    tabela_ram.add_row("Total", f"{ram['total_gb']} GB")
-    tabela_ram.add_row("Disponível", f"{ram['disponivel_gb']} GB")
-    tabela_ram.add_row("Uso atual", f"{ram['percentual_uso']}%")
+    total_ram = ram.get("total_instalada_gb", ram.get("total_gb", 0))
+    tabela_ram.add_row("Total", f"{total_ram} GB")
+
+    # Dinâmico
+    disp_ram = ram.get("disponivel_gb")
+    if disp_ram is not None:
+        tabela_ram.add_row("Disponível", f"{disp_ram} GB")
+    pct_uso = ram.get("percentual_uso")
+    if pct_uso is not None:
+        tabela_ram.add_row("Uso atual", f"{pct_uso}%")
     console.print(tabela_ram)
 
     if not gpus:
         console.print(Panel("Nenhuma GPU detectada.", border_style=banner.COR_SECUNDARIA))
     else:
         for gpu in gpus:
-            tabela_gpu = Table(title=f"GPU — {gpu['nome']}", box=box.ROUNDED, border_style=banner.COR_PRIMARIA)
+            tabela_gpu = Table(title=f"GPU — {gpu.get('nome', 'Desconhecida')}", box=box.ROUNDED, border_style=banner.COR_PRIMARIA)
             tabela_gpu.add_column("Item", style="bold white")
             tabela_gpu.add_column("Valor")
             tabela_gpu.add_row("Fabricante", gpu.get("fabricante", "Desconhecido"))
-            if gpu.get("vram_total_mb"):
-                vram_gb = gpu["vram_total_mb"] / 1024
-                tabela_gpu.add_row("VRAM total", f"{vram_gb:.1f} GB")
+
+            # VRAM Fix
+            v_status = gpu.get("vram_status")
+            if v_status == "exata" and gpu.get("vram_total_mb") is not None:
+                tabela_gpu.add_row("VRAM total", f"{gpu['vram_total_mb']/1024:.1f} GB")
+            elif v_status == "estimada":
+                tabela_gpu.add_row("VRAM total", "Capacidade não confirmada")
+            elif v_status == "compartilhada":
+                tabela_gpu.add_row("VRAM total", "Memória compartilhada")
+            elif v_status == "indisponivel":
+                tabela_gpu.add_row("VRAM total", "Indisponível")
+            elif gpu.get("vram_total_mb"):
+                tabela_gpu.add_row("VRAM total", f"{gpu['vram_total_mb']/1024:.1f} GB")
+
+            # Dinâmicas
             if gpu.get("vram_usada_mb") is not None:
-                vram_usada_gb = gpu["vram_usada_mb"] / 1024
-                tabela_gpu.add_row("VRAM em uso", f"{vram_usada_gb:.1f} GB")
+                tabela_gpu.add_row("VRAM em uso", f"{gpu['vram_usada_mb']/1024:.1f} GB")
             if gpu.get("uso_percentual") is not None:
                 tabela_gpu.add_row("Uso atual", f"{gpu['uso_percentual']}%")
             if gpu.get("temperatura_c") is not None:
                 tabela_gpu.add_row("Temperatura", f"{gpu['temperatura_c']}°C")
+
             if gpu.get("driver_versao"):
                 tabela_gpu.add_row("Versão do driver", gpu["driver_versao"])
-            tabela_gpu.add_row("Origem dos dados", gpu.get("fonte_dados", "—"))
+            tabela_gpu.add_row("Origem dos dados", gpu.get("fonte_dados", "WMI/CIM"))
             console.print(tabela_gpu)
-            
+
     console.print()
     if Confirm.ask("Deseja forçar o rescan do hardware e atualizar o cache agora?", default=False):
         hardware_mod.forcar_rescan_hardware()
@@ -241,19 +268,19 @@ def fluxo_status_otimizacoes():
     console.print()
     banner.exibir_secao("Diagnosticando status das otimizações...")
     status = otimizacao.verificar_status_otimizacoes()
-    
+
     tabela = Table(box=box.ROUNDED, border_style=banner.COR_PRIMARIA)
     tabela.add_column("Status", justify="center")
     tabela.add_column("Otimização", style="bold white")
     tabela.add_column("Detalhe", style="dim")
     tabela.add_column("ID", style="dim")
-    
+
     for item in status["itens"]:
         icone = "[green]✅ Ativo[/green]" if item["ativo"] else "[red]❌ Inativo[/red]"
         tabela.add_row(icone, item["descricao"], item["detalhe"], item["id"])
-        
+
     console.print(tabela)
-    
+
     if status["total_inativos"] > 0:
         console.print(f"\n[yellow]Foram encontradas {status['total_inativos']} otimizações inativas no momento.[/yellow]")
         if Confirm.ask("Deseja reaplicar todas as otimizações inativas agora?", default=True):

@@ -60,13 +60,16 @@ def exibir_tela_escolha_modo(hw_info: dict, recomendacao: str):
     console.clear()
     banner.exibir_banner(modo="Seleção inicial")
 
-    cpu = hw_info["cpu"]
-    ram = hw_info["ram"]
-    tem_gpu = len(hw_info["gpus"]) > 0
+    cpu = hw_info.get("cpu", {})
+    ram = hw_info.get("memoria", hw_info.get("ram", {}))
+    tem_gpu = any(g.get("tipo") == "dedicada" for g in hw_info.get("gpus", []))
+
+    threads = cpu.get('threads_logicas', cpu.get('nucleos_logicos', 'N/A'))
+    total_ram = ram.get('total_instalada_gb', ram.get('total_gb', 'N/A'))
 
     resumo = (
-        f"CPU: {cpu['nucleos_logicos']} núcleos lógicos   |   "
-        f"RAM: {ram['total_gb']} GB   |   "
+        f"CPU: {threads} núcleos lógicos   |   "
+        f"RAM: {total_ram} GB   |   "
         f"GPU dedicada: {'Sim' if tem_gpu else 'Não detectada'}"
     )
     console.print(Panel(resumo, border_style=banner.COR_SECUNDARIA, title="Hardware detectado"))

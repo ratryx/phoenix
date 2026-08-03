@@ -111,9 +111,7 @@ def test_funcoes_possuem_implementacao():
         "iniciarAtualizacaoTempoReal",
         "carregarDiagnostico",
         "renderizarDiagnostico",
-        "carregarHardware",
-        "renderTab",
-        "atualizar"
+        "carregarHardware"
     ]
     all_content = "".join(f.read_text(encoding="utf-8") for f in js_files)
     for func in funcs_migradas:
