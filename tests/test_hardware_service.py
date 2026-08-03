@@ -9,9 +9,9 @@ class MockPsutil:
         self._fail_warmup = fail_warmup
 
     def cpu_percent(self, interval=None, percpu=False):
-        self.warmup_calls.append("warmup")
-        if self._fail_warmup:
-            raise RuntimeError("Warmup failed")
+        # Não é mais usado diretamente em warmup
+        if percpu:
+            return [25.0, 25.0]
         return 25.0
 
     def virtual_memory(self):
@@ -41,26 +41,35 @@ class MockHardwareMetrics:
     def reset_io_counters(self):
         self.reset_called = True
 
-    def coletar_metricas_completas(self):
+    def coletar_metricas_completas(self, psutil_module=None):
         return {
             "ok": True,
             "cpu": {"uso_percentual": 25.0},
             "gpus": self._gpus if self._gpus is not None else [{"nome": "Dummy GPU"}]
         }
 
+    def obter_uso_cpu(self, psutil_module=None):
+        return 25.0, [25.0, 25.0]
+
+    def obter_metricas_gpu(self):
+        return self._gpus if self._gpus is not None else [{"nome": "Dummy GPU"}]
+
 def test_hardware_service_preparar_metricas():
     mock_ps = MockPsutil()
     mock_metrics = MockHardwareMetrics()
     svc = HardwareService(psutil_module=mock_ps, hardware_metrics_mod=mock_metrics)
     svc.preparar_metricas()
-    assert "warmup" in mock_ps.warmup_calls
     assert mock_metrics.reset_called
 
 def test_hardware_service_preparar_metricas_falha_segura():
+    # boot_time falhando
     mock_ps = MockPsutil(fail_warmup=True)
+    def fail_boot():
+        raise RuntimeError("Fail")
+    mock_ps.boot_time = fail_boot
     svc = HardwareService(psutil_module=mock_ps)
     svc.preparar_metricas()
-    assert "warmup" in mock_ps.warmup_calls
+    assert svc._boot_time is None
 
 def test_hardware_service_nivel_visual():
     svc = HardwareService(hardware_mod=MockHardwareMod())
@@ -189,3 +198,93 @@ def test_hardware_service_single_flight_failure():
     assert res3["ok"] is True
     assert res3["hardware"]["fake"] == "scan_deterministic"
     assert mock_hw.call_count == 2
+
+def test_hardware_service_cpu_metrics_integration():
+    """
+    Cobre: primeira coleta, mesma instância, serviço recriado,
+    payload (Início / HWMonitor), regressões.
+    """
+    mock_ps = MockPsutil()
+    mock_ps.cpu_percent = MagicMock(return_value=[20.0, 80.0]) # Média 50.0
+
+    # Para coletar_metricas_completas, o psutil_module precisa ser repassado
+    # Importante: O MockHardwareMetrics atual no teste retorna hardcoded "25.0".
+    # Como queremos testar a integração REAL com hardware_metrics,
+    # não usaremos o MockHardwareMetrics aqui. Usaremos o original.
+    import modules.core.hardware_metrics as real_metrics
+
+    # Mock disk e mem para não falhar
+    mock_ps.disk_io_counters = MagicMock(return_value=None)
+    class Mem:
+        percent = 50.0
+        used = 2 * 1024**3
+        available = 4 * 1024**3
+    mock_ps.virtual_memory = MagicMock(return_value=Mem())
+    mock_ps.cpu_freq = MagicMock(return_value=None)
+
+    # Serviço criado (primeira coleta)
+    svc1 = HardwareService(psutil_module=mock_ps, hardware_metrics_mod=real_metrics)
+    rapidas1 = svc1.obter_metricas_rapidas() # Início
+    completas1 = svc1.obter_metricas_completas() # HWMonitor
+
+    # Deve ser 50.0 (média de 20 e 80)
+    assert rapidas1["cpu_percent"] == 50.0
+    assert completas1["cpu"]["uso_percentual"] == 50.0
+
+    # Mesma instância (coletas consecutivas)
+    mock_ps.cpu_percent.return_value = [10.0, 10.0]
+    rapidas2 = svc1.obter_metricas_rapidas()
+    assert rapidas2["cpu_percent"] == 10.0
+
+    # Serviço recriado
+    mock_ps.cpu_percent.return_value = [30.0, 30.0]
+    svc2 = HardwareService(psutil_module=mock_ps, hardware_metrics_mod=real_metrics)
+    rapidas3 = svc2.obter_metricas_rapidas()
+    assert rapidas3["cpu_percent"] == 30.0
+
+    # Ausência de regressões em RAM e outros
+    assert rapidas1["ram_percent"] == 50.0
+    assert completas1["memoria"]["percentual_uso"] == 50.0
+
+def test_hardware_service_gpu_rapida_nao_chama_cpu():
+    import modules.core.hardware_metrics as real_metrics
+    mock_ps = MockPsutil()
+    mock_ps.cpu_percent = MagicMock()
+
+    svc = HardwareService(psutil_module=mock_ps, hardware_metrics_mod=real_metrics)
+    res = svc.obter_gpu_rapida()
+
+    mock_ps.cpu_percent.assert_not_called()
+    assert res["ok"] is True
+
+def test_api_hardware_service_integration():
+    import modules.core.hardware_metrics as real_metrics
+    from modules.gui.api import PhoenixAPI
+
+    mock_ps = MockPsutil()
+    mock_ps.cpu_percent = MagicMock(return_value=[15.0, 15.0])
+    mock_ps.disk_io_counters = MagicMock(return_value=None)
+    class Mem:
+        percent = 50.0
+        used = 2 * 1024**3
+        available = 4 * 1024**3
+    mock_ps.virtual_memory = MagicMock(return_value=Mem())
+    mock_ps.cpu_freq = MagicMock(return_value=None)
+
+    svc = HardwareService(psutil_module=mock_ps, hardware_metrics_mod=real_metrics)
+
+    # Inicializa a API injetando o serviço integrado de hardware
+    api = PhoenixAPI(
+        hw_info={},
+        hardware_service=svc
+    )
+
+    # O payload da página Início consome obter_metricas_rapidas
+    res_inicio = api.obter_metricas_rapidas()
+    assert res_inicio["ok"] is True
+    assert res_inicio["cpu_percent"] == 15.0
+
+    # O payload do HWMonitor consome obter_metricas_completas
+    res_hw = api.obter_metricas_completas()
+    assert res_hw["ok"] is True
+    assert res_hw["cpu"]["uso_percentual"] == 15.0

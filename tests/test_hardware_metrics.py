@@ -39,7 +39,7 @@ def test_hardware_metrics_falha_psutil_cpu(mock_cpu_percent):
     res = coletar_metricas_completas()
     assert res["ok"] is True
 
-    # cpu não tem uso_percentual
+    # cpu não deve ter uso_percentual devido ao tratamento de erro local retornar (None, None)
     assert "uso_percentual" not in res["cpu"]
     assert "uso_por_nucleo" not in res["cpu"]
 
@@ -59,3 +59,46 @@ def test_hardware_metrics_falha_psutil_memoria(mock_virtual_memory):
 
     # cpu deve estar lá
     assert "uso_percentual" in res["cpu"]
+
+from modules.core.hardware_metrics import obter_uso_cpu
+
+def test_hardware_metrics_obter_uso_cpu_coletas():
+    mock_psutil = MagicMock()
+
+    # Primeira coleta
+    mock_psutil.cpu_percent.return_value = [10.0, 30.0, 50.0, 10.0]
+    total1, cores1 = obter_uso_cpu(mock_psutil)
+    assert total1 == 25.0
+    assert cores1 == [10.0, 30.0, 50.0, 10.0]
+    mock_psutil.cpu_percent.assert_called_with(interval=0.1, percpu=True)
+
+    # Coletas consecutivas
+    mock_psutil.cpu_percent.return_value = [20.0, 20.0, 20.0, 20.0]
+    total2, cores2 = obter_uso_cpu(mock_psutil)
+    assert total2 == 20.0
+    assert cores2 == [20.0, 20.0, 20.0, 20.0]
+
+def test_hardware_metrics_obter_uso_cpu_clamp():
+    mock_psutil = MagicMock()
+
+    # Maior que 100
+    mock_psutil.cpu_percent.return_value = [150.0, 200.0]
+    total1, cores1 = obter_uso_cpu(mock_psutil)
+    assert total1 == 100.0
+
+    # Menor que 0
+    mock_psutil.cpu_percent.return_value = [-10.0, -20.0]
+    total2, cores2 = obter_uso_cpu(mock_psutil)
+    assert total2 == 0.0
+
+    # Valores inválidos, nulos, nans e lista vazia
+    mock_psutil.cpu_percent.return_value = []
+    total3, cores3 = obter_uso_cpu(mock_psutil)
+    assert total3 is None
+    assert cores3 is None
+
+    import math
+    mock_psutil.cpu_percent.return_value = ["150.0", None, float('nan'), -10, "abc"]
+    total4, cores4 = obter_uso_cpu(mock_psutil)
+    assert total4 == 50.0
+    assert cores4 == [100.0, 0.0]

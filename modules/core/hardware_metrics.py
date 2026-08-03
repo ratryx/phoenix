@@ -2,6 +2,7 @@ import logging
 import psutil
 import time
 import threading
+import math
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -58,25 +59,59 @@ def reset_io_counters():
         _last_io_counters = None
         _last_io_time = 0.0
 
-def coletar_metricas_completas() -> dict:
-    """Coleta uso de CPU, freqüência, memória, disco (stateful) e GPUs."""
-    try:
-        cpu_total = psutil.cpu_percent(interval=None)
-        cpu_por_nucleo = psutil.cpu_percent(interval=None, percpu=True)
-    except Exception as e:
-        logger.warning(f"Erro ao obter métricas de CPU: {e}")
-        cpu_total = None
-        cpu_por_nucleo = []
+def obter_uso_cpu(psutil_module=None) -> tuple:
+    """
+    Coleta o uso de CPU de forma bloqueante curta (0.1s) e calcula a média.
+    Retorna uma tupla (uso_total, uso_por_nucleo).
+    Retorna (None, None) em caso de falha ou indisponibilidade.
+    """
+    if psutil_module is None:
+        import psutil
+        psutil_module = psutil
 
     try:
-        freq = psutil.cpu_freq()
+        raw_cpu = psutil_module.cpu_percent(interval=0.1, percpu=True)
+        if not raw_cpu:
+            return None, None
+
+        nucleos_validos = []
+        for v in raw_cpu:
+            try:
+                f = float(v)
+                if math.isfinite(f):
+                    f = max(0.0, min(100.0, f))
+                    nucleos_validos.append(f)
+            except (ValueError, TypeError):
+                continue
+
+        if not nucleos_validos:
+            return None, None
+
+        media = sum(nucleos_validos) / len(nucleos_validos)
+        media = round(media, 1)
+        media = max(0.0, min(100.0, media))
+        return media, nucleos_validos
+    except Exception as e:
+        logger.warning(f"Erro ao obter métricas de CPU: {e}")
+        return None, None
+
+def coletar_metricas_completas(psutil_module=None) -> dict:
+    """Coleta uso de CPU, freqüência, memória, disco (stateful) e GPUs."""
+    if psutil_module is None:
+        import psutil
+        psutil_module = psutil
+
+    cpu_total, cpu_por_nucleo = obter_uso_cpu(psutil_module)
+
+    try:
+        freq = psutil_module.cpu_freq()
         freq_atual = round(freq.current, 0) if freq else None
     except Exception as e:
         logger.warning(f"Erro ao obter frequencia da CPU: {e}")
         freq_atual = None
 
     try:
-        mem = psutil.virtual_memory()
+        mem = psutil_module.virtual_memory()
         memoria_dict = {
             "percentual_uso": round(mem.percent, 1),
             "usada_gb": round(mem.used / (1024**3), 1),
@@ -92,6 +127,32 @@ def coletar_metricas_completas() -> dict:
 
     read_mb, write_mb = _get_disk_io_stateful()
 
+    cpu_dict = {}
+    if cpu_total is not None:
+        cpu_dict["uso_percentual"] = cpu_total
+    if cpu_por_nucleo:
+        cpu_dict["uso_por_nucleo"] = cpu_por_nucleo
+    if freq_atual is not None:
+        cpu_dict["frequencia_atual_mhz"] = freq_atual
+
+    disco_dict = {}
+    if read_mb is not None:
+        disco_dict["leitura_mb_s"] = read_mb
+    if write_mb is not None:
+        disco_dict["escrita_mb_s"] = write_mb
+
+    gpus_metrics = obter_metricas_gpu()
+
+    return {
+        "ok": True,
+        "cpu": cpu_dict,
+        "memoria": memoria_dict,
+        "disco": disco_dict,
+        "gpus": gpus_metrics
+    }
+
+def obter_metricas_gpu() -> list:
+    """Extrai métricas das GPUs."""
     gpus_metrics = []
     try:
         import GPUtil
@@ -109,25 +170,4 @@ def coletar_metricas_completas() -> dict:
         pass
     except Exception as ex:
         logger.warning(f"Erro ao obter dados dinâmicos da GPU: {ex}")
-
-    cpu_dict = {}
-    if cpu_total is not None:
-        cpu_dict["uso_percentual"] = cpu_total
-    if cpu_por_nucleo:
-        cpu_dict["uso_por_nucleo"] = cpu_por_nucleo
-    if freq_atual is not None:
-        cpu_dict["frequencia_atual_mhz"] = freq_atual
-
-    disco_dict = {}
-    if read_mb is not None:
-        disco_dict["leitura_mb_s"] = read_mb
-    if write_mb is not None:
-        disco_dict["escrita_mb_s"] = write_mb
-
-    return {
-        "ok": True,
-        "cpu": cpu_dict,
-        "memoria": memoria_dict,
-        "disco": disco_dict,
-        "gpus": gpus_metrics
-    }
+    return gpus_metrics

@@ -38,9 +38,8 @@ class HardwareService:
         self._hardware_metrics = hardware_metrics_mod
 
     def preparar_metricas(self) -> None:
-        """Faz o aquecimento das métricas (ex: I/O stateful e CPU warmup)."""
+        """Faz o aquecimento das métricas (ex: I/O stateful)."""
         try:
-            self._psutil.cpu_percent(interval=None)
             self._hardware_metrics.reset_io_counters()
             self._boot_time = self._psutil.boot_time()
         except Exception:
@@ -70,9 +69,9 @@ class HardwareService:
         return self._hardware_mod.classificar_capacidade_hardware(self._inventario)
 
     def obter_metricas_rapidas(self) -> dict:
-        """Métricas curtas para CPU e RAM."""
+        """Métricas curtas para CPU e RAM (usado no payload da página Início)."""
         try:
-            cpu = self._psutil.cpu_percent(interval=None)
+            cpu, _ = self._hardware_metrics.obter_uso_cpu(self._psutil)
             mem = self._psutil.virtual_memory()
             return {
                 "ok": True,
@@ -113,15 +112,14 @@ class HardwareService:
         return self.obter_metricas_completas()
 
     def obter_metricas_completas(self) -> dict:
-        """Obtém as métricas dinâmicas de todos os componentes (CPU, RAM, Disco, GPU)."""
-        metrics = self._hardware_metrics.coletar_metricas_completas()
+        """Obtém as métricas dinâmicas de todos os componentes (CPU, RAM, Disco, GPU) para o payload do HWMonitor."""
+        metrics = self._hardware_metrics.coletar_metricas_completas(self._psutil)
         metrics["uptime"] = self._format_uptime()
         return metrics
 
     def obter_gpu_rapida(self) -> dict:
         """Obtém métricas dinâmicas apenas da GPU principal."""
-        metrics = self._hardware_metrics.coletar_metricas_completas()
-        gpus = metrics.get("gpus", [])
+        gpus = self._hardware_metrics.obter_metricas_gpu()
         if not gpus:
             return {"ok": True, "gpu": None}
         return {
