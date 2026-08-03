@@ -10,12 +10,13 @@
         return el;
     }
 
-    function safePct(val) {
-        if (val === null || val === undefined || Number.isNaN(val)) return "N/A";
-        let num = Number(val);
-        if (num < 0) num = 0;
-        if (num > 100) num = 100;
-        return num;
+    function safePct(value) {
+        if (value === null || value === undefined) return "N/A";
+
+        const number = Number(value);
+        if (!Number.isFinite(number)) return "N/A";
+
+        return Math.max(0, Math.min(100, number));
     }
 
     // ──────────────────────────────────────────────
@@ -79,6 +80,9 @@
     page.leave = function () {
         Phoenix.lifecycle.clearInterval("tempoRealInicio");
         page._atualizandoTempoReal = false;
+        if (page._reqId !== undefined) {
+            page._reqId++;
+        }
     };
 
     function atualizarRodapeMensagem(msg) {
@@ -171,16 +175,21 @@
     //  Atualização em tempo real (3s)
     // ──────────────────────────────────────────────
 
+    page._reqId = 0;
+    
     page.iniciarAtualizacaoTempoReal = function () {
         page._atualizandoTempoReal = false;
         Phoenix.lifecycle.setInterval("tempoRealInicio", async function () {
             if (page._atualizandoTempoReal || Phoenix.state.paginaAtual !== "inicio") return;
+            
+            page._reqId++;
+            const currentReqId = page._reqId;
             page._atualizandoTempoReal = true;
+            
             try {
                 // Atualiza CPU e RAM rápidas
                 var resRapida = await Phoenix.bridge.call("obter_metricas_rapidas");
-                if (Phoenix.state.paginaAtual !== "inicio") {
-                    page._atualizandoTempoReal = false;
+                if (currentReqId !== page._reqId || Phoenix.state.paginaAtual !== "inicio") {
                     return;
                 }
                 if (resRapida && resRapida.ok) {
@@ -194,8 +203,7 @@
                 var hw = Phoenix.state.hardware;
                 if (hw && hw.capacidades && hw.capacidades.metricas_gpu_disponiveis) {
                     var resGpu = await Phoenix.bridge.call("obter_gpu_rapida");
-                    if (Phoenix.state.paginaAtual !== "inicio") {
-                        page._atualizandoTempoReal = false;
+                    if (currentReqId !== page._reqId || Phoenix.state.paginaAtual !== "inicio") {
                         return;
                     }
                     if (resGpu && resGpu.ok && resGpu.gpu) {
@@ -204,8 +212,11 @@
                 }
             } catch (e) {
                 // Silencioso
+            } finally {
+                if (currentReqId === page._reqId) {
+                    page._atualizandoTempoReal = false;
+                }
             }
-            page._atualizandoTempoReal = false;
         }, 3000);
     };
 
@@ -253,37 +264,56 @@
         var card = document.querySelector('[data-card="gpu-uso"]');
         if (!card) return;
 
+        // Atualiza a identidade do card (nome da GPU)
+        var nomeGPU = card.querySelector('.valor');
+        if (nomeGPU && gpu.nome) {
+            nomeGPU.textContent = gpu.nome;
+        }
+
         var container = card.querySelector('.gpu-metrics-container');
         if (!container) return;
 
         container.innerHTML = '';
 
-        let uso = gpu.uso_percentual;
-        if (uso !== null && uso !== undefined && !isNaN(uso)) {
-            uso = Math.max(0, Math.min(100, Number(uso)));
+        let usoRaw = gpu.uso_percentual;
+        let usoTxt = "N/A";
+        let usoPctVal = null;
+        if (usoRaw !== null && usoRaw !== undefined) {
+            let num = Number(usoRaw);
+            if (Number.isFinite(num)) {
+                usoPctVal = Math.max(0, Math.min(100, num));
+                usoTxt = usoPctVal + '%';
+            }
+        }
+
+        if (usoPctVal !== null) {
             const barContainer = createEl('div', 'barra-progresso');
-            const fill = createEl('div', 'preenchimento ' + Phoenix.ui.corPorPercentual(uso));
-            fill.style.width = uso + '%';
+            const fill = createEl('div', 'preenchimento ' + Phoenix.ui.corPorPercentual(usoPctVal));
+            fill.style.width = usoPctVal + '%';
             barContainer.appendChild(fill);
             container.appendChild(barContainer);
-
-            let txt = uso + '%';
-            if (gpu.temperatura_c !== null && gpu.temperatura_c !== undefined && !isNaN(gpu.temperatura_c) && gpu.temperatura_c >= 0) {
-                txt += ' · ' + gpu.temperatura_c + '°C';
-            } else {
-                txt += ' · N/A';
-            }
-
-            const sub = createEl('div', 'texto-secundario', txt);
-            sub.style.fontSize = '11px';
-            sub.style.marginTop = '4px';
-            container.appendChild(sub);
-        } else {
-            const sub = createEl('div', 'texto-secundario', 'N/A');
-            sub.style.fontSize = '11px';
-            sub.style.marginTop = '4px';
-            container.appendChild(sub);
         }
+
+        let tempTxt = "N/A";
+        let tempRaw = gpu.temperatura_c;
+        if (tempRaw !== null && tempRaw !== undefined) {
+            let num = Number(tempRaw);
+            if (Number.isFinite(num) && num >= 0) {
+                tempTxt = num + '°C';
+            }
+        }
+
+        let txtFinal = usoTxt;
+        if (usoPctVal !== null) {
+            txtFinal += ' · ' + tempTxt;
+        } else {
+            txtFinal = "N/A"; // fallback full Se uso não existir
+        }
+
+        const sub = createEl('div', 'texto-secundario', txtFinal);
+        sub.style.fontSize = '11px';
+        sub.style.marginTop = '4px';
+        container.appendChild(sub);
     }
 
     Phoenix.pages = Phoenix.pages || {};
