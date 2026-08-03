@@ -9,17 +9,41 @@
         if (textContent !== undefined) el.textContent = textContent;
         return el;
     }
-    
+
     // ──────────────────────────────────────────────
     //  Carregar hardware inicial
     // ──────────────────────────────────────────────
 
     page.carregarHardwareInicial = async function () {
-        // Agora busca o inventário que já foi carregado no bootstrap do app
         try {
             var hw = await Phoenix.bridge.call("obter_inventario_atual");
-            if (hw && hw.status !== "falhou" && hw.status !== "ainda não carregado") {
+
+            // Se estiver não carregado
+            if (!hw || !hw.status || hw.status === "nao_carregado" || hw.status === "ainda não carregado") {
+                atualizarCardsHardware(null); // não mostrar fictícia
+                atualizarRodapeMensagem("Iniciando detecção de hardware...");
+
+                // inicia atualização do cache
+                const res = await Phoenix.bridge.call("carregar_hardware_cache");
+                if (res && res.job_id) {
+                    await Phoenix.jobs.awaitJob(res.job_id, (pct, msg) => {
+                        atualizarRodapeMensagem(msg);
+                    });
+                }
+                // Refetch after job
+                hw = await Phoenix.bridge.call("obter_inventario_atual");
+            }
+
+            console.log("NO INICIO hw is: ", JSON.stringify(hw));
+            if (hw && (hw.status === "completo" || hw.status === "parcial" || hw.status === "cache")) {
                 Phoenix.state.hardware = hw;
+
+                // Recalcular qualidade visual
+                const qual = await Phoenix.bridge.call("obter_nivel_qualidade_visual");
+                if (Phoenix.ui && Phoenix.ui.visualEffects && typeof Phoenix.ui.visualEffects.refresh === 'function') {
+                    Phoenix.ui.visualEffects.refresh();
+                }
+
                 atualizarCardsHardware(hw);
 
                 var textoRodape = document.getElementById("texto-rodape");
@@ -32,26 +56,30 @@
                 var barraRodape = document.getElementById("barra-progresso-rodape");
                 if (barraRodape) barraRodape.style.display = "none";
             } else {
-                atualizarRodapeFalha("Hardware não detectado");
-                // Inicializa cards vazios
+                atualizarRodapeMensagem("Estado: " + (hw && hw.status ? hw.status : "falhou"));
                 atualizarCardsHardware(null);
             }
         } catch (e) {
-            atualizarRodapeFalha("Erro ao detectar hardware");
+            console.log("ERRO NO INICIO:", e);
+            atualizarRodapeMensagem("Erro ao detectar hardware");
         }
     };
-    
+
     // page.load é chamado pelo router quando a página Início é exibida
     page.load = function () {
         page.carregarHardwareInicial();
         page.iniciarAtualizacaoTempoReal();
     };
 
-    function atualizarRodapeFalha(msg) {
+    function atualizarRodapeMensagem(msg) {
         var textoRodape = document.getElementById("texto-rodape");
         if (textoRodape) textoRodape.textContent = msg;
         var barraRodape = document.getElementById("barra-progresso-rodape");
         if (barraRodape) barraRodape.style.display = "none";
+    }
+
+    function atualizarRodapeFalha(msg) {
+        atualizarRodapeMensagem(msg);
     }
 
     // ──────────────────────────────────────────────
@@ -61,16 +89,16 @@
     function buildCard(id, title, valueStr, unitStr, pct) {
         const card = createEl('div', 'card-metrica');
         card.dataset.card = id;
-        
+
         card.appendChild(createEl('div', 'rotulo', title));
-        
+
         const valDiv = createEl('div', 'valor', valueStr);
         if (unitStr) {
             const unitEl = createEl('span', 'unidade', unitStr);
             valDiv.appendChild(unitEl);
         }
         card.appendChild(valDiv);
-        
+
         if (pct != null) {
             const barContainer = createEl('div', 'barra-progresso');
             const fill = createEl('div', 'preenchimento ' + Phoenix.ui.corPorPercentual(pct));
@@ -78,37 +106,37 @@
             barContainer.appendChild(fill);
             card.appendChild(barContainer);
         }
-        
+
         return card;
     }
 
     function atualizarCardsHardware(hw) {
         var cards = document.getElementById("cards-resumo-inicio");
         if (!cards) return;
-        
+
         cards.innerHTML = '';
-        
+
         // 1. CPU
         const cpuCard = buildCard('cpu', 'CPU', '--', '%', 0);
         cards.appendChild(cpuCard);
-        
+
         // 2. RAM
         const ramCard = buildCard('ram', 'Memória RAM', '--', '%', 0);
         cards.appendChild(ramCard);
-        
+
         // 3. GPU
         let nomeGPU = "Não detectada";
         if (hw && hw.gpus && hw.gpus.length > 0) {
             nomeGPU = hw.gpus[0].nome;
         }
-        
+
         const gpuCard = createEl('div', 'card-metrica');
         gpuCard.dataset.card = 'gpu-uso';
         gpuCard.appendChild(createEl('div', 'rotulo', 'GPU'));
         const valGPU = createEl('div', 'valor', nomeGPU);
         valGPU.style.fontSize = '15px';
         gpuCard.appendChild(valGPU);
-        
+
         // Espaço reservado para as métricas da GPU que virão via polling
         const gpuMetricasContainer = createEl('div');
         gpuMetricasContainer.className = 'gpu-metrics-container';
@@ -119,7 +147,7 @@
             gpuMetricasContainer.appendChild(ind);
         }
         gpuCard.appendChild(gpuMetricasContainer);
-        
+
         cards.appendChild(gpuCard);
 
         var rodape = document.getElementById("texto-rodape");
@@ -147,7 +175,7 @@
                         memoria: { percentual_uso: resRapida.ram_percent }
                     });
                 }
-                
+
                 // Atualiza GPU
                 var hw = Phoenix.state.hardware;
                 if (hw && hw.capacidades && hw.capacidades.metricas_gpu_disponiveis) {
@@ -170,12 +198,12 @@
         if (cardCPU && dados.cpu) {
             var pct = dados.cpu.uso_percentual;
             var cor = Phoenix.ui.corPorPercentual(pct);
-            
+
             // Segurança DOM
             cardCPU.querySelector('.valor').textContent = pct;
             const unit = createEl('span', 'unidade', '%');
             cardCPU.querySelector('.valor').appendChild(unit);
-            
+
             var barra = cardCPU.querySelector('.preenchimento');
             if (barra) {
                 barra.style.width = pct + '%';
@@ -186,11 +214,11 @@
         if (cardRAM && dados.memoria) {
             var pct = dados.memoria.percentual_uso;
             var cor = Phoenix.ui.corPorPercentual(pct);
-            
+
             cardRAM.querySelector('.valor').textContent = pct;
             const unit = createEl('span', 'unidade', '%');
             cardRAM.querySelector('.valor').appendChild(unit);
-            
+
             var barra = cardRAM.querySelector('.preenchimento');
             if (barra) {
                 barra.style.width = pct + '%';
@@ -198,28 +226,28 @@
             }
         }
     }
-    
+
     function atualizarCardGPU(gpu) {
         var card = document.querySelector('[data-card="gpu-uso"]');
         if (!card) return;
-        
+
         var container = card.querySelector('.gpu-metrics-container');
         if (!container) return;
-        
+
         container.innerHTML = '';
-        
+
         if (gpu.uso != null) {
             const barContainer = createEl('div', 'barra-progresso');
             const fill = createEl('div', 'preenchimento ' + Phoenix.ui.corPorPercentual(gpu.uso));
             fill.style.width = gpu.uso + '%';
             barContainer.appendChild(fill);
             container.appendChild(barContainer);
-            
+
             let txt = gpu.uso + '%';
             if (gpu.temp != null) {
                 txt += ' · ' + gpu.temp + '°C';
             }
-            
+
             const sub = createEl('div', 'texto-secundario', txt);
             sub.style.fontSize = '11px';
             sub.style.marginTop = '4px';

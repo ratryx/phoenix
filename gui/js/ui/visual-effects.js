@@ -52,6 +52,8 @@
         }
     };
 
+    visualEffects.refresh = visualEffects.initialize;
+
     Phoenix.ui = Phoenix.ui || {};
     Phoenix.ui.visualEffects = visualEffects;
 })(window.Phoenix);

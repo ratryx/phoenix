@@ -150,9 +150,14 @@ def coletar_inventario() -> dict:
     # 1. Tentar coleta via PowerShell
     raw_data = None
     try:
-        res = run_windows_command(["powershell", "-NoProfile", "-Command", _PS_INVENTORY_SCRIPT], timeout=15)
-        if res["ok"] and res["stdout"]:
-            raw_data = json.loads(res["stdout"])
+        res = run_windows_command(
+            ["powershell", "-NoProfile", "-NonInteractive", "-Command", _PS_INVENTORY_SCRIPT],
+            operation_name="hardware_inventory_scan",
+            timeout_seconds=15,
+            max_output_chars=131072,
+        )
+        if res.ok and res.stdout:
+            raw_data = json.loads(res.stdout)
     except Exception as e:
         logger.warning(f"Falha na coleta de inventário WMI/CIM: {e}")
         status = "parcial"

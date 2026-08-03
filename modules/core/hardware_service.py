@@ -1,4 +1,5 @@
 import logging
+import threading
 from typing import Optional, Dict, Any
 from datetime import datetime
 
@@ -18,7 +19,9 @@ class HardwareService:
     ):
         self._inventario = hw_info or {}
         self._boot_time = None
-        
+        self._rescan_lock = threading.Lock()
+        self._rescan_promise = None
+
         # Injeção de dependências
         if psutil_module is None:
             import psutil
@@ -29,7 +32,7 @@ class HardwareService:
         if hardware_metrics_mod is None:
             from modules.core import hardware_metrics
             hardware_metrics_mod = hardware_metrics
-            
+
         self._psutil = psutil_module
         self._hardware_mod = hardware_mod
         self._hardware_metrics = hardware_metrics_mod
@@ -38,7 +41,7 @@ class HardwareService:
         """Faz o aquecimento das métricas (ex: I/O stateful e CPU warmup)."""
         try:
             self._psutil.cpu_percent(interval=None)
-            self._hardware_metrics._get_disk_io_stateful()
+            self._hardware_metrics.reset_io_counters()
             self._boot_time = self._psutil.boot_time()
         except Exception:
             logger.exception("Falha ao preparar as métricas")
@@ -65,25 +68,23 @@ class HardwareService:
             logger.exception("Falha ao obter_metricas_rapidas")
             return {
                 "ok": False,
-                "cpu_percent": 0.0,
-                "ram_percent": 0.0,
-                "ram_disponivel_gb": 0.0
+                "cpu_percent": None,
+                "ram_percent": None,
+                "ram_disponivel_gb": None
             }
 
     def _format_uptime(self) -> str:
         if not self._boot_time:
             self._boot_time = self._psutil.boot_time()
-        
-        # total_seconds is a float, timedelta.seconds only gives the seconds remainder after days
+
         uptime_total_sec = (datetime.now() - datetime.fromtimestamp(self._boot_time)).total_seconds()
-        
         if uptime_total_sec < 0:
             uptime_total_sec = 0
-            
+
         dias = int(uptime_total_sec // 86400)
         horas = int((uptime_total_sec % 86400) // 3600)
         minutos = int((uptime_total_sec % 3600) // 60)
-        
+
         if dias > 0:
             return f"{dias}d {horas}h {minutos}m"
         elif horas > 0:
@@ -92,8 +93,7 @@ class HardwareService:
             return f"{minutos}m"
 
     def obter_info_sistema_detalhado(self) -> dict:
-        """Mescla o inventário estático com algumas métricas básicas para a página inicial (se necessário), ou apenas os dados formatados."""
-        # Delega ao métricas completas para a nova versão
+        """Mescla o inventário estático com algumas métricas básicas para a página inicial."""
         return self.obter_metricas_completas()
 
     def obter_metricas_completas(self) -> dict:
@@ -106,9 +106,11 @@ class HardwareService:
         """Obtém métricas dinâmicas apenas da GPU principal."""
         metrics = self._hardware_metrics.coletar_metricas_completas()
         gpus = metrics.get("gpus", [])
+        if not gpus:
+            return {"ok": True, "gpu": None}
         return {
             "ok": True,
-            "gpu": gpus[0] if gpus else None
+            "gpu": gpus[0]
         }
 
     def carregar_hardware_cache(self, progress_callback=None) -> dict:
@@ -117,6 +119,27 @@ class HardwareService:
         return {"ok": True, "hardware": hw}
 
     def forcar_rescan_hardware(self, progress_callback=None) -> dict:
-        hw = self._hardware_mod.coletar_hardware_completo(progress_callback=progress_callback)
-        self._inventario = hw
-        return {"ok": True, "hardware": hw}
+        is_leader = False
+        with self._rescan_lock:
+            if self._rescan_promise is None:
+                self._rescan_promise = {"event": threading.Event(), "result": None}
+                is_leader = True
+            promise = self._rescan_promise
+
+        if is_leader:
+            try:
+                hw = self._hardware_mod.coletar_hardware_completo(progress_callback=progress_callback)
+                self._inventario = hw
+                promise["result"] = {"ok": True, "hardware": hw}
+            except Exception as e:
+                logger.exception("Falha no rescan_hardware")
+                promise["result"] = {"ok": False, "erro": str(e)}
+            finally:
+                promise["event"].set()
+                with self._rescan_lock:
+                    if self._rescan_promise is promise:
+                        self._rescan_promise = None
+        else:
+            promise["event"].wait()
+
+        return promise["result"]

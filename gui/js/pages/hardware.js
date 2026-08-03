@@ -31,10 +31,12 @@
                 btn.disabled = true;
                 btn.textContent = "Atualizando...";
                 try {
-                    const res = await Phoenix.bridge.call("iniciar_atualizacao");
+                    const res = await Phoenix.bridge.call("forcar_rescan_hardware");
                     if (res && res.job_id) {
                         Phoenix.ui.feedback.mostrarProcessando("Atualizando inventário", "Por favor aguarde...");
-                        await Phoenix.jobs.waitFor(res.job_id);
+                        await Phoenix.jobs.awaitJob(res.job_id, (pct, msg) => {
+                            Phoenix.ui.feedback.mostrarProcessando("Atualizando inventário", msg + " (" + pct + "%)");
+                        });
                     }
                 } catch(e) {
                     console.error("Erro no rescan", e);
@@ -45,6 +47,9 @@
                     await carregarHardware();
                     if (Phoenix.pages.inicio && typeof Phoenix.pages.inicio.load === 'function') {
                         Phoenix.pages.inicio.load(); // atualiza o inicio tbm
+                    }
+                    if (Phoenix.ui && Phoenix.ui.visualEffects && typeof Phoenix.ui.visualEffects.refresh === 'function') {
+                        Phoenix.ui.visualEffects.refresh();
                     }
                 }
             });
@@ -264,14 +269,16 @@
             card.appendChild(titleRow);
             
             let vramText = "N/A";
-            if (gpu.vram_total_mb) {
-                if (gpu.vram_status === "exata") {
-                    vramText = `${gpu.vram_total_mb} MB (${(gpu.vram_total_mb/1024).toFixed(1)} GB)`;
-                } else if (gpu.vram_status === "estimada") {
-                    vramText = `Estimada / Acima de 4GB`;
-                } else {
-                    vramText = "Indisponível";
-                }
+            if (gpu.vram_status === "exata" && gpu.vram_total_mb != null) {
+                vramText = `${gpu.vram_total_mb} MB (${(gpu.vram_total_mb/1024).toFixed(1)} GB)`;
+            } else if (gpu.vram_status === "estimada") {
+                vramText = `Estimada / Acima de 4GB`;
+            } else if (gpu.vram_status === "compartilhada") {
+                vramText = `Memória Compartilhada (Integrada)`;
+            } else if (gpu.vram_total_mb) {
+                vramText = `${gpu.vram_total_mb} MB (${(gpu.vram_total_mb/1024).toFixed(1)} GB)`;
+            } else {
+                vramText = "Indisponível";
             }
             
             card.appendChild(createList({
