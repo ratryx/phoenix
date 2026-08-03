@@ -52,12 +52,12 @@ function runTests() {
     let callCount = 0;
     sandbox.Phoenix.bridge.call = async (method) => {
       if (method === "obter_metricas_completas") callCount++;
-      return { 
-        ok: true, 
-        cpu: { total: 50, por_nucleo: [10, 20] }, 
-        ram: { percent: 40 },
-        gpu: { uso: 30, temp: 60, vram_usada: 1, vram_total: 2 },
-        disco: { leitura_mb: 10, escrita_mb: 20 }
+      return {
+        ok: true,
+        cpu: { uso_percentual: 50, uso_por_nucleo: [10, 20], frequencia_atual_mhz: 3000 },
+        memoria: { percentual_uso: 40, usada_gb: 8, disponivel_gb: 8 },
+        gpus: [{ uso_percentual: 30, temperatura_c: 60, vram_usada_mb: 1024, vram_total_mb: 2048 }],
+        disco: { leitura_mb_s: 10, escrita_mb_s: 20 }
       };
     };
 
@@ -66,7 +66,7 @@ function runTests() {
     let initialCount = callCount;
     page.load(); // it's async but doesn't return promise in original design? Wait, load is async in my code.
     // Since load is async, let's wait a bit.
-    
+
     // We can't await easily since it's just a test function without async context at top level.
     // I will wrap in async IIFE.
   } catch (e) {
@@ -128,12 +128,12 @@ async function runAsyncTests() {
         // Simulate delay to test overlap
         await new Promise(r => setTimeout(r, 10));
       }
-      return { 
-        ok: true, 
-        cpu: { total: 50, por_nucleo: [10, 20] }, 
-        ram: { percent: 40 },
-        gpu: { uso: 30, temp: 60, vram_usada: 1, vram_total: 2 },
-        disco: { leitura_mb: 10, escrita_mb: 20 }
+      return {
+        ok: true,
+        cpu: { uso_percentual: 50, uso_por_nucleo: [10, 20], frequencia_atual_mhz: 3000 },
+        memoria: { percentual_uso: 40, usada_gb: 8, disponivel_gb: 8 },
+        gpus: [{ uso_percentual: 30, temperatura_c: 60, vram_usada_mb: 1024, vram_total_mb: 2048 }],
+        disco: { leitura_mb_s: 10, escrita_mb_s: 20 }
       };
     };
 
@@ -162,7 +162,7 @@ async function runAsyncTests() {
     page.enter();
     page.enter(); // should clear first
     assert(sandbox.intervals.filter(i => i.name === 'sensores').length === 1, "entrar duas vezes não duplica timer");
-    
+
     page.leave();
     assert(sandbox.intervals.length === 0, "sair remove timer");
 

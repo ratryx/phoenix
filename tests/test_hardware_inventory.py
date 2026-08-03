@@ -112,3 +112,27 @@ def test_codigo_nao_zero():
     with patch('modules.core.hardware_inventory.run_windows_command', return_value=mock_res):
         inv = hardware_inventory.coletar_inventario()
         assert inv['status'] == 'parcial'
+
+@pytest.mark.parametrize("gpu_nome, expected_tipo", [
+    ("Intel Arc A770", "dedicada"),
+    ("Intel(R) UHD Graphics 770", "integrada"),
+    ("Intel Iris Xe Graphics", "integrada"),
+    ("Intel HD Graphics 620", "integrada"),
+    ("NVIDIA GeForce RTX 3060", "dedicada"),
+    ("NVIDIA GTX 1650", "dedicada"),
+    ("AMD Radeon RX 6700 XT", "dedicada"),
+    ("AMD Radeon(TM) Graphics", "integrada"),
+    ("AMD Radeon Graphics", "integrada"),
+    ("Custom Unknown GPU", "desconhecida")
+])
+def test_coletar_inventario_gpu_tipos(gpu_nome, expected_tipo):
+    mock_raw = {
+        "cpu": {"modelo": "CPU"},
+        "gpus": [
+            {"nome": gpu_nome, "fabricante": "Unknown", "vram_bytes": 1024}
+        ]
+    }
+    mock_res = CommandResult(ok=True, code="SUCCESS", returncode=0, stdout=json.dumps(mock_raw), stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    with patch("modules.core.hardware_inventory.run_windows_command", return_value=mock_res):
+        inv = hardware_inventory.coletar_inventario()
+        assert inv["gpus"][0]["tipo"] == expected_tipo
