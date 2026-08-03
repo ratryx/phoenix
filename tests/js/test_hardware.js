@@ -146,7 +146,7 @@ async function runTests() {
     resetMocks();
     _jobResultMock = { ok: true, hardware: { status: "parcial" } };
     await btn.onclick();
-    assert.ok(global.inicioLoaded, "Deve atualizar UI se parcial com ok:true");
+    assert.ok(!global.inicioLoaded, "Não deve chamar inicio.load no hardware.js");
     assert.ok(sucessoFoiMostrado(), "Deve mostrar overlay de sucesso"); // The finally block does esconderOverlay(true, true)
 
     // 3. Resposta sem job_id

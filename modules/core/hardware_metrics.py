@@ -152,22 +152,10 @@ def coletar_metricas_completas(psutil_module=None) -> dict:
     }
 
 def obter_metricas_gpu() -> list:
-    """Extrai métricas das GPUs."""
-    gpus_metrics = []
+    """Extrai métricas das GPUs usando o módulo dedicado."""
     try:
-        import GPUtil
-        gpus = GPUtil.getGPUs()
-        for g in gpus:
-            gpus_metrics.append({
-                "id": str(g.id),
-                "nome": g.name,
-                "uso_percentual": int(g.load * 100),
-                "temperatura_c": int(g.temperature),
-                "vram_usada_mb": int(g.memoryUsed),
-                "vram_total_mb": int(g.memoryTotal)
-            })
-    except ImportError:
-        pass
+        from modules.core.gpu_metrics import obter_metricas_gpu as gpu_collector
+        return gpu_collector()
     except Exception as ex:
-        logger.warning(f"Erro ao obter dados dinâmicos da GPU: {ex}")
-    return gpus_metrics
+        logger.warning(f"Erro ao obter dados dinâmicos da GPU via módulo dedicado: {ex}")
+        return []

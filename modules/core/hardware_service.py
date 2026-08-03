@@ -56,8 +56,8 @@ class HardwareService:
         if not hw: return
         has_gputil = False
         try:
-            import GPUtil
-            has_gputil = len(GPUtil.getGPUs()) > 0
+            from modules.core.gpu_metrics import obter_metricas_gpu as gpu_collector
+            has_gputil = len(gpu_collector()) > 0
         except Exception:
             has_gputil = False
 

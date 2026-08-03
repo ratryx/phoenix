@@ -4,8 +4,8 @@ from unittest.mock import patch, MagicMock
 from modules.core.hardware_metrics import coletar_metricas_completas
 
 def test_hardware_metrics_sem_gputil():
-    # Simular a ausência do GPUtil
-    with patch.dict(sys.modules, {'GPUtil': None}):
+    # Simular ausência de GPUs ou falha no módulo gpu_metrics
+    with patch("modules.core.gpu_metrics.obter_metricas_gpu", return_value=[]):
         res = coletar_metricas_completas()
 
         # Não deve crashear, gpus será vazia
