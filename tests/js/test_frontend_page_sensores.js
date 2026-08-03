@@ -100,7 +100,7 @@ async function runAsyncTests() {
 
     // Store reference to check if it's rebuilt
     const initialGpu1 = gpu1Title;
-    
+
     // 2. Clamp values and missing VRAM/freq
     nextResult = {
       ok: true,
@@ -142,7 +142,7 @@ async function runAsyncTests() {
     };
     await page.atualizar();
     assert.strictEqual(sandbox.document.getElementById('hw-ram-pct').textContent, 55, "Deve preservar e atualizar apenas o que está presente");
-    
+
     // 5. Test page.leave during async
     let resolveBridge;
     sandbox.Phoenix.bridge.call = () => {
@@ -153,7 +153,7 @@ async function runAsyncTests() {
     resolveBridge({ ok: true, cpu: { uso_percentual: 88 } });
     await updatePromise;
     assert.notStrictEqual(sandbox.document.getElementById('hw-cpu-total').textContent, 88, "Não deve atualizar UI se leave() foi chamado durante a call");
-    
+
     // Ensure "undefined" text does not exist anywhere in domElements mock text contents
     for (let key in sandbox.domElements) {
       if (typeof sandbox.domElements[key].textContent === 'string') {

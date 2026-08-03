@@ -29,22 +29,22 @@
     page.load = async function () {
         var container = document.getElementById('pagina-hwmonitor');
         if (!container) return;
-        
+
         container.innerHTML = '';
         _gpusRenderizadas = [];
-        
+
         const header = createEl('div', 'cabecalho-pagina');
         const hTitleDiv = createEl('div');
         hTitleDiv.appendChild(createEl('h1', '', 'Monitor de Sensores'));
         hTitleDiv.appendChild(createEl('p', '', 'Monitoramento em tempo real — atualiza a cada 3s'));
         header.appendChild(hTitleDiv);
         container.appendChild(header);
-        
+
         const grid = createEl('div');
         grid.style.display = 'grid';
         grid.style.gridTemplateColumns = '1fr 1fr';
         grid.style.gap = '16px';
-        
+
         // 1. CPU
         const cpuCard = createEl('div', 'card');
         const cpuTitle = createEl('div', '', 'CPU');
@@ -52,7 +52,7 @@
         cpuTitle.style.fontWeight = '600';
         cpuTitle.style.marginBottom = '12px';
         cpuCard.appendChild(cpuTitle);
-        
+
         const cpuTotal = createEl('div', '', '--');
         cpuTotal.style.fontSize = '36px';
         cpuTotal.style.fontWeight = '700';
@@ -61,7 +61,7 @@
         cpuUnit.style.fontSize = '16px';
         cpuTotal.appendChild(cpuUnit);
         cpuCard.appendChild(cpuTotal);
-        
+
         const cpuBarCont = createEl('div', 'barra-progresso');
         cpuBarCont.style.margin = '8px 0';
         const cpuBar = createEl('div', 'preenchimento');
@@ -70,11 +70,11 @@
         cpuBar.style.transition = 'width 0.5s';
         cpuBarCont.appendChild(cpuBar);
         cpuCard.appendChild(cpuBarCont);
-        
+
         const cpuFreq = createEl('div', 'texto-secundario', '-- MHz');
         cpuFreq.id = 'hw-cpu-freq';
         cpuCard.appendChild(cpuFreq);
-        
+
         const cpuCoresDiv = createEl('div');
         cpuCoresDiv.style.marginTop = '16px';
         const cpuCoresLabel = createEl('div', 'texto-secundario', 'POR NÚCLEO');
@@ -82,7 +82,7 @@
         cpuCoresLabel.style.textTransform = 'uppercase';
         cpuCoresLabel.style.marginBottom = '8px';
         cpuCoresDiv.appendChild(cpuCoresLabel);
-        
+
         const coresGrid = createEl('div');
         coresGrid.id = 'hw-nucleos';
         coresGrid.style.display = 'grid';
@@ -90,9 +90,9 @@
         coresGrid.style.gap = '6px';
         cpuCoresDiv.appendChild(coresGrid);
         cpuCard.appendChild(cpuCoresDiv);
-        
+
         grid.appendChild(cpuCard);
-        
+
         // 2. RAM
         const ramCard = createEl('div', 'card');
         const ramTitle = createEl('div', '', 'Memória RAM');
@@ -100,7 +100,7 @@
         ramTitle.style.fontWeight = '600';
         ramTitle.style.marginBottom = '12px';
         ramCard.appendChild(ramTitle);
-        
+
         const ramPct = createEl('div', '', '--');
         ramPct.style.fontSize = '36px';
         ramPct.style.fontWeight = '700';
@@ -109,7 +109,7 @@
         ramUnit.style.fontSize = '16px';
         ramPct.appendChild(ramUnit);
         ramCard.appendChild(ramPct);
-        
+
         const ramBarCont = createEl('div', 'barra-progresso');
         ramBarCont.style.margin = '8px 0';
         const ramBar = createEl('div', 'preenchimento');
@@ -118,13 +118,13 @@
         ramBar.style.transition = 'width 0.5s';
         ramBarCont.appendChild(ramBar);
         ramCard.appendChild(ramBarCont);
-        
+
         const ramMetrics = createEl('div');
         ramMetrics.style.display = 'grid';
         ramMetrics.style.gridTemplateColumns = '1fr 1fr';
         ramMetrics.style.gap = '8px';
         ramMetrics.style.marginTop = '12px';
-        
+
         const ramU = createEl('div', 'card-metrica');
         ramU.style.padding = '12px';
         ramU.appendChild(createEl('div', 'rotulo', 'Em uso'));
@@ -133,7 +133,7 @@
         ramUVal.style.fontSize = '18px';
         ramU.appendChild(ramUVal);
         ramMetrics.appendChild(ramU);
-        
+
         const ramL = createEl('div', 'card-metrica');
         ramL.style.padding = '12px';
         ramL.appendChild(createEl('div', 'rotulo', 'Disponível'));
@@ -142,10 +142,10 @@
         ramLVal.style.fontSize = '18px';
         ramL.appendChild(ramLVal);
         ramMetrics.appendChild(ramL);
-        
+
         ramCard.appendChild(ramMetrics);
         grid.appendChild(ramCard);
-        
+
         // 3. Disco I/O
         const diskCard = createEl('div', 'card');
         const diskTitle = createEl('div', '', 'Disco — Atividade em tempo real');
@@ -153,13 +153,13 @@
         diskTitle.style.fontWeight = '600';
         diskTitle.style.marginBottom = '12px';
         diskCard.appendChild(diskTitle);
-        
+
         const diskMetrics = createEl('div');
         diskMetrics.style.display = 'grid';
         diskMetrics.style.gridTemplateColumns = '1fr 1fr';
         diskMetrics.style.gap = '16px';
         diskMetrics.style.marginTop = '8px';
-        
+
         const dRead = createEl('div');
         dRead.appendChild(createEl('div', 'texto-secundario', 'Leitura'));
         const dReadVal = createEl('div', '', '--');
@@ -172,7 +172,7 @@
         dReadVal.appendChild(dReadU);
         dRead.appendChild(dReadVal);
         diskMetrics.appendChild(dRead);
-        
+
         const dWrite = createEl('div');
         dWrite.appendChild(createEl('div', 'texto-secundario', 'Escrita'));
         const dWriteVal = createEl('div', '', '--');
@@ -185,15 +185,15 @@
         dWriteVal.appendChild(dWriteU);
         dWrite.appendChild(dWriteVal);
         diskMetrics.appendChild(dWrite);
-        
+
         diskCard.appendChild(diskMetrics);
         grid.appendChild(diskCard);
-        
+
         // 4. GPUs - container
         const gpusContainer = createEl('div');
         gpusContainer.id = 'hw-gpus-container';
         gpusContainer.style.marginTop = '16px';
-        
+
         container.appendChild(grid);
         container.appendChild(gpusContainer);
 
@@ -330,7 +330,7 @@
                     }
                 }
             }
-            
+
             // GPUs
             var gpusContainer = document.getElementById('hw-gpus-container');
             if (gpusContainer) {
@@ -338,7 +338,7 @@
                 if (res.gpus && Array.isArray(res.gpus)) {
                     gpusToProcess = res.gpus;
                 }
-                
+
                 // Compare IDs to see if we need a rebuild
                 const incomingIds = gpusToProcess.map((g, i) => String(safeVal(g.id, "gpu_"+i))).join("|");
                 const currentIds = _gpusRenderizadas.join("|");
@@ -395,7 +395,7 @@
                             gmtv.style.fontSize = '20px';
                             gmt.appendChild(gmtv);
                             gm.appendChild(gmt);
-                            
+
                             const gmv = createEl('div', 'card-metrica');
                             gmv.style.padding = '12px';
                             gmv.appendChild(createEl('div', 'rotulo', 'VRAM'));
@@ -404,22 +404,22 @@
                             gmvv.style.fontSize = '16px';
                             gmv.appendChild(gmvv);
                             gm.appendChild(gmv);
-                            
+
                             gc.appendChild(gm);
                             gpusContainer.appendChild(gc);
                         });
                     }
                 }
-                
+
                 // Update
                 gpusToProcess.forEach((g, i) => {
                     const gid = String(safeVal(g.id, "gpu_"+i));
-                    
+
                     const gu = document.getElementById('gpu-uso-' + gid);
                     const gbf = document.getElementById('gpu-bar-' + gid);
                     const gmtv = document.getElementById('gpu-temp-' + gid);
                     const gmvv = document.getElementById('gpu-vram-' + gid);
-                    
+
                     if (gu) {
                         const valPct = safePct(g.uso_percentual);
                         gu.textContent = valPct;
@@ -435,7 +435,7 @@
                             gbf.style.width = '0%';
                         }
                     }
-                    
+
                     if (gmtv) {
                         let tempTxt = 'N/A';
                         let corTemp = '';
@@ -447,7 +447,7 @@
                         gmtv.textContent = tempTxt;
                         if (corTemp) gmtv.style.color = corTemp;
                     }
-                    
+
                     if (gmvv) {
                         let vu = safeVal(g.vram_usada_mb);
                         let vt = safeVal(g.vram_total_mb);

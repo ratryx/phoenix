@@ -58,10 +58,10 @@ class HardwareService:
             has_gputil = len(GPUtil.getGPUs()) > 0
         except Exception:
             has_gputil = False
-            
+
         if "capacidades" not in hw:
             hw["capacidades"] = {}
-            
+
         hw["capacidades"]["metricas_gpu_disponiveis"] = has_gputil
         hw["capacidades"]["temperatura_gpu_disponivel"] = has_gputil
         hw["capacidades"]["vram_gpu_disponivel"] = has_gputil
