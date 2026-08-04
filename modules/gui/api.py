@@ -22,7 +22,7 @@ class PhoenixAPI:
         self._hw_info = hw_info
         self._id_atendimento = None
         self._nome_cliente = ""
-        self._job_manager = job_manager or JobManager()
+        self._job_manager = job_manager or JobManager(on_terminal_state=GUILogger.log_job_terminal_state)
 
         if hardware_service is None:
             from modules.core.hardware_service import HardwareService
@@ -43,47 +43,6 @@ class PhoenixAPI:
 
     def _iniciar_job(self, target_fn, *args, operation_name="unknown", exclusive_group=None, timeout=None, pass_job_context=False, **kwargs) -> dict:
         """Delega a criação do job para o JobManager e retorna o formato esperado pelo JS."""
-        
-        friendly_names = {
-            "executar_limpeza": "Limpeza do sistema",
-            "criar_ponto_restauracao": "Ponto de restauração",
-            "rotina_completa": "Rotina completa",
-            "iniciar_atualizacao": "Atualização de hardware",
-            "forcar_rescan_hardware": "Rescan de hardware",
-            "otimizar_disco": "Otimização de disco"
-        }
-        
-        friendly_op = friendly_names.get(operation_name, operation_name)
-        
-        def log_wrapper(*w_args, **w_kwargs):
-            GUILogger.log(friendly_op, "INICIO")
-            try:
-                res = target_fn(*w_args, **w_kwargs)
-                
-                # Para limpeza
-                if operation_name == "executar_limpeza" and isinstance(res, dict):
-                    mb = res.get("espaco_liberado_mb", 0)
-                    if res.get("ok") and not res.get("parcial"):
-                        GUILogger.log(friendly_op, "OK", f"Limpeza concluída sem erros — {mb} MB liberados.")
-                    elif res.get("ok") and res.get("parcial"):
-                        ign = res.get("arquivos_ignorados", 0)
-                        GUILogger.log(friendly_op, "AVISO", f"Limpeza concluída com {ign} arquivos ignorados.")
-                    else:
-                        GUILogger.log(friendly_op, "ERRO", "Limpeza não concluída.")
-                elif isinstance(res, dict) and not res.get("ok", True):
-                    GUILogger.log(friendly_op, "ERRO", f"Operação falhou: {res.get('erro', 'Erro desconhecido')}")
-                else:
-                    GUILogger.log(friendly_op, "OK", "Operação concluída com sucesso.")
-                    
-                return res
-            except Exception as e:
-                from modules.core.exceptions import JobCancelledError
-                if isinstance(e, JobCancelledError):
-                    GUILogger.log(friendly_op, "ERRO", "Operação não concluída — JOB_CANCELLED.")
-                else:
-                    GUILogger.log(friendly_op, "ERRO", f"Operação falhou: {str(e)}")
-                raise
-
         if timeout is None:
             if operation_name == "rotina_completa":
                 timeout = 600
@@ -99,7 +58,7 @@ class PhoenixAPI:
                 timeout = 30
 
         job_id = self._job_manager.submit(
-            log_wrapper,
+            target_fn,
             *args,
             operation_name=operation_name,
             exclusive_group=exclusive_group,
@@ -473,4 +432,5 @@ class PhoenixAPI:
 
     def fechar_janela(self):
         self._job_manager.shutdown()
+        GUILogger.shutdown()
         self._window_controller.fechar()
