@@ -19,9 +19,10 @@ def is_safe_path(caminho: str, raiz_autorizada: str) -> bool:
     except Exception:
         return False
 
-def _is_reparse_point(filepath: Path) -> bool:
+def _is_reparse_point(filepath: Path, st=None) -> bool:
     try:
-        st = os.lstat(str(filepath))
+        if st is None:
+            st = os.lstat(str(filepath))
         return bool(st.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
     except AttributeError:
         return filepath.is_symlink() or filepath.is_junction()
@@ -38,12 +39,14 @@ def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
         alvos["temp_usuario"] = {
             "nome": "Arquivos temporários do usuário",
             "caminho": os.path.join(local_appdata, "Temp"),
+            "raiz_autorizada": os.path.join(local_appdata, "Temp"),
             "tipo": "diretorio"
         }
         
     alvos["temp_windows"] = {
         "nome": "Arquivos temporários do Windows",
         "caminho": r"C:\Windows\Temp",
+        "raiz_autorizada": r"C:\Windows\Temp",
         "tipo": "diretorio"
     }
     
@@ -51,26 +54,31 @@ def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
         alvos["wer_archive"] = {
             "nome": "Relatórios de erro (Archive)",
             "caminho": os.path.join(local_appdata, "Microsoft", "Windows", "WER", "ReportArchive"),
+            "raiz_autorizada": os.path.join(local_appdata, "Microsoft", "Windows", "WER", "ReportArchive"),
             "tipo": "diretorio"
         }
         alvos["wer_queue"] = {
             "nome": "Relatórios de erro (Queue)",
             "caminho": os.path.join(local_appdata, "Microsoft", "Windows", "WER", "ReportQueue"),
+            "raiz_autorizada": os.path.join(local_appdata, "Microsoft", "Windows", "WER", "ReportQueue"),
             "tipo": "diretorio"
         }
         alvos["crash_dumps"] = {
             "nome": "Dumps de memória",
             "caminho": os.path.join(local_appdata, "CrashDumps"),
+            "raiz_autorizada": os.path.join(local_appdata, "CrashDumps"),
             "tipo": "diretorio"
         }
         alvos["d3ds_cache"] = {
             "nome": "DirectX Shader Cache",
             "caminho": os.path.join(local_appdata, "D3DSCache"),
+            "raiz_autorizada": os.path.join(local_appdata, "D3DSCache"),
             "tipo": "diretorio"
         }
         alvos["thumbcache"] = {
             "nome": "Cache de miniaturas",
             "caminho": os.path.join(local_appdata, "Microsoft", "Windows", "Explorer"),
+            "raiz_autorizada": os.path.join(local_appdata, "Microsoft", "Windows", "Explorer"),
             "tipo": "glob",
             "padrao": "thumbcache_*.db"
         }
@@ -86,6 +94,7 @@ def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
                 alvos[f"cache_{browser.lower()}"] = {
                     "nome": f"Cache do {browser}",
                     "caminho": base_dir,
+                    "raiz_autorizada": base_dir,
                     "tipo": "chromium_cache"
                 }
 
@@ -95,6 +104,7 @@ def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
             alvos["cache_firefox"] = {
                 "nome": "Cache do Firefox",
                 "caminho": firefox_dir,
+                "raiz_autorizada": firefox_dir,
                 "tipo": "firefox_cache"
             }
             
@@ -123,21 +133,44 @@ def _limpar_lixeira(cancel_event) -> dict:
         return {"removidos": 1, "ignorados": 0, "bytes": 0}
     return {"removidos": 0, "ignorados": 1, "bytes": 0}
 
-def _remover_arquivo(filepath: Path, raiz_autorizada: str) -> dict:
+def _remover_arquivo(filepath: Path, raiz_autorizada: str, cancel_event) -> dict:
+    from modules.core.exceptions import JobCancelledError
     try:
+        if cancel_event and cancel_event.is_set():
+            raise JobCancelledError()
+            
         if not is_safe_path(str(filepath), raiz_autorizada):
             return {"removidos": 0, "ignorados": 1, "bytes": 0}
             
-        if filepath.is_symlink() or filepath.is_junction() or _is_reparse_point(filepath):
+        st1 = os.lstat(str(filepath))
+        if stat.S_ISLNK(st1.st_mode) or _is_reparse_point(filepath, st1):
             return {"removidos": 0, "ignorados": 1, "bytes": 0}
             
-        tamanho = os.lstat(str(filepath)).st_size
+        tamanho = st1.st_size
         
+        if cancel_event and cancel_event.is_set():
+            raise JobCancelledError()
+            
+        st2 = os.lstat(str(filepath))
+        if (st1.st_ino != st2.st_ino or 
+            st1.st_dev != st2.st_dev or 
+            st1.st_size != st2.st_size or 
+            st1.st_mode != st2.st_mode):
+            return {"removidos": 0, "ignorados": 1, "bytes": 0}
+            
+        if stat.S_ISLNK(st2.st_mode) or _is_reparse_point(filepath, st2):
+            return {"removidos": 0, "ignorados": 1, "bytes": 0}
+            
         if not is_safe_path(str(filepath), raiz_autorizada):
             return {"removidos": 0, "ignorados": 1, "bytes": 0}
+            
+        if cancel_event and cancel_event.is_set():
+            raise JobCancelledError()
             
         filepath.unlink()
         return {"removidos": 1, "ignorados": 0, "bytes": tamanho}
+    except JobCancelledError:
+        raise
     except Exception:
         return {"removidos": 0, "ignorados": 1, "bytes": 0}
 
@@ -146,7 +179,7 @@ def _remover_diretorio_recursivo(dirpath: Path, raiz_autorizada: str, cancel_eve
     if cancel_event and cancel_event.is_set():
         raise JobCancelledError()
         
-    total = {"removidos": 0, "ignorados": 0, "bytes": 0}
+    total = {"removidos": 0, "ignorados": 0, "bytes": 0, "erros": []}
     
     try:
         if not dirpath.exists() or dirpath.is_symlink() or dirpath.is_junction() or _is_reparse_point(dirpath):
@@ -161,21 +194,28 @@ def _remover_diretorio_recursivo(dirpath: Path, raiz_autorizada: str, cancel_eve
                 
             try:
                 if not is_safe_path(str(item), raiz_autorizada):
+                    total["ignorados"] += 1
+                    total["erros"].append(f"Caminho inseguro: {item}")
                     continue
                     
                 if item.is_junction() or item.is_symlink() or _is_reparse_point(item):
+                    total["ignorados"] += 1
+                    total["erros"].append(f"Link ou reparse point ignorado: {item}")
                     continue
                     
                 if item.is_file():
-                    res = _remover_arquivo(item, raiz_autorizada)
+                    res = _remover_arquivo(item, raiz_autorizada, cancel_event)
                     total["removidos"] += res["removidos"]
                     total["ignorados"] += res["ignorados"]
                     total["bytes"] += res["bytes"]
+                    if res["ignorados"] > 0:
+                        total["erros"].append(f"Não removido: {item}")
                 elif item.is_dir():
                     res = _remover_diretorio_recursivo(item, raiz_autorizada, cancel_event)
-                    total["removidos"] += res["removidos"]
-                    total["ignorados"] += res["ignorados"]
-                    total["bytes"] += res["bytes"]
+                    total["removidos"] += res.get("removidos", 0)
+                    total["ignorados"] += res.get("ignorados", 0)
+                    total["bytes"] += res.get("bytes", 0)
+                    total["erros"].extend(res.get("erros", []))
                     
                     try:
                         if is_safe_path(str(item), raiz_autorizada):
@@ -184,19 +224,21 @@ def _remover_diretorio_recursivo(dirpath: Path, raiz_autorizada: str, cancel_eve
                         pass
             except JobCancelledError:
                 raise
-            except Exception:
+            except Exception as e:
                 total["ignorados"] += 1
+                total["erros"].append(f"Erro em {item}: {str(e)}")
     except JobCancelledError:
         raise
-    except Exception:
-        pass
+    except Exception as e:
+        total["ignorados"] += 1
+        total["erros"].append(f"Falha de acesso em {dirpath}: {str(e)}")
             
     return total
 
 def _processar_alvo(alvo_id, info, cancel_event) -> dict:
     from modules.core.exceptions import JobCancelledError
     
-    total = {"removidos": 0, "ignorados": 0, "bytes": 0}
+    total = {"removidos": 0, "ignorados": 0, "bytes": 0, "erros": []}
     
     if cancel_event and cancel_event.is_set():
         raise JobCancelledError()
@@ -211,47 +253,73 @@ def _processar_alvo(alvo_id, info, cancel_event) -> dict:
         
     caminho_base = info["caminho"]
     
+    if "raiz_autorizada" not in info:
+        return total
+        
+    raiz_autorizada = info["raiz_autorizada"]
+    
     if tipo == "diretorio":
-        res = _remover_diretorio_recursivo(Path(caminho_base), caminho_base, cancel_event)
-        total["removidos"] += res["removidos"]
-        total["ignorados"] += res["ignorados"]
-        total["bytes"] += res["bytes"]
+        res = _remover_diretorio_recursivo(Path(caminho_base), raiz_autorizada, cancel_event)
+        total["removidos"] += res.get("removidos", 0)
+        total["ignorados"] += res.get("ignorados", 0)
+        total["bytes"] += res.get("bytes", 0)
+        total["erros"].extend(res.get("erros", []))
         
     elif tipo == "glob":
-        if not is_safe_path(caminho_base, caminho_base):
+        if "raiz_autorizada" not in info or not is_safe_path(caminho_base, info["raiz_autorizada"]):
             return total
-        for filepath in Path(caminho_base).glob(info["padrao"]):
-            if cancel_event and cancel_event.is_set():
-                raise JobCancelledError()
-            if filepath.is_file() and not filepath.is_symlink() and not filepath.is_junction() and not _is_reparse_point(filepath):
-                res = _remover_arquivo(filepath, caminho_base)
-                total["removidos"] += res["removidos"]
-                total["ignorados"] += res["ignorados"]
-                total["bytes"] += res["bytes"]
-                
-    elif tipo == "chromium_cache":
-        for perfil in Path(caminho_base).iterdir():
-            if not perfil.is_dir() or perfil.is_symlink() or perfil.is_junction():
-                continue
-            subpastas = ["Cache", "Code Cache", "GPUCache", "GrShaderCache", "DawnCache"]
-            for sub in subpastas:
-                sub_path = perfil / sub
-                if sub_path.exists() and sub_path.is_dir() and not sub_path.is_symlink() and not sub_path.is_junction():
-                    res = _remover_diretorio_recursivo(sub_path, str(sub_path), cancel_event)
+            
+        try:
+            for filepath in Path(caminho_base).glob(info["padrao"]):
+                if cancel_event and cancel_event.is_set():
+                    raise JobCancelledError()
+                    
+                if filepath.is_file() and not filepath.is_symlink() and not filepath.is_junction() and not _is_reparse_point(filepath):
+                    res = _remover_arquivo(filepath, info["raiz_autorizada"], cancel_event)
                     total["removidos"] += res["removidos"]
                     total["ignorados"] += res["ignorados"]
                     total["bytes"] += res["bytes"]
-                    
+                    if res["ignorados"] > 0:
+                        total["erros"].append(f"Não removido: {filepath}")
+        except JobCancelledError:
+            raise
+        except Exception as e:
+            total["ignorados"] += 1
+            total["erros"].append(f"Erro no glob: {str(e)}")
+                
+    elif tipo == "chromium_cache":
+        try:
+            for perfil in Path(caminho_base).iterdir():
+                if not perfil.is_dir() or perfil.is_symlink() or perfil.is_junction():
+                    continue
+                subpastas = ["Cache", "Code Cache", "GPUCache", "GrShaderCache", "DawnCache"]
+                for sub in subpastas:
+                    sub_path = perfil / sub
+                    if sub_path.exists() and sub_path.is_dir() and not sub_path.is_symlink() and not sub_path.is_junction():
+                        res = _remover_diretorio_recursivo(sub_path, raiz_autorizada, cancel_event)
+                        total["removidos"] += res.get("removidos", 0)
+                        total["ignorados"] += res.get("ignorados", 0)
+                        total["bytes"] += res.get("bytes", 0)
+                        total["erros"].extend(res.get("erros", []))
+        except Exception as e:
+            total["ignorados"] += 1
+            total["erros"].append(f"Erro na iteração Chromium: {str(e)}")
+                        
     elif tipo == "firefox_cache":
-        for perfil in Path(caminho_base).iterdir():
-            if not perfil.is_dir() or perfil.is_symlink() or perfil.is_junction():
-                continue
-            sub_path = perfil / "cache2"
-            if sub_path.exists() and sub_path.is_dir() and not sub_path.is_symlink() and not sub_path.is_junction():
-                res = _remover_diretorio_recursivo(sub_path, str(sub_path), cancel_event)
-                total["removidos"] += res["removidos"]
-                total["ignorados"] += res["ignorados"]
-                total["bytes"] += res["bytes"]
+        try:
+            for perfil in Path(caminho_base).iterdir():
+                if not perfil.is_dir() or perfil.is_symlink() or perfil.is_junction():
+                    continue
+                sub_path = perfil / "cache2"
+                if sub_path.exists() and sub_path.is_dir() and not sub_path.is_symlink() and not sub_path.is_junction():
+                    res = _remover_diretorio_recursivo(sub_path, raiz_autorizada, cancel_event)
+                    total["removidos"] += res.get("removidos", 0)
+                    total["ignorados"] += res.get("ignorados", 0)
+                    total["bytes"] += res.get("bytes", 0)
+                    total["erros"].extend(res.get("erros", []))
+        except Exception as e:
+            total["ignorados"] += 1
+            total["erros"].append(f"Erro na iteração Firefox: {str(e)}")
 
     return total
 
@@ -261,6 +329,9 @@ def executar_limpeza(progress_callback=None, cancel_event=None, incluir_lixeira=
     from modules.core.exceptions import JobCancelledError
     
     if injetar_alvos is not None:
+        for k, v in injetar_alvos.items():
+            if v.get("tipo") != "lixeira" and "raiz_autorizada" not in v:
+                raise ValueError(f"Alvo injetado '{k}' sem raiz_autorizada")
         alvos = injetar_alvos
     else:
         alvos = _obter_alvos_limpeza(incluir_lixeira=incluir_lixeira)
@@ -309,17 +380,20 @@ def executar_limpeza(progress_callback=None, cancel_event=None, incluir_lixeira=
         
         try:
             stats = _processar_alvo(cat_id, info, cancel_event)
-            cat_result["arquivos_removidos"] = stats["removidos"]
-            cat_result["arquivos_ignorados"] = stats["ignorados"]
-            cat_result["espaco_liberado_bytes"] = stats["bytes"]
+            cat_result["arquivos_removidos"] = stats.get("removidos", 0)
+            cat_result["arquivos_ignorados"] = stats.get("ignorados", 0)
+            cat_result["espaco_liberado_bytes"] = stats.get("bytes", 0)
             
-            resultado["arquivos_removidos"] += stats["removidos"]
-            resultado["arquivos_ignorados"] += stats["ignorados"]
-            resultado["espaco_liberado_bytes"] += stats["bytes"]
+            resultado["arquivos_removidos"] += stats.get("removidos", 0)
+            resultado["arquivos_ignorados"] += stats.get("ignorados", 0)
+            resultado["espaco_liberado_bytes"] += stats.get("bytes", 0)
             
-            if stats["ignorados"] > 0:
+            if stats.get("ignorados", 0) > 0:
                 cat_result["status"] = "parcial"
                 resultado["parcial"] = True
+                erros = stats.get("erros", [])
+                if erros:
+                    resultado["avisos"].append(f"Erros em {info['nome']}: {'; '.join(erros[:5])}")
             else:
                 cat_result["status"] = "concluido"
                 
