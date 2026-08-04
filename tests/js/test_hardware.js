@@ -1,4 +1,4 @@
-const assert = require('assert');
+﻿const assert = require('assert');
 
 // Mock DOM
 const domElements = {};
@@ -102,6 +102,7 @@ global.window.Phoenix.pages = {
 global.Phoenix = global.window.Phoenix;
 
 // Carregar feedback real
+require('../../gui/js/ui/icons.js');
 require('../../gui/js/ui/feedback.js');
 
 // Carregar hardware real
@@ -141,47 +142,47 @@ async function runTests() {
     resetMocks();
     _jobResultMock = { ok: true, hardware: { status: "completo" } };
     await btn.onclick();
-    assert.ok(!global.inicioLoaded, "NÃO deve chamar inicio.load no sucesso");
+    assert.ok(!global.inicioLoaded, "NÃƒO deve chamar inicio.load no sucesso");
     assert.ok(global.visualEffectsRefreshed, "Deve atualizar efeitos no sucesso");
-    assert.ok(!btn.disabled, "Botão deve ser reabilitado");
+    assert.ok(!btn.disabled, "BotÃ£o deve ser reabilitado");
     assert.ok(sucessoFoiMostrado(), "Deve mostrar overlay de sucesso");
 
     // 2. Fluxo de Sucesso Parcial
     resetMocks();
     _jobResultMock = { ok: true, hardware: { status: "parcial" } };
     await btn.onclick();
-    assert.ok(!global.inicioLoaded, "Não deve chamar inicio.load no hardware.js");
+    assert.ok(!global.inicioLoaded, "NÃ£o deve chamar inicio.load no hardware.js");
     assert.ok(sucessoFoiMostrado(), "Deve mostrar overlay de sucesso"); // The finally block does esconderOverlay(true, true)
 
     // 3. Resposta sem job_id
     resetMocks();
     _forcarRescanMock = { return: { } }; // missing job_id
     await btn.onclick();
-    assert.ok(!global.inicioLoaded, "Não deve carregar inicio se não houve job");
+    assert.ok(!global.inicioLoaded, "NÃ£o deve carregar inicio se nÃ£o houve job");
     assert.ok(erroFoiMostrado(), "Deve mostrar erro");
 
-    // 4. Exceção da bridge
+    // 4. ExceÃ§Ã£o da bridge
     resetMocks();
     _forcarRescanMock = { throw: "Timeout da bridge" };
     await btn.onclick();
-    assert.ok(!global.inicioLoaded, "Não deve carregar inicio");
+    assert.ok(!global.inicioLoaded, "NÃ£o deve carregar inicio");
     assert.ok(erroFoiMostrado(), "Deve mostrar erro interno");
-    assert.ok(!btn.disabled, "Botão deve continuar usável");
+    assert.ok(!btn.disabled, "BotÃ£o deve continuar usÃ¡vel");
 
     // 5. jobResult null
     resetMocks();
     _jobResultMock = null;
     await btn.onclick();
-    assert.ok(!global.inicioLoaded, "Não deve carregar inicio");
+    assert.ok(!global.inicioLoaded, "NÃ£o deve carregar inicio");
     assert.ok(erroFoiMostrado(), "Deve mostrar erro de falha");
 
     // 6. jobResult ok:false
     resetMocks();
     _jobResultMock = { ok: false, erro: "Ocorreu X" };
     await btn.onclick();
-    assert.ok(!global.inicioLoaded, "Não deve recarregar página em caso de erro da job");
+    assert.ok(!global.inicioLoaded, "NÃ£o deve recarregar pÃ¡gina em caso de erro da job");
     assert.ok(erroFoiMostrado(), "Deve exibir msgErro no feedback");
-    assert.ok(!btn.disabled, "Botão deve estar habilitado novamente");
+    assert.ok(!btn.disabled, "BotÃ£o deve estar habilitado novamente");
 
     console.log("Testes do hardware.js passaram com sucesso.");
 }
