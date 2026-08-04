@@ -3,28 +3,41 @@ import shutil
 import glob
 from pathlib import Path
 
+import stat
+
 def bytes_to_mb(valor: int) -> float:
     return round(valor / (1024 ** 2), 2)
 
 def is_safe_path(caminho: str, raiz_autorizada: str) -> bool:
     """Verifica se o caminho final esta dentro da raiz autorizada, sem symlinks escapando."""
     try:
-        real_path = os.path.realpath(caminho)
-        real_root = os.path.realpath(raiz_autorizada)
-        return real_path.startswith(real_root)
+        real_path = os.path.normcase(os.path.normpath(os.path.realpath(caminho)))
+        real_root = os.path.normcase(os.path.normpath(os.path.realpath(raiz_autorizada)))
+        return os.path.commonpath([real_path, real_root]) == real_root
+    except ValueError:
+        return False
     except Exception:
         return False
 
+def _is_reparse_point(filepath: Path) -> bool:
+    try:
+        st = os.lstat(str(filepath))
+        return bool(st.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except AttributeError:
+        return filepath.is_symlink() or filepath.is_junction()
+    except Exception:
+        return True
+
+
 def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
     local_appdata = os.environ.get("LOCALAPPDATA", "")
-    temp_dir = os.environ.get("TEMP", "")
     
     alvos = {}
     
-    if temp_dir:
+    if local_appdata:
         alvos["temp_usuario"] = {
             "nome": "Arquivos temporários do usuário",
-            "caminho": temp_dir,
+            "caminho": os.path.join(local_appdata, "Temp"),
             "tipo": "diretorio"
         }
         
@@ -110,54 +123,73 @@ def _limpar_lixeira(cancel_event) -> dict:
         return {"removidos": 1, "ignorados": 0, "bytes": 0}
     return {"removidos": 0, "ignorados": 1, "bytes": 0}
 
-def _remover_arquivo(filepath: Path) -> dict:
+def _remover_arquivo(filepath: Path, raiz_autorizada: str) -> dict:
     try:
-        if filepath.is_symlink():
-            filepath.unlink()
-            return {"removidos": 1, "ignorados": 0, "bytes": 0}
+        if not is_safe_path(str(filepath), raiz_autorizada):
+            return {"removidos": 0, "ignorados": 1, "bytes": 0}
             
-        tamanho = filepath.stat().st_size
+        if filepath.is_symlink() or filepath.is_junction() or _is_reparse_point(filepath):
+            return {"removidos": 0, "ignorados": 1, "bytes": 0}
+            
+        tamanho = os.lstat(str(filepath)).st_size
+        
+        if not is_safe_path(str(filepath), raiz_autorizada):
+            return {"removidos": 0, "ignorados": 1, "bytes": 0}
+            
         filepath.unlink()
         return {"removidos": 1, "ignorados": 0, "bytes": tamanho}
     except Exception:
         return {"removidos": 0, "ignorados": 1, "bytes": 0}
 
 def _remover_diretorio_recursivo(dirpath: Path, raiz_autorizada: str, cancel_event) -> dict:
+    from modules.core.exceptions import JobCancelledError
     if cancel_event and cancel_event.is_set():
-        from modules.core.exceptions import JobCancelledError
         raise JobCancelledError()
         
     total = {"removidos": 0, "ignorados": 0, "bytes": 0}
     
-    if not dirpath.exists() or dirpath.is_symlink() or dirpath.is_junction():
-        return total
-        
-    for item in dirpath.iterdir():
-        if cancel_event and cancel_event.is_set():
-            from modules.core.exceptions import JobCancelledError
-            raise JobCancelledError()
+    try:
+        if not dirpath.exists() or dirpath.is_symlink() or dirpath.is_junction() or _is_reparse_point(dirpath):
+            return total
             
-        try:
-            if item.is_junction() or item.is_symlink():
-                continue
+        if not is_safe_path(str(dirpath), raiz_autorizada):
+            return total
+            
+        for item in dirpath.iterdir():
+            if cancel_event and cancel_event.is_set():
+                raise JobCancelledError()
                 
-            if item.is_file():
-                res = _remover_arquivo(item)
-                total["removidos"] += res["removidos"]
-                total["ignorados"] += res["ignorados"]
-                total["bytes"] += res["bytes"]
-            elif item.is_dir():
-                res = _remover_diretorio_recursivo(item, raiz_autorizada, cancel_event)
-                total["removidos"] += res["removidos"]
-                total["ignorados"] += res["ignorados"]
-                total["bytes"] += res["bytes"]
-                
-                try:
-                    item.rmdir()
-                except Exception:
-                    pass
-        except Exception:
-            total["ignorados"] += 1
+            try:
+                if not is_safe_path(str(item), raiz_autorizada):
+                    continue
+                    
+                if item.is_junction() or item.is_symlink() or _is_reparse_point(item):
+                    continue
+                    
+                if item.is_file():
+                    res = _remover_arquivo(item, raiz_autorizada)
+                    total["removidos"] += res["removidos"]
+                    total["ignorados"] += res["ignorados"]
+                    total["bytes"] += res["bytes"]
+                elif item.is_dir():
+                    res = _remover_diretorio_recursivo(item, raiz_autorizada, cancel_event)
+                    total["removidos"] += res["removidos"]
+                    total["ignorados"] += res["ignorados"]
+                    total["bytes"] += res["bytes"]
+                    
+                    try:
+                        if is_safe_path(str(item), raiz_autorizada):
+                            item.rmdir()
+                    except Exception:
+                        pass
+            except JobCancelledError:
+                raise
+            except Exception:
+                total["ignorados"] += 1
+    except JobCancelledError:
+        raise
+    except Exception:
+        pass
             
     return total
 
@@ -186,11 +218,13 @@ def _processar_alvo(alvo_id, info, cancel_event) -> dict:
         total["bytes"] += res["bytes"]
         
     elif tipo == "glob":
+        if not is_safe_path(caminho_base, caminho_base):
+            return total
         for filepath in Path(caminho_base).glob(info["padrao"]):
             if cancel_event and cancel_event.is_set():
                 raise JobCancelledError()
-            if filepath.is_file() and not filepath.is_symlink():
-                res = _remover_arquivo(filepath)
+            if filepath.is_file() and not filepath.is_symlink() and not filepath.is_junction() and not _is_reparse_point(filepath):
+                res = _remover_arquivo(filepath, caminho_base)
                 total["removidos"] += res["removidos"]
                 total["ignorados"] += res["ignorados"]
                 total["bytes"] += res["bytes"]
