@@ -148,11 +148,11 @@
             icone.appendChild(Phoenix.ui.icons.createSVG(iconName));
         }
         
-        if (titulo) titulo.textContent = sucesso ? (parcial ? 'ConcluÃ­do (Parcial)' : 'ConcluÃ­do!') : 'AtenÃ§Ã£o';
+        if (titulo) titulo.textContent = sucesso ? (parcial ? 'Concluído (Parcial)' : 'Concluído!') : 'Atenção';
         if (status && !sucesso) {
             status.textContent = 'Verifique os resultados';
         } else if (status) {
-            status.textContent = 'OperaÃ§Ã£o finalizada';
+            status.textContent = 'Operação finalizada';
         }
         
         setTimeout(() => {
