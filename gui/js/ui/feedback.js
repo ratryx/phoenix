@@ -3,53 +3,6 @@
 
     var _barraProgresso = null;
 
-        Phoenix.ui.icons = {
-        createSVG: function(name) {
-            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-            svg.setAttribute('viewBox', '0 0 24 24');
-            svg.setAttribute('fill', 'none');
-            svg.setAttribute('stroke', 'currentColor');
-            svg.setAttribute('stroke-width', '2');
-            svg.setAttribute('stroke-linecap', 'round');
-            svg.setAttribute('stroke-linejoin', 'round');
-            svg.setAttribute('width', '24');
-            svg.setAttribute('height', '24');
-
-            if (name === 'processando') {
-                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12'); circle.setAttribute('r', '10');
-                const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-                polyline.setAttribute('points', '12 6 12 12 16 14');
-                svg.appendChild(circle); svg.appendChild(polyline);
-            } else if (name === 'sucesso') {
-                svg.style.color = 'var(--cor-sucesso-texto, #4ade80)';
-                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                path.setAttribute('d', 'M22 11.08V12a10 10 0 1 1-5.93-9.14');
-                const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
-                polyline.setAttribute('points', '22 4 12 14.01 9 11.01');
-                svg.appendChild(path); svg.appendChild(polyline);
-            } else if (name === 'erro') {
-                svg.style.color = 'var(--cor-erro-texto, #f87171)';
-                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12'); circle.setAttribute('r', '10');
-                const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line1.setAttribute('x1', '15'); line1.setAttribute('y1', '9'); line1.setAttribute('x2', '9'); line1.setAttribute('y2', '15');
-                const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line2.setAttribute('x1', '9'); line2.setAttribute('y1', '9'); line2.setAttribute('x2', '15'); line2.setAttribute('y2', '15');
-                svg.appendChild(circle); svg.appendChild(line1); svg.appendChild(line2);
-            } else { // aviso
-                svg.style.color = 'var(--cor-alerta-texto, #facc15)';
-                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                path.setAttribute('d', 'M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z');
-                const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line1.setAttribute('x1', '12'); line1.setAttribute('y1', '9'); line1.setAttribute('x2', '12'); line1.setAttribute('y2', '13');
-                const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-                line2.setAttribute('x1', '12'); line2.setAttribute('y1', '17'); line2.setAttribute('x2', '12.01'); line2.setAttribute('y2', '17');
-                svg.appendChild(path); svg.appendChild(line1); svg.appendChild(line2);
-            }
-            return svg;
-        }
-    };
 
     Phoenix.ui.feedback.mostrarOverlay = function(texto, destrutivo = false) {
         if (!destrutivo) {
@@ -82,7 +35,7 @@
         if (status) status.textContent = 'Iniciando...';
         if (icone) {
             while (icone.firstChild) { icone.removeChild(icone.firstChild); }
-            icone.appendChild(Phoenix.ui.icons.createSVG('processando'));
+            icone.appendChild(Phoenix.ui.icons.create('processando'));
         }
         
         if (barraFill) {
@@ -145,14 +98,14 @@
         let iconName = sucesso ? (parcial ? 'aviso' : 'sucesso') : 'erro';
         if (icone) {
             while (icone.firstChild) { icone.removeChild(icone.firstChild); }
-            icone.appendChild(Phoenix.ui.icons.createSVG(iconName));
+            icone.appendChild(Phoenix.ui.icons.create(iconName));
         }
         
-        if (titulo) titulo.textContent = sucesso ? (parcial ? 'Concluído (Parcial)' : 'Concluído!') : 'Atenção';
+        if (titulo) titulo.textContent = sucesso ? (parcial ? 'ConcluÃ­do (Parcial)' : 'ConcluÃ­do!') : 'AtenÃ§Ã£o';
         if (status && !sucesso) {
             status.textContent = 'Verifique os resultados';
         } else if (status) {
-            status.textContent = 'Operação finalizada';
+            status.textContent = 'OperaÃ§Ã£o finalizada';
         }
         
         setTimeout(() => {
@@ -179,7 +132,7 @@
             if (mensagemEl) mensagemEl.textContent = mensagem;
             if (iconeEl) {
                 while (iconeEl.firstChild) { iconeEl.removeChild(iconeEl.firstChild); }
-                iconeEl.appendChild(Phoenix.ui.icons.createSVG(iconeName));
+                iconeEl.appendChild(Phoenix.ui.icons.create(iconeName));
             }
             
             modal.classList.add('visivel');
