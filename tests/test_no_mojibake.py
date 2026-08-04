@@ -1,29 +1,32 @@
-﻿import os
+import os
 import re
-import pytest
 
 def test_no_mojibake_in_source_code():
     mojibake_patterns = [
-        r'Ã[^O\n\r]', # Ã not followed by O
-        r'Â',
-        r'â€',
-        r'\uFFFD'
+        '\u00C3[^O\n\r]',
+        '\u00C2',
+        '\u00E2\u20AC',
+        '\uFFFD'
     ]
+
     failures = []
-    for root, _, files in os.walk('.'):
-        if any(ignored in root for ignored in ['.git', '__pycache__', 'node_modules', '.venv', '.pytest_cache']):
-            continue
+    ignored_exts = ('.exe', '.dll', '.png', '.jpg', '.jpeg', '.gif', '.ico', '.pyc', '.pyd', '.zip', '.db', '.pdf', '.ttf', '.woff', '.woff2', '.bin', '.dat', '.mp3', '.mp4', '.sqlite', '.log', '.pkg')
+    ignored_dirs = ['.git', '__pycache__', 'node_modules', '.venv', '.pytest_cache', 'build', 'dist', 'dados']
+
+    for root, dirs, files in os.walk('.'):
+        dirs[:] = [d for d in dirs if d not in ignored_dirs]
         for file in files:
-            if file.endswith(('.py', '.js', '.md', '.html', '.json', '.txt')):
-                filepath = os.path.join(root, file)
-                if 'test_no_mojibake.py' in filepath or 'fix_mojibake.py' in filepath:
-                    continue
-                try:
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                        for p in mojibake_patterns:
-                            if re.search(p, content):
-                                failures.append(f'{filepath} contains mojibake matching: {p}')
-                except Exception:
-                    pass
+            if file.endswith(ignored_exts):
+                continue
+
+            filepath = os.path.join(root, file)
+            if 'test_no_mojibake.py' in filepath or 'fix_mojibake.py' in filepath:
+                continue
+
+            with open(filepath, 'r', encoding='utf-8') as f:
+                content = f.read()
+                for p in mojibake_patterns:
+                    if re.search(p, content):
+                        failures.append(f'{filepath} contains mojibake matching: {p}')
+
     assert not failures, "Mojibake found:\\n" + "\\n".join(failures)
