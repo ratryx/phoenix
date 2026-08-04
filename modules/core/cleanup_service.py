@@ -59,61 +59,95 @@ def _enumerar_seguro(caminho: str, raiz_autorizada: str, cancel_event, is_root=T
 
 def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
     local_appdata = os.environ.get("LOCALAPPDATA", "")
-    temp_dir = os.environ.get("TEMP", "")
-    windir = os.environ.get("WINDIR", "C:\\Windows")
-    
-    alvos = {
-        "user_temp": {
-            "tipo": "diretorio",
+    alvos = {}
+
+    if local_appdata:
+        temp_user = os.path.join(local_appdata, "Temp")
+        alvos["temp_usuario"] = {
             "nome": "Arquivos temporários do usuário",
-            "caminho": temp_dir,
-            "raiz_autorizada": temp_dir
-        },
-        "windows_temp": {
-            "tipo": "diretorio",
-            "nome": "Arquivos temporários do Windows",
-            "caminho": os.path.join(windir, "Temp"),
-            "raiz_autorizada": os.path.join(windir, "Temp")
-        },
-        "wer_archive": {
-            "tipo": "diretorio",
-            "nome": "Relatórios de erro (Archive)",
-            "caminho": os.path.join(windir, "LiveKernelReports"),
-            "raiz_autorizada": os.path.join(windir, "LiveKernelReports")
-        },
-        "wer_queue": {
-            "tipo": "diretorio",
-            "nome": "Relatórios de erro (Queue)",
-            "caminho": os.path.join(windir, "Minidump"),
-            "raiz_autorizada": os.path.join(windir, "Minidump")
-        },
-        "memory_dumps": {
-            "tipo": "glob",
-            "nome": "Dumps de memória",
-            "caminho": windir,
-            "padrao": "*.dmp",
-            "raiz_autorizada": windir
-        },
-        "chromium_cache": {
-            "tipo": "chromium_cache",
-            "nome": "Cache de navegadores Chromium",
-            "caminho": local_appdata,
-            "raiz_autorizada": local_appdata
-        },
-        "firefox_cache": {
-            "tipo": "firefox_cache",
-            "nome": "Cache do Firefox",
-            "caminho": local_appdata,
-            "raiz_autorizada": local_appdata
+            "caminho": temp_user,
+            "raiz_autorizada": temp_user,
+            "tipo": "diretorio"
         }
+
+    alvos["temp_windows"] = {
+        "nome": "Arquivos temporários do Windows",
+        "caminho": r"C:\Windows\Temp",
+        "raiz_autorizada": r"C:\Windows\Temp",
+        "tipo": "diretorio"
     }
-    
+
+    if local_appdata:
+        wer_archive = os.path.join(local_appdata, "Microsoft", "Windows", "WER", "ReportArchive")
+        alvos["wer_archive"] = {
+            "nome": "Relatórios de erro (Archive)",
+            "caminho": wer_archive,
+            "raiz_autorizada": wer_archive,
+            "tipo": "diretorio"
+        }
+
+        wer_queue = os.path.join(local_appdata, "Microsoft", "Windows", "WER", "ReportQueue")
+        alvos["wer_queue"] = {
+            "nome": "Relatórios de erro (Queue)",
+            "caminho": wer_queue,
+            "raiz_autorizada": wer_queue,
+            "tipo": "diretorio"
+        }
+
+        crash_dumps = os.path.join(local_appdata, "CrashDumps")
+        alvos["crash_dumps"] = {
+            "nome": "Dumps de memória",
+            "caminho": crash_dumps,
+            "raiz_autorizada": crash_dumps,
+            "tipo": "diretorio"
+        }
+
+        d3ds_cache = os.path.join(local_appdata, "D3DSCache")
+        alvos["d3ds_cache"] = {
+            "nome": "DirectX Shader Cache",
+            "caminho": d3ds_cache,
+            "raiz_autorizada": d3ds_cache,
+            "tipo": "diretorio"
+        }
+
+        explorer = os.path.join(local_appdata, "Microsoft", "Windows", "Explorer")
+        alvos["thumbcache"] = {
+            "nome": "Cache de miniaturas",
+            "caminho": explorer,
+            "raiz_autorizada": explorer,
+            "tipo": "glob",
+            "padrao": "thumbcache_*.db"
+        }
+
+        for browser, path_part in [
+            ("Chrome", r"Google\Chrome\User Data"),
+            ("Edge", r"Microsoft\Edge\User Data"),
+            ("Brave", r"BraveSoftware\Brave-Browser\User Data")
+        ]:
+            base_dir = os.path.join(local_appdata, path_part)
+            if os.path.isdir(base_dir):
+                alvos[f"cache_{browser.lower()}"] = {
+                    "nome": f"Cache do {browser}",
+                    "caminho": base_dir,
+                    "raiz_autorizada": base_dir,
+                    "tipo": "chromium_cache"
+                }
+
+        firefox_dir = os.path.join(local_appdata, "Mozilla", "Firefox", "Profiles")
+        if os.path.isdir(firefox_dir):
+            alvos["cache_firefox"] = {
+                "nome": "Cache do Firefox",
+                "caminho": firefox_dir,
+                "raiz_autorizada": firefox_dir,
+                "tipo": "firefox_cache"
+            }
+
     if incluir_lixeira:
         alvos["lixeira"] = {
             "tipo": "lixeira",
             "nome": "Lixeira do Sistema"
         }
-        
+
     return alvos
 
 def _contar_alvo(info, cancel_event) -> int:
