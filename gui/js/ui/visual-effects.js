@@ -28,14 +28,14 @@
     function limparParticulas() {
         var camada = document.getElementById("camada-particulas");
         if (camada) {
-            camada.innerHTML = "";
+            while (camada.firstChild) { camada.removeChild(camada.firstChild); }
         }
     }
 
     function gerarParticulas() {
         var camada = document.getElementById("camada-particulas");
         if (!camada) return;
-        camada.innerHTML = "";
+        while (camada.firstChild) { camada.removeChild(camada.firstChild); }
 
         var quantidade = 14;
         for (var i = 0; i < quantidade; i++) {

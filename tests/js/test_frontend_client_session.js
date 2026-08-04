@@ -18,6 +18,11 @@ function setupEnvironment() {
                     style: {},
                     className: '',
                     children: [],
+              removeChild: function(c) { if (!this.children) return;
+                const i = this.children.indexOf(c);
+                if (i !== -1) this.children.splice(i, 1);
+              },
+              get firstChild() { return (this.children && this.children.length > 0) ? this.children[0] : null; },
                     appendChild: function(child) { this.children.push(child); },
                     addEventListener: function(evt, cb) { 
                         this.listeners = this.listeners || {};
@@ -83,6 +88,11 @@ function setupEnvironment() {
         listaClientes: { 
             innerHTML: '', 
             children: [],
+              removeChild: function(c) { if (!this.children) return;
+                const i = this.children.indexOf(c);
+                if (i !== -1) this.children.splice(i, 1);
+              },
+              get firstChild() { return (this.children && this.children.length > 0) ? this.children[0] : null; },
             appendChild: function(child) { this.children.push(child); }
         },
         inputNovo: { 

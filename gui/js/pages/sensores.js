@@ -30,7 +30,7 @@
         var container = document.getElementById('pagina-hwmonitor');
         if (!container) return;
 
-        container.innerHTML = '';
+        while (container.firstChild) { container.removeChild(container.firstChild); }
         _gpusRenderizadas = [];
 
         const header = createEl('div', 'cabecalho-pagina');
@@ -248,7 +248,7 @@
                     // Update instead of clear if counts match
                     const existingCount = nucleosEl.children.length;
                     if (existingCount !== res.cpu.uso_por_nucleo.length) {
-                        nucleosEl.innerHTML = '';
+                        while (nucleosEl.firstChild) { nucleosEl.removeChild(nucleosEl.firstChild); }
                         res.cpu.uso_por_nucleo.forEach((_, i) => {
                             const nd = createEl('div');
                             nd.style.textAlign = 'center';
@@ -345,7 +345,7 @@
 
                 if (incomingIds !== currentIds) {
                     // Rebuild
-                    gpusContainer.innerHTML = '';
+                    while (gpusContainer.firstChild) { gpusContainer.removeChild(gpusContainer.firstChild); }
                     _gpusRenderizadas = gpusToProcess.map((g, i) => String(safeVal(g.id, "gpu_"+i)));
 
                     if (gpusToProcess.length === 0) {

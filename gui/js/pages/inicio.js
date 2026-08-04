@@ -128,7 +128,7 @@
         var cards = document.getElementById("cards-resumo-inicio");
         if (!cards) return;
 
-        cards.innerHTML = '';
+        while (cards.firstChild) { cards.removeChild(cards.firstChild); }
 
         // 1. CPU
         const cpuCard = buildCard('cpu', 'CPU', '--', '%', 0);
@@ -273,7 +273,7 @@
         var container = card.querySelector('.gpu-metrics-container');
         if (!container) return;
 
-        container.innerHTML = '';
+        while (container.firstChild) { container.removeChild(container.firstChild); }
 
         let usoRaw = gpu.uso_percentual;
         let usoTxt = "N/A";

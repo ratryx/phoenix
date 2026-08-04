@@ -7,6 +7,8 @@ const vm = require('vm');
 const window = {
     addEventListener: () => {},
     removeEventListener: () => {},
+                appendChild: () => {},
+                removeChild: () => {},
     location: { hash: '' }
 };
 global.window = window;
@@ -29,7 +31,9 @@ const document = {
                 style: { width: '', opacity: '' },
                 textContent: '',
                 addEventListener: () => {},
-                removeEventListener: () => {}
+                removeEventListener: () => {},
+                appendChild: () => {},
+                removeChild: () => {}
             };
         }
         return elements[id];
@@ -39,7 +43,8 @@ const document = {
     },
     querySelector: () => {
         return { classList };
-    }
+    },
+    createElementNS: (ns, tag) => { return { setAttribute: () => {}, appendChild: () => {}, removeChild: () => {}, style: {} }; }
 };
 global.document = document;
 global.setTimeout = setTimeout;

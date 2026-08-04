@@ -45,7 +45,7 @@
         const container = document.getElementById("resultado-otimizacao");
         if (!container) return;
 
-        container.innerHTML = '';
+        while (container.firstChild) { container.removeChild(container.firstChild); }
         const div = document.createElement("div");
         div.className = "card";
         const span = document.createElement("span");

@@ -14,7 +14,7 @@
         const lista = document.getElementById('lista-clientes-portable');
         
         if (!lista) return;
-        lista.innerHTML = '';
+        while (lista.firstChild) { lista.removeChild(lista.firstChild); }
         
         if (res.clientes && res.clientes.length > 0) {
             const title = document.createElement('div');

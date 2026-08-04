@@ -26,7 +26,11 @@ function fakeClearInterval(id) {
 const windowObj = {
     location: { hash: '' },
     addEventListener: () => {},
+                appendChild: () => {},
+                removeChild: () => {},
     removeEventListener: () => {},
+                appendChild: () => {},
+                removeChild: () => {},
     setInterval: fakeSetInterval,
     clearInterval: fakeClearInterval
 };

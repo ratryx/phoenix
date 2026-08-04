@@ -22,11 +22,11 @@ class FakeLimpeza:
     def __init__(self, fail_on=None):
         self.fail_on = fail_on
         self.calls = 0
-    def executar_limpeza_completa(self, id_atendimento):
+    def executar_limpeza(self, progress_callback=None, cancel_event=None, incluir_lixeira=False):
         self.calls += 1
         if self.fail_on == "cleanup":
             raise RuntimeError("Sensitive failure cleanup C:\\Users\\Client\\secret.txt")
-        return 1024 * 1024 * 500  # 500 MB
+        return {"espaco_liberado_mb": 500.0, "arquivos_removidos": 100, "arquivos_ignorados": 0}
 
 class FakeOtimizacao:
     def __init__(self, fail_on=None):
@@ -56,7 +56,7 @@ class FakeLogs:
         if id_atendimento not in self.snapshots:
             self.snapshots[id_atendimento] = {}
         self.snapshots[id_atendimento][etapa] = dados
-    def registrar_acao(self, id_atendimento, acao, nome_cliente=""):
+    def registrar_acao(self, id_atendimento, acao, detalhe="", nome_cliente=""):
         self.acoes.append((id_atendimento, acao))
     def obter_pasta_logs(self):
         import pathlib
@@ -85,7 +85,7 @@ def test_routine_service_sucesso():
 
     service = RoutineService(
         diagnostico_module=f_diag,
-        limpeza_module=f_limp,
+        cleanup_service_module=f_limp,
         otimizacao_module=f_otim,
         logs_module=f_logs,
         relatorio_module=f_rel
@@ -98,10 +98,11 @@ def test_routine_service_sucesso():
     assert res["espaco_liberado_mb"] == 500.0
     assert "123_relatorio.txt" in res["relatorio_txt"]
 
-    assert len(f_logs.acoes) == 3 # 2 diags + 1 conclusão
+    assert len(f_logs.acoes) == 4 # 2 diags + 1 limpeza + 1 conclusão
     assert f_logs.acoes[0] == ("123", "Diagnóstico inicial coletado")
-    assert f_logs.acoes[1] == ("123", "Diagnóstico final coletado")
-    assert f_logs.acoes[2] == ("123", "Rotina concluída com sucesso")
+    assert f_logs.acoes[1] == ("123", "Limpeza executada")
+    assert f_logs.acoes[2] == ("123", "Diagnóstico final coletado")
+    assert f_logs.acoes[3] == ("123", "Rotina concluída com sucesso")
 
 
 def test_routine_service_validacao_id():

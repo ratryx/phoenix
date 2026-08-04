@@ -13,7 +13,7 @@ class RoutineService:
     def __init__(
         self,
         diagnostico_module=None,
-        limpeza_module=None,
+        cleanup_service_module=None,
         otimizacao_module=None,
         logs_module=None,
         relatorio_module=None,
@@ -22,9 +22,9 @@ class RoutineService:
         if diagnostico_module is None:
             from modules import diagnostico
             diagnostico_module = diagnostico
-        if limpeza_module is None:
-            from modules import limpeza
-            limpeza_module = limpeza
+        if cleanup_service_module is None:
+            from modules.core import cleanup_service
+            cleanup_service_module = cleanup_service
         if otimizacao_module is None:
             from modules import otimizacao
             otimizacao_module = otimizacao
@@ -36,7 +36,7 @@ class RoutineService:
             relatorio_module = relatorio
 
         self._diagnostico = diagnostico_module
-        self._limpeza = limpeza_module
+        self._limpeza = cleanup_service_module
         self._otimizacao = otimizacao_module
         self._logs = logs_module
         self._relatorio = relatorio_module
@@ -75,7 +75,21 @@ class RoutineService:
             if job_context: job_context.update_progress(30, "Executando limpeza completa...")
 
             # 2. Limpeza
-            espaco_liberado = self._limpeza.executar_limpeza_completa(id_atendimento)
+            def cleanup_progress(mensagem, progresso, detalhes):
+                if job_context:
+                    job_context.update_progress(
+                        30 + int(progresso * 0.3),  # Limpeza ocupa de 30% a 60%
+                        mensagem,
+                        details=detalhes
+                    )
+                    
+            limpeza_resultado = self._limpeza.executar_limpeza(
+                progress_callback=cleanup_progress,
+                cancel_event=job_context.cancel_event if job_context else None,
+                incluir_lixeira=False
+            )
+            espaco_liberado_mb = limpeza_resultado.get("espaco_liberado_mb", 0.0)
+            self._logs.registrar_acao(id_atendimento, "Limpeza executada", f"{espaco_liberado_mb} MB liberados", nome_cliente=nome_cliente)
 
             # Checkpoint 4: after cleanup
             check_cancel()
@@ -120,8 +134,6 @@ class RoutineService:
             check_cancel()
             if job_context: job_context.update_progress(90, "Gerando relatório final...")
 
-            # 5. Exportação de Relatório
-            espaco_liberado_mb = round(espaco_liberado / (1024 ** 2), 2)
             pasta_logs = self._logs.obter_pasta_logs()
             caminho_txt = pasta_logs / f"{id_atendimento}_relatorio.txt"
 

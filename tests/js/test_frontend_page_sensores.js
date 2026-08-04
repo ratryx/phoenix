@@ -21,6 +21,11 @@ async function runAsyncTests() {
           if (!sandbox.domElements[id]) {
             sandbox.domElements[id] = {
               id, textContent: '', style: { display: '', width: '' }, innerHTML: '', dataset: {}, children: [],
+              removeChild: function(c) { if (!this.children) return;
+                const i = this.children.indexOf(c);
+                if (i !== -1) this.children.splice(i, 1);
+              },
+              get firstChild() { return (this.children && this.children.length > 0) ? this.children[0] : null; },
               classList: { add: () => {}, remove: () => {} },
               appendChild: function(c) {
                 this.children.push(c);
@@ -32,6 +37,11 @@ async function runAsyncTests() {
         createElement: (tag) => {
           const el = {
             tag, style: {}, classList: { add: () => {}, remove: () => {} }, dataset: {}, children: [],
+              removeChild: function(c) { if (!this.children) return;
+                const i = this.children.indexOf(c);
+                if (i !== -1) this.children.splice(i, 1);
+              },
+              get firstChild() { return (this.children && this.children.length > 0) ? this.children[0] : null; },
             appendChild: function(c) {
               this.children.push(c);
             }
@@ -132,7 +142,7 @@ async function runAsyncTests() {
       ]
     };
     await page.atualizar();
-    assert.strictEqual(gpusCont.innerHTML, '', "Deve refazer a árvore de GPUs se a lista de IDs mudou");
+    assert.strictEqual(gpusCont.children.length, 1, "Deve refazer a árvore de GPUs se a lista de IDs mudou");
 
     // 4. Parcial missing GPU or CPU
     nextResult = {

@@ -40,12 +40,16 @@ async function runTests() {
             'btn-modal-confirmar': {
                 textContent: '', className: '', style: {},
                 addEventListener: (ev, cb) => { if (ev === 'click') sandbox.mockConfirmarClick = cb; },
-                removeEventListener: () => {}
+                removeEventListener: () => {},
+                appendChild: () => {},
+                removeChild: () => {}
             },
             'btn-modal-cancelar': {
                 textContent: '',
                 addEventListener: (ev, cb) => { if (ev === 'click') sandbox.mockCancelarClick = cb; },
-                removeEventListener: () => {}
+                removeEventListener: () => {},
+                appendChild: () => {},
+                removeChild: () => {}
             }
         },
         modalAberto: false,

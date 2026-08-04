@@ -75,7 +75,7 @@
 
     async function carregarHardware() {
         const container = document.getElementById('hw-conteudo');
-        container.innerHTML = ''; // safe clear
+        while (container.firstChild) { container.removeChild(container.firstChild); } // safe clear
         
         const badge = document.getElementById('hw-status-badge');
         const dataLbl = document.getElementById('hw-data-coleta');

@@ -28,7 +28,12 @@ async function runTests() {
                     return sandbox.mockDom[id] || null;
                 },
                 createElement: (tag) => {
-                    const el = { tag: tag, children: [], innerHTML: '' };
+                    const el = { tag: tag, children: [],
+              removeChild: function(c) { if (!this.children) return;
+                const i = this.children.indexOf(c);
+                if (i !== -1) this.children.splice(i, 1);
+              },
+              get firstChild() { return (this.children && this.children.length > 0) ? this.children[0] : null; }, innerHTML: '' };
                     el.appendChild = function(child) {
                         this.children.push(child);
                         if (typeof child === 'string') {
@@ -52,7 +57,12 @@ async function runTests() {
             'btn-otimizar-disco': { dataset: {}, addEventListener: (ev, cb) => { if (ev === 'click') sandbox.clicks.disco = cb; } },
             'btn-liberar-ram': { dataset: {}, addEventListener: (ev, cb) => { if (ev === 'click') sandbox.clicks.ram = cb; } },
             'btn-analisar-startup': { dataset: {}, addEventListener: (ev, cb) => { if (ev === 'click') sandbox.clicks.startup = cb; } },
-            'resultado-otimizacao': { innerHTML: '', children: [], appendChild: function(c) { this.children.push(c); if(c.innerHTML) this.innerHTML += c.innerHTML; else if(c.textContent) this.innerHTML += c.textContent; else if(typeof c === 'string') this.innerHTML += c; } },
+            'resultado-otimizacao': { innerHTML: '', children: [],
+              removeChild: function(c) { if (!this.children) return;
+                const i = this.children.indexOf(c);
+                if (i !== -1) this.children.splice(i, 1);
+              },
+              get firstChild() { return (this.children && this.children.length > 0) ? this.children[0] : null; }, appendChild: function(c) { this.children.push(c); if(c.innerHTML) this.innerHTML += c.innerHTML; else if(c.textContent) this.innerHTML += c.textContent; else if(typeof c === 'string') this.innerHTML += c; } },
             'resultado-startup': { innerHTML: '', style: {} }
         },
         clicks: {}

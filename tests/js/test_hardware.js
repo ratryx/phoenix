@@ -10,7 +10,10 @@ global.document = {
                 style: {},
                 dataset: {},
                 textContent: "",
-                innerHTML: "",
+                innerHTML: "", children: [],
+                appendChild: function(c) { this.children.push(c); },
+                removeChild: function(c) { const i = this.children.indexOf(c); if(i!==-1) this.children.splice(i,1); },
+                get firstChild() { return this.children.length > 0 ? this.children[0] : null; },
                 classList: {
                     classes: new Set(),
                     add: function(c) { this.classes.add(c); },
@@ -31,7 +34,8 @@ global.document = {
         }
         return domElements[id];
     },
-    createElement: (tag) => {
+    createElementNS: (ns, tag) => { return { setAttribute: () => {}, appendChild: () => {}, removeChild: () => {}, style: {} }; },
+        createElement: (tag) => {
         return { tag, style: {}, classList: { add: () => {}, remove: () => {} }, appendChild: () => {} };
     }
 };
@@ -106,13 +110,13 @@ require('../../gui/js/pages/hardware.js');
 function erroFoiMostrado() {
     const overlay = domElements['overlay-processando'];
     const icone = domElements['overlay-icone'];
-    return overlay && overlay.classList.contains('visivel') === false && icone && icone.innerHTML.includes('svg');
+    return overlay && overlay.classList.contains('visivel') === false && icone && (icone.children && icone.children.length > 0);
 }
 
 function sucessoFoiMostrado() {
     const overlay = domElements['overlay-processando'];
     const icone = domElements['overlay-icone'];
-    return overlay && overlay.classList.contains('visivel') === false && icone && icone.innerHTML.includes('svg');
+    return overlay && overlay.classList.contains('visivel') === false && icone && (icone.children && icone.children.length > 0);
 }
 
 function resetMocks() {
