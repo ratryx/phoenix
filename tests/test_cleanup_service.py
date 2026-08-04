@@ -186,10 +186,10 @@ def test_permission_error_iterdir(tmp_path):
         }
     }
     
-    def fake_iterdir(self):
+    def fake_scandir(*args, **kwargs):
         raise PermissionError("Access Denied")
         
-    with patch("pathlib.Path.iterdir", new=fake_iterdir):
+    with patch("os.scandir", new=fake_scandir):
         result = executar_limpeza(injetar_alvos=alvos)
         
     assert result["arquivos_ignorados"] == 1
