@@ -38,6 +38,31 @@ def _classificar_item_navegador(p: Path, st=None) -> bool:
         return True
     return False
 
+def _validar_raiz(caminho: str, raiz_autorizada: str, cancel_event, on_error=None) -> bool:
+    from modules.core.exceptions import JobCancelledError
+    if cancel_event and cancel_event.is_set():
+        raise JobCancelledError()
+    
+    try:
+        st = os.lstat(caminho)
+    except OSError as exc:
+        if on_error:
+            on_error(f"Falha de lstat na raiz: {caminho} ({type(exc).__name__})")
+        return False
+
+    p = Path(caminho)
+    if _classificar_item_navegador(p, st):
+        if on_error:
+            on_error(f"Raiz ignorada (link/reparse): {caminho}")
+        return False
+
+    if not is_safe_path(caminho, raiz_autorizada):
+        if on_error:
+            on_error(f"Raiz insegura: {caminho}")
+        return False
+        
+    return True
+
 def _enumerar_seguro(caminho: str, raiz_autorizada: str, cancel_event, on_error=None):
     from modules.core.exceptions import JobCancelledError
     if cancel_event and cancel_event.is_set():
@@ -132,14 +157,15 @@ def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
         alvos["temp_usuario"] = {
             "nome": "Arquivos temporários do usuário",
             "caminho": temp_user,
-            "raiz_autorizada": temp_user,
+            "raiz_autorizada": local_appdata,
             "tipo": "diretorio"
         }
 
+    windows_dir = os.environ.get("SystemRoot", r"C:\Windows")
     alvos["temp_windows"] = {
         "nome": "Arquivos temporários do Windows",
-        "caminho": r"C:\Windows\Temp",
-        "raiz_autorizada": r"C:\Windows\Temp",
+        "caminho": os.path.join(windows_dir, "Temp"),
+        "raiz_autorizada": windows_dir,
         "tipo": "diretorio"
     }
 
@@ -148,7 +174,7 @@ def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
         alvos["wer_archive"] = {
             "nome": "Relatórios de erro (Archive)",
             "caminho": wer_archive,
-            "raiz_autorizada": wer_archive,
+            "raiz_autorizada": local_appdata,
             "tipo": "diretorio"
         }
 
@@ -156,7 +182,7 @@ def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
         alvos["wer_queue"] = {
             "nome": "Relatórios de erro (Queue)",
             "caminho": wer_queue,
-            "raiz_autorizada": wer_queue,
+            "raiz_autorizada": local_appdata,
             "tipo": "diretorio"
         }
 
@@ -164,7 +190,7 @@ def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
         alvos["crash_dumps"] = {
             "nome": "Dumps de memória",
             "caminho": crash_dumps,
-            "raiz_autorizada": crash_dumps,
+            "raiz_autorizada": local_appdata,
             "tipo": "diretorio"
         }
 
@@ -172,7 +198,7 @@ def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
         alvos["d3ds_cache"] = {
             "nome": "DirectX Shader Cache",
             "caminho": d3ds_cache,
-            "raiz_autorizada": d3ds_cache,
+            "raiz_autorizada": local_appdata,
             "tipo": "diretorio"
         }
 
@@ -180,7 +206,7 @@ def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
         alvos["thumbcache"] = {
             "nome": "Cache de miniaturas",
             "caminho": explorer,
-            "raiz_autorizada": explorer,
+            "raiz_autorizada": local_appdata,
             "tipo": "glob",
             "padrao": "thumbcache_*.db"
         }
@@ -195,16 +221,16 @@ def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
                 alvos[f"cache_{browser.lower()}"] = {
                     "nome": f"Cache do {browser}",
                     "caminho": base_dir,
-                    "raiz_autorizada": base_dir,
+                    "raiz_autorizada": local_appdata,
                     "tipo": "chromium_cache"
                 }
 
-        firefox_dir = os.path.join(local_appdata, "Mozilla", "Firefox", "Profiles")
-        if os.path.isdir(firefox_dir):
+        firefox = os.path.join(local_appdata, "Mozilla", "Firefox", "Profiles")
+        if os.path.isdir(firefox):
             alvos["cache_firefox"] = {
                 "nome": "Cache do Firefox",
-                "caminho": firefox_dir,
-                "raiz_autorizada": firefox_dir,
+                "caminho": firefox,
+                "raiz_autorizada": local_appdata,
                 "tipo": "firefox_cache"
             }
 
@@ -354,14 +380,16 @@ def _contar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_event
     def on_error(msg):
         tracker.add_count(cat_id)
 
+    if not _validar_raiz(caminho, raiz_autorizada, cancel_event, on_error):
+        return
+
     if tipo == "diretorio":
         for path, is_dir in _enumerar_seguro(caminho, raiz_autorizada, cancel_event, on_error):
             tracker.add_count(cat_id)
 
     elif tipo == "glob":
-        if is_safe_path(caminho, raiz_autorizada):
-            for path, is_dir in _enumerar_glob_seguro(caminho, info["padrao"], raiz_autorizada, cancel_event, on_error):
-                tracker.add_count(cat_id)
+        for path, is_dir in _enumerar_glob_seguro(caminho, info["padrao"], raiz_autorizada, cancel_event, on_error):
+            tracker.add_count(cat_id)
 
     elif tipo in ("chromium_cache", "firefox_cache"):
         try:
@@ -369,15 +397,10 @@ def _contar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_event
                 for perfil in it:
                     if cancel_event and cancel_event.is_set(): raise JobCancelledError()
                     try:
-                        st = perfil.stat(follow_symlinks=False)
                         p = Path(perfil.path)
-                        if _classificar_item_navegador(p, st):
-                            on_error("Perfil ignorado (link/reparse)")
+                        if not _validar_raiz(str(p), raiz_autorizada, cancel_event, on_error):
                             continue
-                        if not stat.S_ISDIR(st.st_mode):
-                            continue
-                        if not is_safe_path(str(p), raiz_autorizada):
-                            on_error("Perfil inseguro")
+                        if not p.is_dir():
                             continue
                     except OSError:
                         on_error("Erro no perfil")
@@ -388,13 +411,9 @@ def _contar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_event
                         sub_path = p / sub
                         try:
                             if sub_path.exists():
-                                if _classificar_item_navegador(sub_path):
-                                    on_error("Subpasta ignorada (link/reparse)")
+                                if not _validar_raiz(str(sub_path), raiz_autorizada, cancel_event, on_error):
                                     continue
                                 if sub_path.is_dir():
-                                    if not is_safe_path(str(sub_path), raiz_autorizada):
-                                        on_error("Subpasta insegura")
-                                        continue
                                     for path, is_item_dir in _enumerar_seguro(str(sub_path), raiz_autorizada, cancel_event, on_error):
                                         tracker.add_count(cat_id)
                         except OSError:
@@ -569,18 +588,26 @@ def _processar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_ev
 
     if not os.path.exists(caminho_base) or not raiz_autorizada:
         return
+        
+    def root_error(msg):
+        avisos_ref.append(msg)
+        tracker.increment_processed(cat_id, removed=0, ignored=1, bytes_liberados=0)
+        cat = tracker.cat_map[cat_id]
+        cat["status"] = "parcial"
+        tracker.force_update()
 
+    if not _validar_raiz(caminho_base, raiz_autorizada, cancel_event, root_error):
+        return
     if tipo == "diretorio":
         _remover_diretorio_recursivo(Path(caminho_base), raiz_autorizada, cat_id, tracker, cancel_event, avisos_ref)
 
     elif tipo == "glob":
         try:
-            if is_safe_path(caminho_base, raiz_autorizada):
-                for filepath_str, is_dir in _enumerar_glob_seguro(caminho_base, info["padrao"], raiz_autorizada, cancel_event, on_error):
-                    if cancel_event and cancel_event.is_set(): raise JobCancelledError()
-                    if not is_dir:
-                        res = _remover_arquivo(Path(filepath_str), raiz_autorizada, cancel_event, log_error)
-                        tracker.increment_processed(cat_id, removed=res["removidos"], ignored=res["ignorados"], bytes_liberados=res["bytes"])
+            for filepath_str, is_dir in _enumerar_glob_seguro(caminho_base, info["padrao"], raiz_autorizada, cancel_event, on_error):
+                if cancel_event and cancel_event.is_set(): raise JobCancelledError()
+                if not is_dir:
+                    res = _remover_arquivo(Path(filepath_str), raiz_autorizada, cancel_event, log_error)
+                    tracker.increment_processed(cat_id, removed=res["removidos"], ignored=res["ignorados"], bytes_liberados=res["bytes"])
         except JobCancelledError:
             raise
         except OSError as e:
@@ -592,18 +619,10 @@ def _processar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_ev
                 for perfil in it:
                     if cancel_event and cancel_event.is_set(): raise JobCancelledError()
                     try:
-                        st = perfil.stat(follow_symlinks=False)
                         p = Path(perfil.path)
-
-                        if _classificar_item_navegador(p, st):
-                            on_error(f"Perfil ignorado (link/reparse): {perfil.name}")
+                        if not _validar_raiz(str(p), raiz_autorizada, cancel_event, on_error):
                             continue
-
-                        if not stat.S_ISDIR(st.st_mode):
-                            continue
-                            
-                        if not is_safe_path(str(p), raiz_autorizada):
-                            on_error(f"Perfil inseguro: {perfil.name}")
+                        if not p.is_dir():
                             continue
                     except OSError as e:
                         on_error(f"Erro lendo perfil Chromium ({type(e).__name__})")
@@ -614,13 +633,9 @@ def _processar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_ev
                         sub_path = p / sub
                         try:
                             if sub_path.exists():
-                                if _classificar_item_navegador(sub_path):
-                                    on_error(f"Subpasta ignorada (link/reparse): {sub}")
+                                if not _validar_raiz(str(sub_path), raiz_autorizada, cancel_event, on_error):
                                     continue
                                 if sub_path.is_dir():
-                                    if not is_safe_path(str(sub_path), raiz_autorizada):
-                                        on_error(f"Subpasta insegura: {sub}")
-                                        continue
                                     _remover_diretorio_recursivo(sub_path, raiz_autorizada, cat_id, tracker, cancel_event, avisos_ref)
                         except OSError as e:
                             on_error(f"Erro no subdiretório {sub} ({type(e).__name__})")
@@ -634,19 +649,11 @@ def _processar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_ev
             with os.scandir(caminho_base) as it:
                 for perfil in it:
                     if cancel_event and cancel_event.is_set(): raise JobCancelledError()
+                    p = Path(perfil.path)
                     try:
-                        st = perfil.stat(follow_symlinks=False)
-                        p = Path(perfil.path)
-
-                        if _classificar_item_navegador(p, st):
-                            on_error(f"Perfil ignorado (link/reparse): {perfil.name}")
+                        if not _validar_raiz(str(p), raiz_autorizada, cancel_event, on_error):
                             continue
-
-                        if not stat.S_ISDIR(st.st_mode):
-                            continue
-                            
-                        if not is_safe_path(str(p), raiz_autorizada):
-                            on_error(f"Perfil inseguro: {perfil.name}")
+                        if not p.is_dir():
                             continue
                     except OSError as e:
                         on_error(f"Erro lendo perfil Firefox ({type(e).__name__})")
@@ -655,13 +662,9 @@ def _processar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_ev
                     sub_path = p / "cache2"
                     try:
                         if sub_path.exists():
-                            if _classificar_item_navegador(sub_path):
-                                on_error(f"Subpasta ignorada (link/reparse): cache2")
+                            if not _validar_raiz(str(sub_path), raiz_autorizada, cancel_event, on_error):
                                 continue
                             if sub_path.is_dir():
-                                if not is_safe_path(str(sub_path), raiz_autorizada):
-                                    on_error(f"Subpasta insegura: cache2")
-                                    continue
                                 _remover_diretorio_recursivo(sub_path, raiz_autorizada, cat_id, tracker, cancel_event, avisos_ref)
                     except OSError as e:
                         on_error(f"Erro no cache2 ({type(e).__name__})")

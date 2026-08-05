@@ -334,20 +334,26 @@ def test_chromium_firefox_root_reparse_points(tmp_path):
     temp_dir = tmp_path / "temp"
     temp_dir.mkdir()
     
-    # Create fake Chromium profile
+    # Chromium profile
     chrome_profile = temp_dir / "Default"
     chrome_profile.mkdir()
+    (chrome_profile / "Cache").mkdir()
     
-    # Create fake Firefox profile
+    # Firefox profile
     ff_dir = tmp_path / "ff"
     ff_dir.mkdir()
-    ff_profiles = ff_dir / "Profiles"
-    ff_profiles.mkdir()
-    ff_profile = ff_profiles / "xyz.default"
+    ff_profile = ff_dir / "xyz.default"
     ff_profile.mkdir()
+    (ff_profile / "cache2").mkdir()
+    
+    # Another Firefox profile where cache2 itself is reparse
+    ff_profile2 = ff_dir / "abc.default"
+    ff_profile2.mkdir()
+    ff_cache2 = ff_profile2 / "cache2"
+    ff_cache2.mkdir()
     
     # Root dir
-    root_dir = tmp_path / "root"
+    root_dir = tmp_path / "somedir"
     root_dir.mkdir()
     
     alvos = {
@@ -371,19 +377,35 @@ def test_chromium_firefox_root_reparse_points(tmp_path):
         }
     }
     
+    expected_reparse = [
+        chrome_profile.resolve(),
+        ff_profile.resolve(),
+        ff_cache2.resolve(),
+        root_dir.resolve()
+    ]
+    
     original_is_reparse = _is_reparse_point
     def fake_is_reparse(filepath, st=None):
-        if "Default" in str(filepath) or "xyz.default" in str(filepath) or "root" in str(filepath):
+        if filepath.resolve() in expected_reparse:
             return True
         return original_is_reparse(filepath, st)
 
+    cb_calls = []
+    def prog_cb(mensagem, progresso, detalhes):
+        cb_calls.append(detalhes)
+
     with patch("modules.core.cleanup_service._is_reparse_point", side_effect=fake_is_reparse):
-        result = executar_limpeza(injetar_alvos=alvos)
+        result = executar_limpeza(injetar_alvos=alvos, progress_callback=prog_cb)
 
     assert result["ok"] is True
     assert result["parcial"] is True
-    assert result["arquivos_ignorados"] == 3
+    # chromium profile ignored = 1
+    # firefox profile (xyz) ignored = 1
+    # firefox profile2 (abc) has cache2 ignored = 1
+    # root_dir ignored = 1
+    # Total ignorados = 4
+    assert result["arquivos_ignorados"] == 4
     
-    # Check if specific categories were marked as partial
-    for cat in result["categorias"]:
-        assert cat["status"] == "parcial"
+    last_details = cb_calls[-1] if cb_calls else None
+    assert last_details is not None
+    assert last_details["arquivos_processados"] == last_details["arquivos_total"]
