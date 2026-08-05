@@ -23,7 +23,7 @@
         if (executando) return;
         executando = true;
 
-        Phoenix.ui.feedback.mostrarOverlay("Limpando arquivos temporários...", true);
+        Phoenix.ui.feedback.mostrarOverlay("Limpando arquivos temporários...", { destrutivo: true, cancelavel: true });
 
         const abortController = new AbortController();
         const btnCancelar = document.getElementById("overlay-btn-cancelar");
@@ -38,10 +38,11 @@
 
         let sucesso = false;
         let parcial = false;
-        let finalJobRes = null;
         try {
             const jobRes = await Phoenix.bridge.call("executar_limpeza");
             if (!jobRes || !jobRes.job_id) {
+                executando = false;
+                Phoenix.ui.feedback.esconderOverlay(true, false, false);
                 return;
             }
             const resultado = await Phoenix.jobs.awaitJob(jobRes.job_id, {
@@ -51,7 +52,6 @@
                 signal: abortController.signal
             });
 
-            finalJobRes = resultado;
             if (resultado && resultado.ok) {
                 sucesso = true;
                 if (resultado.parcial) parcial = true;

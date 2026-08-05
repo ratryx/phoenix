@@ -81,7 +81,7 @@ class JobManager:
             try:
                 self.on_terminal_state(job_id, job)
             except Exception as e:
-                logger.error(f"Erro no terminal callback do job {job_id}: {e}")
+                logger.error(f"Erro no terminal callback do job {job_id}: {type(e).__name__}")
 
     def submit(self, target_fn, *args, job_id=None, operation_name="unknown", exclusive_group=None, timeout=None, pass_job_context=False, **kwargs):
         with self._lock:
@@ -180,7 +180,7 @@ class JobManager:
                                     try:
                                         json.dumps(res)
                                         job["status"] = "done"
-                                    except (TypeError, ValueError, OverflowError):
+                                    except (TypeError, ValueError, OverflowError, RecursionError):
                                         res = {
                                             "ok": False,
                                             "codigo": "JOB_RESULT_INVALID",
@@ -196,10 +196,13 @@ class JobManager:
 
                             self._trigger_terminal_callback(job_id, job)
 
-                        if exclusive_group and self._exclusive_groups.get(exclusive_group) == job_id:
-                            del self._exclusive_groups[exclusive_group]
                 except Exception as fe:
                     logger.error(f"Erro critico no finally do job {job_id} ({operation_name}): {type(fe).__name__}")
+                finally:
+                    if exclusive_group:
+                        with self._lock:
+                            if self._exclusive_groups.get(exclusive_group) == job_id:
+                                del self._exclusive_groups[exclusive_group]
 
         threading.Thread(target=worker, daemon=True, name=f"PhoenixJob-{job_id}").start()
         return job_id

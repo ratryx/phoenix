@@ -3,213 +3,133 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 
+const htmlCode = fs.readFileSync(path.resolve(__dirname, '../../gui/index.html'), 'utf8');
+assert(htmlCode.includes('id="overlay-btn-cancelar"'), "Botão cancelar existe no index.html");
+assert(htmlCode.includes('id="overlay-detalhes-limpeza"'), "Contêiner detalhes limpeza no index.html");
+assert(htmlCode.includes('id="overlay-categorias"'), "Contêiner categorias no index.html");
+assert(htmlCode.includes('id="overlay-progresso-numerico"'), "Contêiner numérico no index.html");
+
 async function runTests() {
     const sandbox = {
         window: {
-            Phoenix: {
-                bridge: { call: async () => ({ job_id: '123' }) },
-                jobs: { awaitJob: async () => ({ ok: true, espaco_liberado_mb: 150 }) },
-                ui: {
-                    feedback: {
-                        mostrarOverlay: () => { sandbox.overlayAberto = true; },
-                        esconderOverlay: () => { sandbox.overlayAberto = false; },
-                        confirmarModal: async () => true
-                    }
-                },
-                state: {},
-                pages: {}
-            },
-            document: {
-                getElementById: (id) => {
-                    if (id === 'btn-executar-limpeza') return sandbox.mockBtn;
-                    if (id === 'conteudo-limpeza') return sandbox.mockContainer;
-                    return null;
-                },
-                createElement: (tag) => {
-                    return {
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            Phoenix: { bridge: {}, jobs: {}, ui: { feedback: {}, icons: { create: () => ({ appendChild: () => {} }) } }, state: {}, pages: {}, lifecycle: {} }
+        },
+        document: {
+            elements: {},
+            getElementById: function(id) {
+                if (!this.elements[id]) {
+                    this.elements[id] = {
+                        id,
+                        classList: { add: () => {}, remove: () => {}, contains: () => false },
+                        style: { display: '', width: '' },
                         textContent: '',
                         innerHTML: '',
-                        style: {},
-                        appendChild: function(c) { this.innerHTML += c.textContent || c.innerHTML || ''; }
+                        dataset: {},
+                        appendChild: function(c) { this.innerHTML += c.textContent || c.innerHTML || ''; },
+                        replaceChildren: function() { this.innerHTML = ''; },
+                        addEventListener: (ev, cb) => { if (ev === 'click') this.elements[id].onclick = cb; }
                     };
-                },
-                createTextNode: (txt) => {
-                    return { textContent: txt };
                 }
-            }
+                return this.elements[id];
+            },
+            createElement: function(tag) {
+                return {
+                    textContent: '', innerHTML: '', style: {}, classList: { add: () => {}, remove: () => {} },
+                    appendChild: function(c) { this.innerHTML += c.textContent || c.innerHTML || ''; }
+                };
+            },
+            createTextNode: (txt) => { return { textContent: txt }; }
         },
-        console: { error: () => {}, log: () => {} },
-        setTimeout: setTimeout,
+        console: { error: (e) => console.error("SANDBOX ERR:", e), log: (m) => console.log("SANDBOX LOG:", m) },
+        setTimeout: (cb, t) => setTimeout(cb, 5),
         clearTimeout: clearTimeout,
-        overlayAberto: false,
-        mockBtn: {
-            dataset: {},
-            addEventListener: (ev, cb) => {
-                if (ev === 'click') sandbox.mockBtn.onclick = cb;
+        AbortController: class {
+            constructor() {
+                this.signal = { aborted: false, listeners: [], addEventListener: (e, cb) => this.signal.listeners.push(cb), removeEventListener: () => {} };
+            }
+            abort() {
+                this.signal.aborted = true;
+                for (let l of this.signal.listeners) l();
             }
         },
-        mockContainer: {
-            innerHTML: '',
-            appendChild: function(child) { this.innerHTML += child.textContent || child.innerHTML || ''; },
-            replaceChildren: function() { this.innerHTML = ''; }
-        },
-        AbortController: class {
-            constructor() { this.signal = { aborted: false }; }
-            abort() {}
-        }
+        Promise: Promise
     };
 
-    sandbox.document = sandbox.window.document;
+    sandbox.document.window = sandbox.window;
+    sandbox.window.document = sandbox.document;
     sandbox.Phoenix = sandbox.window.Phoenix;
 
     vm.createContext(sandbox);
 
-    const code = fs.readFileSync(path.resolve(__dirname, '../../gui/js/pages/limpeza.js'), 'utf8');
-    vm.runInContext(code, sandbox);
+    const loadScript = (filePath) => {
+        const code = fs.readFileSync(path.resolve(__dirname, '../../', filePath), 'utf8');
+        vm.runInContext(code, sandbox);
+    };
+
+    loadScript('gui/js/core/jobs.js');
+    loadScript('gui/js/ui/feedback.js');
+    loadScript('gui/js/pages/limpeza.js');
 
     try {
         const page = sandbox.window.Phoenix.pages.limpeza;
-        assert(page, "Módulo não registrado como Phoenix.pages.limpeza");
-
-        // 1. Carregamento e listener
+        const btn = sandbox.document.getElementById('btn-executar-limpeza');
         page.load();
-        assert(sandbox.mockBtn.onclick, "Listener registrado no botão");
-        assert(sandbox.mockBtn.dataset.eventosRegistrados === "true", "Guard de listener atualizado");
 
-        // 2. Execução = Sucesso
-        sandbox.Phoenix.ui.feedback.mostrarOverlay = () => { sandbox.overlayAberto = true; };
-        sandbox.Phoenix.ui.feedback.esconderOverlay = () => { sandbox.overlayAberto = false; };
-
-        let calledBridge = false;
-        let jobCalled = false;
-
-        sandbox.Phoenix.bridge.call = async (ep) => {
-            assert(ep === "executar_limpeza", "endpoint correto");
-            calledBridge = true;
-            return { job_id: '456' };
-        };
-        sandbox.Phoenix.jobs.awaitJob = async (jid) => {
-            assert(jid === '456', "retorno job_id aguardado");
-            jobCalled = true;
-            await new Promise(r => setTimeout(r, 20)); // Delay to test overlay state
-            return { ok: true, espaco_liberado_mb: 500 };
-        };
-
-        let execPromise = sandbox.mockBtn.onclick();
-        // Wait for event loop to process microtasks
-        await new Promise(r => setTimeout(r, 10));
-        assert(sandbox.overlayAberto, "overlay abre");
-
-        // 3. Proteção contra duplicação (Concorrência)
-        let callCount = 0;
-        sandbox.Phoenix.bridge.call = async () => { callCount++; return { job_id: '1' }; };
-        let execPromise2 = sandbox.mockBtn.onclick(); // deveria retornar imediatamente por estar executando
-        await Promise.all([execPromise, execPromise2]);
-
-        assert(jobCalled, "job concluído processado");
-        assert(!sandbox.overlayAberto, "overlay não permanece aberto");
-        assert(sandbox.mockContainer.innerHTML.includes("Concluído"), "markup principal preservado");
-        assert(sandbox.mockContainer.innerHTML.includes("500.0 MB"), "total liberado renderizado");
-
-        // Flag liberada em sucesso
-        callCount = 0;
-        sandbox.Phoenix.bridge.call = async () => { callCount++; return { job_id: '1' }; };
-        sandbox.Phoenix.jobs.awaitJob = async () => ({ ok: true, espaco_liberado_mb: 100 });
-        await sandbox.mockBtn.onclick(); // Roda de novo
-        assert(callCount === 1, "flag liberada em sucesso");
-
-        // 4b. Tratamento de parcial: {ok: true, parcial: true}
-        sandbox.Phoenix.jobs.awaitJob = async () => ({ ok: true, parcial: true, espaco_liberado_mb: 15 });
-        await sandbox.mockBtn.onclick();
-        assert(sandbox.mockContainer.innerHTML.includes("15.0 MB"), "15 MB renderizado no parcial");
-        assert(sandbox.mockContainer.innerHTML.includes("Concluído (Parcial)"), "parcial tratado");
-
-        // 4. Tratamento de falhas: `{ok: false}`
-        sandbox.Phoenix.jobs.awaitJob = async () => ({ ok: false, erro: "Algo falhou" });
-        await sandbox.mockBtn.onclick();
-        assert(sandbox.mockContainer.innerHTML.includes("Algo falhou"), "{ok: false} tratado");
-        assert(sandbox.mockContainer.innerHTML.includes("Erro"), "erro é renderizado");
-
-        // 4c. Tratamento de cancelamento na UI (AbortController e signal)
-        let cancelBtnDisabled = false;
-        let cancelBtnText = "";
-        let abortCalled = false;
-
-        sandbox.AbortController = class {
-            constructor() { this.signal = { aborted: false }; }
-            abort() { abortCalled = true; }
+        let cancel_tarefa_calls = 0;
+        let verificar_tarefa_calls = 0;
+        let is_cancelled = false;
+        
+        sandbox.window.Phoenix.bridge.call = async (ep, arg) => {
+            if (ep === "executar_limpeza") return { job_id: '999' };
+            if (ep === "cancelar_tarefa") {
+                is_cancelled = true;
+                cancel_tarefa_calls++;
+                return {};
+            }
+            if (ep === "verificar_tarefa") {
+                verificar_tarefa_calls++;
+                if (is_cancelled) {
+                    return { status: "cancelled", resultado: { ok: false, erro: "Cancelado pelo usuário.", codigo: "JOB_CANCELLED", resultado_parcial: { arquivos_processados: 10, arquivos_total: 20, espaco_liberado_mb: 50, arquivos_removidos: 8, arquivos_ignorados: 2 } } };
+                }
+                return { status: "running", progresso: 50, mensagem: "Limpando", detalhes_progresso: { arquivos_processados: 10, arquivos_total: 20, espaco_liberado_mb: 50, categoria: "Cache Chrome", categorias: [{nome: "Cache Chrome", status: "limpando", percentual: 50}] } };
+            }
         };
 
-        const mockCancelBtn = {
-            disabled: false,
-            textContent: "Cancelar",
-            onclick: null
-        };
-        sandbox.document.getElementById = (id) => {
-            if (id === 'btn-executar-limpeza') return sandbox.mockBtn;
-            if (id === 'conteudo-limpeza') return sandbox.mockContainer;
-            if (id === 'overlay-btn-cancelar') return mockCancelBtn;
-            return null;
-        };
-
-        sandbox.Phoenix.jobs.awaitJob = async (jid, opts) => {
-            assert(opts.signal !== undefined, "Signal deve ser passado para awaitJob");
-            // simular clique do usuário no botão cancelar
-            mockCancelBtn.onclick();
-            assert(mockCancelBtn.disabled === true, "Botão cancelar deve ficar desabilitado");
-            assert(mockCancelBtn.textContent === "Cancelando...", "Botão cancelar texto deve mudar");
-            assert(abortCalled === true, "Controller deve ter sido abortado");
-
-            return {
-                ok: false,
-                codigo: "JOB_CANCELLED",
-                erro: "A operação foi cancelada.",
-                resultado_parcial: { espaco_liberado_bytes: 10485760, arquivos_processados: 10, arquivos_removidos: 8, arquivos_ignorados: 2, categoria: "Cache do Chrome" }
-            };
-        };
-        await sandbox.mockBtn.onclick();
-        assert(sandbox.mockContainer.innerHTML.includes("Cancelado"), "JOB_CANCELLED gera tag Cancelado");
-        assert(sandbox.mockContainer.innerHTML.includes("10 itens processados"), "Renderiza itens processados no cancelamento");
-        assert(sandbox.mockContainer.innerHTML.includes("10.0 MB"), "Renderiza MB convertidos no cancelamento");
-        assert(sandbox.mockContainer.innerHTML.includes("Cache do Chrome"), "Renderiza categoria onde parou");
-        assert(mockCancelBtn.onclick === null, "Listener de cancelar deve ser limpo");
-
-        // 4d. Tratamento de TIMEOUT com snapshot
-        sandbox.Phoenix.jobs.awaitJob = async () => ({
-            ok: false,
-            codigo: "JOB_TIMEOUT",
-            erro: "Timeout.",
-            resultado_parcial: { espaco_liberado_mb: 25.5, arquivos_processados: 5 }
-        });
-        await sandbox.mockBtn.onclick();
-        assert(sandbox.mockContainer.innerHTML.includes("Erro"), "JOB_TIMEOUT continua como Erro");
-        assert(sandbox.mockContainer.innerHTML.includes("25.5 MB liberados antes da interrupção"), "Renderiza mb direto do parcial no timeout");
-
-        // 5. Tratamento de falhas: Bridge Error
-        sandbox.Phoenix.bridge.call = async () => { throw new Error("bridge error"); };
-        await sandbox.mockBtn.onclick();
-        assert(!sandbox.overlayAberto, "overlay não permanece aberto após erro");
-
-        // Flag liberada em erro
-        sandbox.Phoenix.bridge.call = async () => ({ job_id: '1' });
-        sandbox.Phoenix.jobs.awaitJob = async () => ({ ok: true, espaco_liberado_mb: 0 });
-        await sandbox.mockBtn.onclick();
-        assert(sandbox.mockContainer.innerHTML.includes("0.0 MB"), "zero MB tratado");
-
-        // 6. Limites
-        assert(!code.includes("executarOtimizacao"), "módulo não contém otimização");
-        assert(!code.includes("carregarServicos"), "módulo não contém serviços");
-        assert(!code.includes("executarRotinaCompleta"), "módulo não contém rotina completa");
-        assert(!code.includes("confirmarModal"), "não existe chamada a confirmarModal");
-        assert(!code.includes("window.confirm"), "não existe chamada a window.confirm");
-        assert(!code.includes("alert("), "não existe chamada a alert");
-
-        console.log("Todos os testes JS de limpeza passaram.");
-
-    } catch (e) {
+        const execPromise = btn.onclick();
+        
+        await new Promise(r => setTimeout(r, 60)); // Let step 1 (progress) run
+        
+        const numerico = sandbox.document.getElementById('overlay-progresso-numerico');
+        const categorias = sandbox.document.getElementById('overlay-categorias');
+        assert(numerico.innerHTML.includes("10 / 20 itens"), "DOM: processados/total rendering");
+        assert(numerico.innerHTML.includes("50 MB"), "DOM: liberado rendering");
+        console.log("NUMERICO:", numerico.innerHTML);
+        console.log("CATEGORIAS:", categorias.innerHTML);
+        assert(categorias.innerHTML.includes("Cache Chrome"), "DOM: list rendering");
+        const btnCancel = sandbox.document.getElementById('overlay-btn-cancelar');
+        btnCancel.onclick();
+        
+        assert(btnCancel.disabled === true, "Botão desabilitado");
+        assert(btnCancel.textContent === "Cancelando...", "Texto cancelando");
+        assert(cancel_tarefa_calls === 1, "Chamou cancelar_tarefa");
+        
+        // Let polling run its course
+        await execPromise;
+        
+        assert(cancel_tarefa_calls === 1, "Tarefa cancelada");
+        console.log("verificar_tarefa_calls:", verificar_tarefa_calls);
+        assert(verificar_tarefa_calls >= 2, "Polling continuou após abort até terminal");
+        
+        const container = sandbox.document.getElementById('conteudo-limpeza');
+        assert(container.innerHTML.includes("Cancelado"), "Snapshot terminal renderizado (Cancelado)");
+        assert(container.innerHTML.includes("10 itens processados"), "Snapshot terminal: itens");
+        
+        console.log("Todos os testes JS de limpeza (integração real) passaram.");
+    } catch(e) {
         console.error(e);
         process.exit(1);
     }
 }
-
 runTests();

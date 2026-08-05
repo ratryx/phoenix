@@ -54,20 +54,17 @@
                 reject(err);
             }
 
+            var cancelRequested = false;
+
             if (signal) {
                 if (signal.aborted) {
-                    settled = true;
-                    // Intencionalmente chama cancelar no bridge pra ser seguro
+                    cancelRequested = true;
                     Phoenix.bridge.call("cancelar_tarefa", jobId).catch(function() {});
-                    resolve({ ok: false, codigo: "JOB_CANCELLED", erro: "Operação cancelada pelo usuário." });
-                    return;
                 }
                 abortHandler = function () {
-                    if (settled) return;
-                    cleanup(); // impede polling novo
-                    
+                    if (settled || cancelRequested) return;
+                    cancelRequested = true;
                     Phoenix.bridge.call("cancelar_tarefa", jobId).catch(function() {});
-                    resolveOnce({ ok: false, codigo: "JOB_CANCELLED", erro: "Operação cancelada pelo usuário." });
                 };
                 signal.addEventListener("abort", abortHandler);
             }

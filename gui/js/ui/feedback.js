@@ -10,132 +10,160 @@
 
 
 
-    Phoenix.ui.feedback.mostrarOverlay = function(texto, destrutivo = false) {
+    Phoenix.ui.feedback.mostrarOverlay = function(texto, opcoes = {}) {
+        let destrutivo = false;
+        let cancelavel = false;
+        if (typeof opcoes === 'boolean') {
+            destrutivo = opcoes;
+        } else if (opcoes && typeof opcoes === 'object') {
+            destrutivo = opcoes.destrutivo || false;
+            cancelavel = opcoes.cancelavel || false;
+        }
 
         if (!destrutivo) {
-
             const barra = document.getElementById('barra-progresso-global');
-
             const fill = document.getElementById('barra-progresso-fill');
-
             const textoEl = document.getElementById('overlay-texto');
-
             if (barra) barra.style.opacity = '1';
-
             if (textoEl) {
-
                 textoEl.textContent = texto || 'Carregando...';
-
                 textoEl.style.opacity = '1';
-
             }
-
             if (fill) {
-
                 fill.style.width = '0%';
-
                 setTimeout(() => { if (fill) fill.style.width = '60%'; }, 50);
-
                 setTimeout(() => { if (fill) fill.style.width = '80%'; }, 500);
-
             }
-
             _barraProgresso = { barra, fill, textoEl };
-
             return;
-
         }
-
-
 
         const overlay = document.getElementById('overlay-processando');
-
         const titulo = document.getElementById('overlay-titulo');
-
         const subtitulo = document.getElementById('overlay-subtitulo');
-
         const barraFill = document.getElementById('overlay-barra-fill');
-
         const status = document.getElementById('overlay-status');
-
         const icone = document.getElementById('overlay-icone');
 
-
-
         if (titulo) titulo.textContent = texto || 'Processando...';
-
         if (subtitulo) subtitulo.textContent = 'Aguarde, isso pode levar alguns segundos';
-
         if (status) status.textContent = 'Iniciando...';
-
         if (icone) {
-
             while (icone.firstChild) { icone.removeChild(icone.firstChild); }
-
             icone.appendChild(Phoenix.ui.icons.create('processando'));
-
         }
-
-
 
         if (barraFill) {
-
             barraFill.classList.add('indeterminado');
-
             barraFill.style.width = '';
-
         }
 
+        const detalhesContainer = document.getElementById('overlay-detalhes-limpeza');
+        if (detalhesContainer) {
+            detalhesContainer.style.display = 'none';
+        }
 
+        const categoriasLista = document.getElementById('overlay-categorias');
+        if (categoriasLista) {
+            categoriasLista.replaceChildren();
+        }
+
+        const btnCancelar = document.getElementById('overlay-btn-cancelar');
+        if (btnCancelar) {
+            if (cancelavel) {
+                btnCancelar.disabled = false;
+                btnCancelar.textContent = 'Cancelar';
+                btnCancelar.style.display = 'inline-block';
+            } else {
+                btnCancelar.style.display = 'none';
+            }
+        }
 
         if (overlay) overlay.classList.add('visivel');
-
     };
 
 
 
     Phoenix.ui.feedback.atualizarOverlay = function(texto, percentual = null, detalhes = null) {
-
         const status = document.getElementById('overlay-status');
-
         const barraFill = document.getElementById('overlay-barra-fill');
-
-
 
         if (status) status.textContent = texto;
 
-
-
         if (percentual !== null && barraFill) {
-
             barraFill.classList.remove('indeterminado');
-
             barraFill.style.width = percentual + '%';
-
         }
-
-
 
         const subtitulo = document.getElementById('overlay-subtitulo');
-
         if (detalhes && subtitulo) {
-
             let info = [];
-
             if (detalhes.categoria) info.push(`Categoria: ${detalhes.categoria}`);
-
             if (detalhes.arquivos_processados !== undefined) info.push(`Arquivos: ${detalhes.arquivos_processados}`);
-
             if (detalhes.espaco_liberado_mb !== undefined) info.push(`Liberado: ${detalhes.espaco_liberado_mb} MB`);
-
             if (info.length > 0) {
-
                 subtitulo.textContent = info.join(" | ");
-
             }
-
+            
+            const detalhesContainer = document.getElementById('overlay-detalhes-limpeza');
+            if (detalhesContainer && detalhes.categorias) {
+                detalhesContainer.style.display = 'block';
+                
+                const contadores = document.getElementById('overlay-progresso-numerico');
+                if (contadores) {
+                    let catAtualStr = detalhes.categoria ? `${detalhes.categoria} — ` : '';
+                    let percStr = detalhes.categoria_percentual !== undefined ? `${detalhes.categoria_percentual}%` : '';
+                    let proc = detalhes.arquivos_processados || 0;
+                    let tot = detalhes.arquivos_total || 0;
+                    let lib = detalhes.espaco_liberado_mb !== undefined ? detalhes.espaco_liberado_mb : 0;
+                    
+                    contadores.replaceChildren();
+                    
+                    if (catAtualStr || percStr) {
+                        const pCat = document.createElement('div');
+                        pCat.textContent = `${catAtualStr}${percStr}`;
+                        contadores.appendChild(pCat);
+                    }
+                    const pCont = document.createElement('div');
+                    pCont.textContent = `${proc} / ${tot} itens`;
+                    pCont.style.fontWeight = 'normal';
+                    contadores.appendChild(pCont);
+                    
+                    const pEsp = document.createElement('div');
+                    pEsp.textContent = `${lib} MB liberados`;
+                    pEsp.style.fontWeight = 'normal';
+                    contadores.appendChild(pEsp);
+                }
+                
+                const lista = document.getElementById('overlay-categorias');
+                if (lista) {
+                    lista.replaceChildren();
+                    for (let c of detalhes.categorias) {
+                        const div = document.createElement('div');
+                        let st = 'Aguardando';
+                        let cor = 'var(--cor-texto-secundario)';
+                        
+                        if (c.status === 'limpando') { 
+                            st = c.percentual !== undefined ? `Limpando ${c.percentual}%` : 'Limpando...'; 
+                            cor = 'var(--cor-alerta-texto)'; 
+                        } else if (c.status === 'concluido') { 
+                            st = 'Concluído'; 
+                            cor = 'var(--cor-sucesso-texto)'; 
+                        } else if (c.status === 'parcial') { 
+                            st = 'Parcial'; 
+                            cor = 'var(--cor-alerta-texto)'; 
+                        } else if (c.status === 'falhou') { 
+                            st = 'Falhou'; 
+                            cor = 'var(--cor-erro-texto)'; 
+                        }
+                        
+                        div.textContent = `[${st}] ${c.nome}`;
+                        div.style.color = cor;
+                        lista.appendChild(div);
+                    }
+                }
+            }
         }
-
     };
 
 
@@ -196,6 +224,8 @@
         if (btnCancelar) btnCancelar.style.display = 'none';
         const detalhesContainer = document.getElementById('overlay-detalhes-limpeza');
         if (detalhesContainer) detalhesContainer.style.display = 'none';
+        const categoriasLista = document.getElementById('overlay-categorias');
+        if (categoriasLista) categoriasLista.replaceChildren();
 
         let iconName = sucesso ? (parcial ? 'aviso' : 'sucesso') : 'erro';
 

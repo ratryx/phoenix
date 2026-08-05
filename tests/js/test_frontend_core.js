@@ -33,7 +33,8 @@ const document = {
                 addEventListener: () => {},
                 removeEventListener: () => {},
                 appendChild: () => {},
-                removeChild: () => {}
+                removeChild: () => {},
+                replaceChildren: function() { this.innerHTML = ''; }
             };
         }
         return elements[id];

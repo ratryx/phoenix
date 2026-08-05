@@ -24,11 +24,19 @@ def _is_reparse_point(filepath: Path, st=None) -> bool:
             st = os.lstat(str(filepath))
         return bool(st.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
     except AttributeError:
-        return filepath.is_symlink() or filepath.is_junction()
+        return filepath.is_symlink() or (hasattr(filepath, 'is_junction') and filepath.is_junction())
     except JobCancelledError:
         raise
     except OSError:
         return True
+
+def _classificar_item_navegador(p: Path, st=None) -> bool:
+    """
+    Retorna True se o item deve ser ignorado por ser link ou reparse point.
+    """
+    if p.is_symlink() or (hasattr(p, 'is_junction') and p.is_junction()) or _is_reparse_point(p, st):
+        return True
+    return False
 
 def _enumerar_seguro(caminho: str, raiz_autorizada: str, cancel_event, on_error=None):
     from modules.core.exceptions import JobCancelledError
@@ -361,11 +369,15 @@ def _contar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_event
                 for perfil in it:
                     if cancel_event and cancel_event.is_set(): raise JobCancelledError()
                     try:
-                        is_dir = perfil.is_dir(follow_symlinks=False)
                         st = perfil.stat(follow_symlinks=False)
                         p = Path(perfil.path)
-                        is_reparse = _is_reparse_point(p, st)
-                        if not is_dir or p.is_symlink() or (hasattr(p, 'is_junction') and p.is_junction()) or is_reparse:
+                        if _classificar_item_navegador(p, st):
+                            on_error("Perfil ignorado (link/reparse)")
+                            continue
+                        if not stat.S_ISDIR(st.st_mode):
+                            continue
+                        if not is_safe_path(str(p), raiz_autorizada):
+                            on_error("Perfil inseguro")
                             continue
                     except OSError:
                         on_error("Erro no perfil")
@@ -375,9 +387,16 @@ def _contar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_event
                     for sub in subpastas:
                         sub_path = p / sub
                         try:
-                            if sub_path.exists() and sub_path.is_dir() and not sub_path.is_symlink() and not (hasattr(sub_path, 'is_junction') and sub_path.is_junction()):
-                                for path, is_item_dir in _enumerar_seguro(str(sub_path), raiz_autorizada, cancel_event, on_error):
-                                    tracker.add_count(cat_id)
+                            if sub_path.exists():
+                                if _classificar_item_navegador(sub_path):
+                                    on_error("Subpasta ignorada (link/reparse)")
+                                    continue
+                                if sub_path.is_dir():
+                                    if not is_safe_path(str(sub_path), raiz_autorizada):
+                                        on_error("Subpasta insegura")
+                                        continue
+                                    for path, is_item_dir in _enumerar_seguro(str(sub_path), raiz_autorizada, cancel_event, on_error):
+                                        tracker.add_count(cat_id)
                         except OSError:
                             on_error("Erro no cache subpasta")
         except JobCancelledError:
@@ -573,16 +592,18 @@ def _processar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_ev
                 for perfil in it:
                     if cancel_event and cancel_event.is_set(): raise JobCancelledError()
                     try:
-                        is_dir = perfil.is_dir(follow_symlinks=False)
                         st = perfil.stat(follow_symlinks=False)
                         p = Path(perfil.path)
-                        is_reparse = _is_reparse_point(p, st)
 
-                        if is_reparse or p.is_symlink() or (hasattr(p, 'is_junction') and p.is_junction()):
+                        if _classificar_item_navegador(p, st):
                             on_error(f"Perfil ignorado (link/reparse): {perfil.name}")
                             continue
 
-                        if not is_dir:
+                        if not stat.S_ISDIR(st.st_mode):
+                            continue
+                            
+                        if not is_safe_path(str(p), raiz_autorizada):
+                            on_error(f"Perfil inseguro: {perfil.name}")
                             continue
                     except OSError as e:
                         on_error(f"Erro lendo perfil Chromium ({type(e).__name__})")
@@ -592,8 +613,15 @@ def _processar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_ev
                     for sub in subpastas:
                         sub_path = p / sub
                         try:
-                            if sub_path.exists() and sub_path.is_dir() and not sub_path.is_symlink() and not (hasattr(sub_path, 'is_junction') and sub_path.is_junction()):
-                                _remover_diretorio_recursivo(sub_path, raiz_autorizada, cat_id, tracker, cancel_event, avisos_ref)
+                            if sub_path.exists():
+                                if _classificar_item_navegador(sub_path):
+                                    on_error(f"Subpasta ignorada (link/reparse): {sub}")
+                                    continue
+                                if sub_path.is_dir():
+                                    if not is_safe_path(str(sub_path), raiz_autorizada):
+                                        on_error(f"Subpasta insegura: {sub}")
+                                        continue
+                                    _remover_diretorio_recursivo(sub_path, raiz_autorizada, cat_id, tracker, cancel_event, avisos_ref)
                         except OSError as e:
                             on_error(f"Erro no subdiretório {sub} ({type(e).__name__})")
         except JobCancelledError:
@@ -607,16 +635,18 @@ def _processar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_ev
                 for perfil in it:
                     if cancel_event and cancel_event.is_set(): raise JobCancelledError()
                     try:
-                        is_dir = perfil.is_dir(follow_symlinks=False)
                         st = perfil.stat(follow_symlinks=False)
                         p = Path(perfil.path)
-                        is_reparse = _is_reparse_point(p, st)
 
-                        if is_reparse or p.is_symlink() or (hasattr(p, 'is_junction') and p.is_junction()):
+                        if _classificar_item_navegador(p, st):
                             on_error(f"Perfil ignorado (link/reparse): {perfil.name}")
                             continue
 
-                        if not is_dir:
+                        if not stat.S_ISDIR(st.st_mode):
+                            continue
+                            
+                        if not is_safe_path(str(p), raiz_autorizada):
+                            on_error(f"Perfil inseguro: {perfil.name}")
                             continue
                     except OSError as e:
                         on_error(f"Erro lendo perfil Firefox ({type(e).__name__})")
@@ -624,8 +654,15 @@ def _processar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_ev
 
                     sub_path = p / "cache2"
                     try:
-                        if sub_path.exists() and sub_path.is_dir() and not sub_path.is_symlink() and not (hasattr(sub_path, 'is_junction') and sub_path.is_junction()):
-                            _remover_diretorio_recursivo(sub_path, raiz_autorizada, cat_id, tracker, cancel_event, avisos_ref)
+                        if sub_path.exists():
+                            if _classificar_item_navegador(sub_path):
+                                on_error(f"Subpasta ignorada (link/reparse): cache2")
+                                continue
+                            if sub_path.is_dir():
+                                if not is_safe_path(str(sub_path), raiz_autorizada):
+                                    on_error(f"Subpasta insegura: cache2")
+                                    continue
+                                _remover_diretorio_recursivo(sub_path, raiz_autorizada, cat_id, tracker, cancel_event, avisos_ref)
                     except OSError as e:
                         on_error(f"Erro no cache2 ({type(e).__name__})")
         except JobCancelledError:

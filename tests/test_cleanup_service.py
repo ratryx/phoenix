@@ -353,22 +353,13 @@ def test_chromium_firefox_root_reparse_points(tmp_path):
         }
     }
     
-    original_lstat = os.lstat
-    def fake_lstat(path):
-        st = original_lstat(path)
-        # Mock Default profile and the root directory as reparse points
-        if "Default" in str(path) or "xyz.default" in str(path) or "root" in str(path):
-            class FakeStat:
-                st_mode = st.st_mode
-                st_ino = st.st_ino
-                st_dev = st.st_dev
-                st_size = st.st_size
-                st_file_attributes = stat.FILE_ATTRIBUTE_REPARSE_POINT
-                st_reparse_tag = 0
-            return FakeStat()
-        return st
+    original_is_reparse = _is_reparse_point
+    def fake_is_reparse(filepath, st=None):
+        if "Default" in str(filepath) or "xyz.default" in str(filepath) or "root" in str(filepath):
+            return True
+        return original_is_reparse(filepath, st)
 
-    with patch("os.lstat", side_effect=fake_lstat):
+    with patch("modules.core.cleanup_service._is_reparse_point", side_effect=fake_is_reparse):
         result = executar_limpeza(injetar_alvos=alvos)
 
     assert result["ok"] is True
