@@ -455,11 +455,19 @@ def _remover_diretorio(dirpath: Path, raiz_autorizada: str, cancel_event, on_err
             on_error("TOCTOU mismatch dir")
             return {"removidos": 0, "ignorados": 1, "bytes": 0}
             
+        if stat.S_ISLNK(st2.st_mode) or _is_reparse_point(dirpath, st2):
+            on_error("Reparse point dir 2")
+            return {"removidos": 0, "ignorados": 1, "bytes": 0}
+            
+        if not is_safe_path(str(dirpath), raiz_autorizada):
+            on_error("Caminho inseguro dir 2")
+            return {"removidos": 0, "ignorados": 1, "bytes": 0}
+            
         if cancel_event and cancel_event.is_set():
             raise JobCancelledError()
             
         dirpath.rmdir()
-        return {"removidos": 0, "ignorados": 0, "bytes": 0}
+        return {"removidos": 1, "ignorados": 0, "bytes": 0}
     except JobCancelledError:
         raise
     except OSError as e:
@@ -473,6 +481,9 @@ def _remover_diretorio_recursivo(dirpath: Path, raiz_autorizada: str, cat_id: st
     
     def on_error(msg):
         tracker.increment_processed(cat_id, removed=0, ignored=1, bytes_liberados=0)
+        avisos_ref.append(msg)
+        
+    def log_error(msg):
         avisos_ref.append(msg)
     
     try:
@@ -489,11 +500,11 @@ def _remover_diretorio_recursivo(dirpath: Path, raiz_autorizada: str, cat_id: st
             item = Path(item_path)
             try:
                 if not is_dir:
-                    res = _remover_arquivo(item, raiz_autorizada, cancel_event, on_error)
+                    res = _remover_arquivo(item, raiz_autorizada, cancel_event, log_error)
                     tracker.increment_processed(cat_id, removed=res["removidos"], ignored=res["ignorados"], bytes_liberados=res["bytes"])
                 else:
-                    res = _remover_diretorio(item, raiz_autorizada, cancel_event, on_error)
-                    tracker.increment_processed(cat_id, removed=0, ignored=res["ignorados"], bytes_liberados=0)
+                    res = _remover_diretorio(item, raiz_autorizada, cancel_event, log_error)
+                    tracker.increment_processed(cat_id, removed=res["removidos"], ignored=res["ignorados"], bytes_liberados=res["bytes"])
             except JobCancelledError:
                 raise
             except OSError as e:
@@ -512,6 +523,9 @@ def _processar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_ev
     
     def on_error(msg):
         tracker.increment_processed(cat_id, removed=0, ignored=1, bytes_liberados=0)
+        avisos_ref.append(msg)
+        
+    def log_error(msg):
         avisos_ref.append(msg)
     
     if tipo == "lixeira":
@@ -541,7 +555,7 @@ def _processar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_ev
                 for filepath_str, is_dir in _enumerar_glob_seguro(caminho_base, info["padrao"], raiz_autorizada, cancel_event, on_error):
                     if cancel_event and cancel_event.is_set(): raise JobCancelledError()
                     if not is_dir:
-                        res = _remover_arquivo(Path(filepath_str), raiz_autorizada, cancel_event, on_error)
+                        res = _remover_arquivo(Path(filepath_str), raiz_autorizada, cancel_event, log_error)
                         tracker.increment_processed(cat_id, removed=res["removidos"], ignored=res["ignorados"], bytes_liberados=res["bytes"])
         except JobCancelledError:
             raise
