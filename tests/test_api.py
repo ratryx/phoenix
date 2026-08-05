@@ -233,7 +233,7 @@ def test_api_concorrencia_destrutiva_rejeita(monkeypatch):
     payload2 = api.verificar_tarefa(job_id2)
     assert payload2["status"] == "failed"
     assert payload2["resultado"]["ok"] is False
-    assert "está em execução" in payload2["resultado"]["erro"]
+    assert "está em andamento" in payload2["resultado"]["erro"]
     assert "system_mutation" not in payload2["resultado"].get("erro", "")
     assert "system_mutation" not in payload2["resultado"].get("detalhe", "")
     assert payload2["resultado"]["detalhe"] == "Por favor, aguarde a conclusão da tarefa atual."

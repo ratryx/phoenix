@@ -110,7 +110,8 @@ class JobManager:
                     return self._create_rejected_job(
                         job_id, operation_name, exclusive_group,
                         codigo="JOB_CONFLICT",
-                        erro="Outra operação está em andamento."
+                        erro="Outra operação está em andamento.",
+                        detalhe="Por favor, aguarde a conclusão da tarefa atual."
                     )
 
             cancel_event = threading.Event()

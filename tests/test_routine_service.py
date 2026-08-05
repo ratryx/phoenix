@@ -198,11 +198,17 @@ def test_integration_routine_cancellation():
     original_exec = service.executar
     def proxy_executar(*args, **kwargs):
         ev_wait.wait(2.0)
+        job_context = kwargs.get("job_context")
+        if job_context:
+            job_context.raise_if_cancelled()
         return original_exec(*args, **kwargs)
 
     service.executar = proxy_executar
 
-    job_id = jm.submit(service.executar, "123", pass_job_context=True)
+    def target_fn(ctx):
+        return service.executar("123", job_context=ctx)
+
+    job_id = jm.submit(target_fn, pass_job_context=True)
 
     # wait a moment to make sure it started waiting on ev_wait
     time.sleep(0.1)
