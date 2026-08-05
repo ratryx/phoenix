@@ -157,13 +157,14 @@ def test_item_swapped_reparse_point(tmp_path):
         if "f1.txt" in str(path):
             nonlocal call_count
             call_count += 1
-            if call_count == 2:
+            if call_count >= 2:
                 class FakeStat:
                     st_mode = st.st_mode
                     st_ino = st.st_ino
                     st_dev = st.st_dev
                     st_size = st.st_size
                     st_file_attributes = stat.FILE_ATTRIBUTE_REPARSE_POINT
+                    st_reparse_tag = 0
                 return FakeStat()
         return st
 

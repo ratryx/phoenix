@@ -672,7 +672,7 @@ def executar_limpeza(progress_callback=None, cancel_event=None, incluir_lixeira=
     parcial = any(c["status"] in ("parcial", "falhou") for c in tracker.categorias)
     
     return {
-        "ok": not parcial,
+        "ok": True,
         "parcial": parcial,
         "espaco_liberado_bytes": tracker.espaco_liberado_bytes,
         "espaco_liberado_mb": bytes_to_mb(tracker.espaco_liberado_bytes),
