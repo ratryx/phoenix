@@ -29,6 +29,10 @@ global.document = {
                 appendChild: function(child) {
                     if (!this.children) this.children = [];
                     this.children.push(child);
+                },
+                replaceChildren: function() {
+                    this.children = [];
+                    this.innerHTML = "";
                 }
             };
         }
