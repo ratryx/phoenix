@@ -205,6 +205,8 @@ assert.strictEqual(window.Phoenix.state.paginaAtual, 'diagnostico');
 
 // 7. Feedback
 loadScript('gui/js/ui/feedback.js');
+window.Phoenix.ui.icons = { create: () => ({ appendChild: () => {} }) };
+
 window.Phoenix.ui.feedback.mostrarOverlay('Teste');
 assert.strictEqual(document.getElementById('overlay-texto').textContent, 'Teste');
 window.Phoenix.ui.feedback.esconderOverlay();

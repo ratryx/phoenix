@@ -24,16 +24,34 @@
         executando = true;
 
         Phoenix.ui.feedback.mostrarOverlay("Limpando arquivos temporários...", true);
+
+        const abortController = new AbortController();
+        const btnCancelar = document.getElementById("overlay-btn-cancelar");
+
+        if (btnCancelar) {
+            btnCancelar.onclick = () => {
+                btnCancelar.disabled = true;
+                btnCancelar.textContent = "Cancelando...";
+                abortController.abort();
+            };
+        }
+
         let sucesso = false;
         let parcial = false;
+        let finalJobRes = null;
         try {
             const jobRes = await Phoenix.bridge.call("executar_limpeza");
             if (!jobRes || !jobRes.job_id) {
                 return;
             }
-            const resultado = await Phoenix.jobs.awaitJob(jobRes.job_id, function(pct, msg, detalhes) {
-                Phoenix.ui.feedback.atualizarOverlay(msg, pct, detalhes);
+            const resultado = await Phoenix.jobs.awaitJob(jobRes.job_id, {
+                progressCallback: function(pct, msg, detalhes) {
+                    Phoenix.ui.feedback.atualizarOverlay(msg, pct, detalhes);
+                },
+                signal: abortController.signal
             });
+
+            finalJobRes = resultado;
             if (resultado && resultado.ok) {
                 sucesso = true;
                 if (resultado.parcial) parcial = true;
@@ -42,6 +60,7 @@
         } catch (e) {
             console.error("[ERRO] Limpeza:", e);
         } finally {
+            if (btnCancelar) btnCancelar.onclick = null;
             Phoenix.ui.feedback.esconderOverlay(true, sucesso, parcial);
             executando = false;
         }
@@ -58,14 +77,32 @@
         if (!resultado || !resultado.ok) {
             const span = document.createElement("span");
             span.className = "badge erro";
-            span.textContent = "Erro";
+            span.textContent = (resultado && resultado.codigo === "JOB_CANCELLED") ? "Cancelado" : "Erro";
             div.appendChild(span);
             div.appendChild(document.createTextNode(" "));
-            
+
             const txt = (resultado && resultado.erro) || "Erro desconhecido";
             div.appendChild(document.createTextNode(txt));
-            
-            if (resultado && resultado.espaco_liberado_mb !== undefined) {
+
+            // Fallback para timeout ou cancelamento (MOSTRAR RESULTADO PARCIAL)
+            const snap = resultado && resultado.resultado_parcial;
+            if (snap) {
+                const espaco = snap.espaco_liberado_mb !== undefined ? snap.espaco_liberado_mb : (snap.espaco_liberado_bytes ? (snap.espaco_liberado_bytes / (1024*1024)) : 0);
+                if (espaco > 0 || snap.arquivos_processados > 0) {
+                    const p = document.createElement("p");
+                    p.style.marginTop = "10px";
+                    p.style.fontSize = "13px";
+                    p.textContent = `Resultado parcial: ${snap.arquivos_processados} itens processados (${snap.arquivos_removidos} removidos, ${snap.arquivos_ignorados} ignorados). ${formatarBytes(espaco)} liberados antes da interrupção.`;
+                    div.appendChild(p);
+                }
+                if (snap.categoria) {
+                    const pCat = document.createElement("p");
+                    pCat.style.marginTop = "4px";
+                    pCat.style.fontSize = "13px";
+                    pCat.textContent = `Parou na categoria: ${snap.categoria}`;
+                    div.appendChild(pCat);
+                }
+            } else if (resultado && resultado.espaco_liberado_mb !== undefined) {
                 const p = document.createElement("p");
                 p.style.marginTop = "10px";
                 p.textContent = `Resultado parcial: ${formatarBytes(resultado.espaco_liberado_mb)} liberados antes da falha.`;
@@ -80,13 +117,20 @@
             const p = document.createElement("p");
             p.style.marginTop = "10px";
             p.appendChild(document.createTextNode("Espaço total liberado: "));
-            
+
             const strong = document.createElement("strong");
             strong.textContent = formatarBytes(resultado.espaco_liberado_mb);
             p.appendChild(strong);
-            
+
             div.appendChild(p);
-            
+
+            const resStats = document.createElement("p");
+            resStats.style.marginTop = "4px";
+            resStats.style.fontSize = "13px";
+            resStats.style.color = "var(--cor-texto-secundario)";
+            resStats.textContent = `Processados: ${resultado.arquivos_processados || 0} (${resultado.arquivos_removidos || 0} removidos, ${resultado.arquivos_ignorados || 0} ignorados).`;
+            div.appendChild(resStats);
+
             if (resultado.avisos && resultado.avisos.length > 0) {
                 const pAvisos = document.createElement("p");
                 pAvisos.style.marginTop = "10px";
@@ -96,7 +140,7 @@
                 div.appendChild(pAvisos);
             }
         }
-        
+
         container.appendChild(div);
     }
 

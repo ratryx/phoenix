@@ -153,7 +153,7 @@ class JobManager:
                 res = None
                 exception_type = "cancelled"
             except Exception as e:
-                logger.exception(f"Falha durante execução do job {job_id} ({operation_name})")
+                logger.error(f"Falha durante execução do job {job_id} (operação: {operation_name}, tipo: {type(e).__name__})")
                 res = {
                     "ok": False,
                     "codigo": "JOB_INTERNAL_ERROR",
@@ -162,41 +162,44 @@ class JobManager:
                 }
                 exception_type = "failed"
             finally:
-                with self._lock:
-                    job = self._jobs.get(job_id)
-                    if job:
-                        job["worker_alive"] = False
-                        job["worker_exited_at"] = time.time()
+                try:
+                    with self._lock:
+                        job = self._jobs.get(job_id)
+                        if job:
+                            job["worker_alive"] = False
+                            job["worker_exited_at"] = time.time()
 
-                        if job["status"] not in ("timed_out", "cancelled"):
-                            if exception_type == "cancelled":
-                                job["status"] = "cancelled"
-                                if not res:
-                                    res = {"ok": False, "codigo": "JOB_CANCELLED", "erro": "A operação foi cancelada.", "resultado_parcial": job.get("last_snapshot")}
-                            elif exception_type:
-                                job["status"] = "failed"
-                            else:
-                                try:
-                                    json.dumps(res)
-                                    job["status"] = "done"
-                                except TypeError:
-                                    res = {
-                                        "ok": False,
-                                        "codigo": "JOB_RESULT_INVALID",
-                                        "erro": "Resultado não serializável.",
-                                        "detalhe": "A operação retornou um objeto que não pode ser enviado para a interface."
-                                    }
+                            if job["status"] not in ("timed_out", "cancelled"):
+                                if exception_type == "cancelled":
+                                    job["status"] = "cancelled"
+                                    if not res:
+                                        res = {"ok": False, "codigo": "JOB_CANCELLED", "erro": "A operação foi cancelada.", "resultado_parcial": job.get("last_snapshot")}
+                                elif exception_type:
                                     job["status"] = "failed"
+                                else:
+                                    try:
+                                        json.dumps(res)
+                                        job["status"] = "done"
+                                    except (TypeError, ValueError, OverflowError):
+                                        res = {
+                                            "ok": False,
+                                            "codigo": "JOB_RESULT_INVALID",
+                                            "erro": "Resultado não serializável.",
+                                            "detalhe": "A operação retornou um objeto que não pode ser enviado para a interface."
+                                        }
+                                        job["status"] = "failed"
 
-                            job["resultado"] = res
-                            job["completed_at"] = time.time()
-                        elif not job.get("completed_at"):
-                            job["completed_at"] = time.time()
-                            
-                        self._trigger_terminal_callback(job_id, job)
+                                job["resultado"] = res
+                                job["completed_at"] = time.time()
+                            elif not job.get("completed_at"):
+                                job["completed_at"] = time.time()
 
-                    if exclusive_group and self._exclusive_groups.get(exclusive_group) == job_id:
-                        del self._exclusive_groups[exclusive_group]
+                            self._trigger_terminal_callback(job_id, job)
+
+                        if exclusive_group and self._exclusive_groups.get(exclusive_group) == job_id:
+                            del self._exclusive_groups[exclusive_group]
+                except Exception as fe:
+                    logger.error(f"Erro critico no finally do job {job_id} ({operation_name}): {type(fe).__name__}")
 
         threading.Thread(target=worker, daemon=True, name=f"PhoenixJob-{job_id}").start()
         return job_id
@@ -234,7 +237,7 @@ class JobManager:
                     pct = max(0, min(100, int(float(pct))))
                 except (ValueError, TypeError):
                     pct = 0
-                    
+
                 if pct < job.get("progresso", 0):
                     pct = job.get("progresso", 0)
 
@@ -289,7 +292,7 @@ class JobManager:
                         "resultado_parcial": job.get("last_snapshot")
                     }
                     job["completed_at"] = time.time()
-                    
+
                     self._trigger_terminal_callback(j_id, job)
 
     def consultar(self, job_id: str) -> dict:

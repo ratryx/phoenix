@@ -255,7 +255,7 @@ def test_processed_tracking(tmp_path):
     d1.mkdir()
     f1 = d1 / "f1.txt"
     f1.write_text("1")
-    
+
     alvos = {
         "t": {
             "nome": "T",
@@ -264,25 +264,25 @@ def test_processed_tracking(tmp_path):
             "tipo": "diretorio"
         }
     }
-    
+
     result = executar_limpeza(injetar_alvos=alvos)
-    
+
     # 2 removed: dir1, f1.txt. +1 ignorado due to root temp_dir itself maybe?
     # Actually temp_dir itself is evaluated, but let's check processed count.
     # total items is returned as arquivos_removidos + arquivos_ignorados if we track it,
     # but the test just wants to ensure no double counting and total == processed
     # However we don't return total_items, the callback does!
-    
+
     # Let's mock the callback
     cb_calls = []
     def prog_cb(mensagem, progresso, detalhes):
         cb_calls.append(detalhes)
-        
+
     d1.mkdir()
     f1.write_text("1")
-        
+
     result2 = executar_limpeza(injetar_alvos=alvos, progress_callback=prog_cb)
-    
+
     last_details = cb_calls[-1]
     assert last_details["arquivos_processados"] > 0
     assert last_details["arquivos_total"] > 0
@@ -292,7 +292,7 @@ def test_parcial_with_ok_true(tmp_path):
     temp_dir = tmp_path / "temp"
     temp_dir.mkdir()
     (temp_dir / "f1.txt").write_text("1")
-    
+
     alvos = {
         "t": {
             "nome": "T",
@@ -301,13 +301,80 @@ def test_parcial_with_ok_true(tmp_path):
             "tipo": "diretorio"
         }
     }
-    
+
     def fake_unlink(self):
         raise PermissionError("Denied")
-        
+
     with patch("pathlib.Path.unlink", new=fake_unlink):
         result = executar_limpeza(injetar_alvos=alvos)
-        
+
     # The new contract: ok is ALWAYS True, but parcial is True if there were errors/warnings
     assert result["ok"] is True
     assert result["parcial"] is True
+
+def test_chromium_firefox_root_reparse_points(tmp_path):
+    temp_dir = tmp_path / "temp"
+    temp_dir.mkdir()
+    
+    # Create fake Chromium profile
+    chrome_profile = temp_dir / "Default"
+    chrome_profile.mkdir()
+    
+    # Create fake Firefox profile
+    ff_dir = tmp_path / "ff"
+    ff_dir.mkdir()
+    ff_profiles = ff_dir / "Profiles"
+    ff_profiles.mkdir()
+    ff_profile = ff_profiles / "xyz.default"
+    ff_profile.mkdir()
+    
+    # Root dir
+    root_dir = tmp_path / "root"
+    root_dir.mkdir()
+    
+    alvos = {
+        "cache_chrome": {
+            "nome": "Cache Chromium",
+            "caminho": str(temp_dir),
+            "raiz_autorizada": str(temp_dir),
+            "tipo": "chromium_cache"
+        },
+        "cache_firefox": {
+            "nome": "Cache Firefox",
+            "caminho": str(ff_dir),
+            "raiz_autorizada": str(ff_dir),
+            "tipo": "firefox_cache"
+        },
+        "root_dir": {
+            "nome": "Root Dir",
+            "caminho": str(root_dir),
+            "raiz_autorizada": str(root_dir),
+            "tipo": "diretorio"
+        }
+    }
+    
+    original_lstat = os.lstat
+    def fake_lstat(path):
+        st = original_lstat(path)
+        # Mock Default profile and the root directory as reparse points
+        if "Default" in str(path) or "xyz.default" in str(path) or "root" in str(path):
+            class FakeStat:
+                st_mode = st.st_mode
+                st_ino = st.st_ino
+                st_dev = st.st_dev
+                st_size = st.st_size
+                st_file_attributes = stat.FILE_ATTRIBUTE_REPARSE_POINT
+                st_reparse_tag = 0
+            return FakeStat()
+        return st
+
+    with patch("os.lstat", side_effect=fake_lstat):
+        result = executar_limpeza(injetar_alvos=alvos)
+
+    assert result["ok"] is True
+    assert result["parcial"] is True
+    assert result["arquivos_ignorados"] == 3
+    
+    # Check if specific categories were marked as partial
+    for cat in result["categorias"]:
+        assert cat["status"] == "parcial"

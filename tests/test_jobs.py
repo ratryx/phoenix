@@ -112,6 +112,20 @@ def test_6_7_resultado_serializavel():
     assert "NaoSerializavel" not in payload_str
     wait_for_worker_exit(jm, job_id2)
 
+    d = {}
+    d["loop"] = d
+    ev3 = threading.Event()
+    def broken_circular():
+        ev3.set()
+        return {"ok": True, "circular": d}
+
+    job_id3 = jm.submit(broken_circular)
+    ev3.wait(2.0)
+
+    status3 = wait_for_status(jm, job_id3, "failed")
+    assert status3["resultado"]["codigo"] == "JOB_RESULT_INVALID"
+    wait_for_worker_exit(jm, job_id3)
+
     jm.shutdown()
 
 def test_8_9_ttl_remove_job():
