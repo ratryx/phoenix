@@ -411,3 +411,69 @@ def test_shutdown_behavior_duplicate_id_protection():
     assert "system_mutation" not in jm._exclusive_groups
 
     jm.shutdown()
+
+def test_callback_exactly_once():
+    cb_calls = []
+    def terminal_cb(job_id, job):
+        cb_calls.append((job_id, job["status"]))
+        
+    jm = JobManager(watchdog_interval=0.1, on_terminal_state=terminal_cb)
+    ev_start = threading.Event()
+    ev_finish = threading.Event()
+
+    def operacao():
+        ev_start.set()
+        ev_finish.wait(5.0)
+        return {"ok": True}
+
+    job_id = jm.submit(operacao, timeout=0.2)
+    ev_start.wait(2.0)
+    
+    # Check that it timed out and callback called
+    wait_for_status(jm, job_id, "timed_out")
+    
+    # Now let the worker exit
+    ev_finish.set()
+    wait_for_worker_exit(jm, job_id)
+    
+    # Callback should be called exactly once
+    assert len(cb_calls) == 1
+    assert cb_calls[0][1] == "timed_out"
+    jm.shutdown()
+
+def test_recursive_sanitization():
+    jm = JobManager(watchdog_interval=0.1)
+    ev_start = threading.Event()
+    ev_finish = threading.Event()
+
+    def operacao(job_context=None):
+        ev_start.set()
+        
+        nested_dict = {}
+        curr = nested_dict
+        for i in range(10):
+            curr["level"] = {}
+            curr = curr["level"]
+            
+        job_context.update_progress(50, "deep", nested_dict)
+        ev_finish.wait(5.0)
+        return {"ok": True}
+
+    job_id = jm.submit(operacao, pass_job_context=True)
+    ev_start.wait(2.0)
+    
+    payload = jm.consultar(job_id)
+    snapshot = payload.get("detalhes_progresso")
+    
+    # It should not have 10 levels because max depth is 5
+    curr = snapshot
+    levels = 0
+    while isinstance(curr, dict) and "level" in curr:
+        levels += 1
+        curr = curr["level"]
+    
+    assert levels <= 6
+    
+    ev_finish.set()
+    wait_for_worker_exit(jm, job_id)
+    jm.shutdown()

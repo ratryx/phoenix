@@ -114,6 +114,12 @@ async function runTests() {
         await sandbox.mockBtn.onclick(); // Roda de novo
         assert(callCount === 1, "flag liberada em sucesso");
 
+        // 4b. Tratamento de parcial: {ok: true, parcial: true}
+        sandbox.Phoenix.jobs.awaitJob = async () => ({ ok: true, parcial: true, espaco_liberado_mb: 15 });
+        await sandbox.mockBtn.onclick();
+        assert(sandbox.mockContainer.innerHTML.includes("15.0 MB"), "15 MB renderizado no parcial");
+        assert(sandbox.mockContainer.innerHTML.includes("Concluído (Parcial)"), "parcial tratado");
+
         // 4. Tratamento de falhas: `{ok: false}`
         sandbox.Phoenix.jobs.awaitJob = async () => ({ ok: false, erro: "Algo falhou" });
         await sandbox.mockBtn.onclick();

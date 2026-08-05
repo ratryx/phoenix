@@ -247,3 +247,67 @@ def test_bytes_only_after_removal(tmp_path):
 
     assert result["espaco_liberado_bytes"] == 0
     assert file1.exists()
+
+def test_processed_tracking(tmp_path):
+    temp_dir = tmp_path / "temp"
+    temp_dir.mkdir()
+    d1 = temp_dir / "dir1"
+    d1.mkdir()
+    f1 = d1 / "f1.txt"
+    f1.write_text("1")
+    
+    alvos = {
+        "t": {
+            "nome": "T",
+            "caminho": str(temp_dir),
+            "raiz_autorizada": str(temp_dir),
+            "tipo": "diretorio"
+        }
+    }
+    
+    result = executar_limpeza(injetar_alvos=alvos)
+    
+    # 2 removed: dir1, f1.txt. +1 ignorado due to root temp_dir itself maybe?
+    # Actually temp_dir itself is evaluated, but let's check processed count.
+    # total items is returned as arquivos_removidos + arquivos_ignorados if we track it,
+    # but the test just wants to ensure no double counting and total == processed
+    # However we don't return total_items, the callback does!
+    
+    # Let's mock the callback
+    cb_calls = []
+    def prog_cb(mensagem, progresso, detalhes):
+        cb_calls.append(detalhes)
+        
+    d1.mkdir()
+    f1.write_text("1")
+        
+    result2 = executar_limpeza(injetar_alvos=alvos, progress_callback=prog_cb)
+    
+    last_details = cb_calls[-1]
+    assert last_details["arquivos_processados"] > 0
+    assert last_details["arquivos_total"] > 0
+    assert last_details["arquivos_processados"] == last_details["arquivos_total"]
+
+def test_parcial_with_ok_true(tmp_path):
+    temp_dir = tmp_path / "temp"
+    temp_dir.mkdir()
+    (temp_dir / "f1.txt").write_text("1")
+    
+    alvos = {
+        "t": {
+            "nome": "T",
+            "caminho": str(temp_dir),
+            "raiz_autorizada": str(temp_dir),
+            "tipo": "diretorio"
+        }
+    }
+    
+    def fake_unlink(self):
+        raise PermissionError("Denied")
+        
+    with patch("pathlib.Path.unlink", new=fake_unlink):
+        result = executar_limpeza(injetar_alvos=alvos)
+        
+    # The new contract: ok is ALWAYS True, but parcial is True if there were errors/warnings
+    assert result["ok"] is True
+    assert result["parcial"] is True
