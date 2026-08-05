@@ -431,6 +431,8 @@ class PhoenixAPI:
         self._window_controller.minimizar()
 
     def fechar_janela(self):
+        self._window_controller.fechar()
+        
+    def shutdown(self):
         self._job_manager.shutdown()
         GUILogger.shutdown()
-        self._window_controller.fechar()

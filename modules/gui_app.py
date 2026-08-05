@@ -57,7 +57,10 @@ def iniciar(hw_info: dict = None):
 
     window_controller.set_window(janela)
 
-    webview.start(debug=False)
+    try:
+        webview.start(debug=False)
+    finally:
+        api.shutdown()
 
 
 if __name__ == "__main__":

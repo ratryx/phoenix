@@ -28,6 +28,8 @@ window.Phoenix.ui.icons = {
             svg.setAttribute('role', 'img');
             if (label) {
                 svg.setAttribute('aria-label', label);
+            } else {
+                svg.setAttribute('aria-label', name);
             }
         }
 
@@ -100,6 +102,14 @@ window.Phoenix.ui.icons = {
             const polyline = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
             polyline.setAttribute('points', '22 12 18 12 15 21 9 3 6 12 2 12');
             paths = [polyline];
+        } else {
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', '12'); circle.setAttribute('cy', '12'); circle.setAttribute('r', '10');
+            const line1 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line1.setAttribute('x1', '12'); line1.setAttribute('y1', '16'); line1.setAttribute('x2', '12'); line1.setAttribute('y2', '12');
+            const line2 = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line2.setAttribute('x1', '12'); line2.setAttribute('y1', '8'); line2.setAttribute('x2', '12.01'); line2.setAttribute('y2', '8');
+            paths = [circle, line1, line2];
         }
 
         paths.forEach(p => svg.appendChild(p));
