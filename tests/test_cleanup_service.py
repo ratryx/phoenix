@@ -114,6 +114,24 @@ def test_unauthorized_root(tmp_path):
     with pytest.raises(ValueError, match="sem raiz_autorizada"):
         executar_limpeza(injetar_alvos=alvos)
 
+def test_final_stats_exposed(tmp_path):
+    temp_dir = tmp_path / "temp"
+    temp_dir.mkdir()
+    (temp_dir / "f1.txt").write_text("a")
+    (temp_dir / "f2.txt").write_text("b")
+    alvos = {
+        "t": {
+            "nome": "T",
+            "caminho": str(temp_dir),
+            "raiz_autorizada": str(temp_dir),
+            "tipo": "diretorio"
+        }
+    }
+    res = executar_limpeza(injetar_alvos=alvos)
+    assert res["arquivos_processados"] == 2
+    assert res["arquivos_total"] == 2
+    assert res["arquivos_removidos"] == 2
+
 def test_root_symlink_junction(tmp_path):
     temp_dir = tmp_path / "temp"
     temp_dir.mkdir()

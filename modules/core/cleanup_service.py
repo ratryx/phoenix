@@ -730,6 +730,8 @@ def executar_limpeza(progress_callback=None, cancel_event=None, incluir_lixeira=
         "espaco_liberado_mb": bytes_to_mb(tracker.espaco_liberado_bytes),
         "arquivos_removidos": tracker.arquivos_removidos,
         "arquivos_ignorados": tracker.arquivos_ignorados,
+        "arquivos_processados": tracker.arquivos_processados,
+        "arquivos_total": tracker.total_arquivos,
         "categorias": tracker.categorias,
         "avisos": global_avisos,
         "resultado_parcial": res_snapshot

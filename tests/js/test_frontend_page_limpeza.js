@@ -126,6 +126,40 @@ async function runTests() {
         assert(container.innerHTML.includes("Cancelado"), "Snapshot terminal renderizado (Cancelado)");
         assert(container.innerHTML.includes("10 itens processados"), "Snapshot terminal: itens");
         
+        // TEST: SUCCESS INTEGRAL
+        is_cancelled = false;
+        let iter_count = 0;
+        sandbox.window.Phoenix.bridge.call = async (ep, arg) => {
+            if (ep === "executar_limpeza") return { job_id: '998' };
+            if (ep === "verificar_tarefa") {
+                iter_count++;
+                if (iter_count === 1) return { status: "running", progresso: 50 };
+                return { status: "done", resultado: { ok: true, parcial: false, arquivos_processados: 100, arquivos_total: 100, arquivos_removidos: 80, arquivos_ignorados: 20, espaco_liberado_mb: 200 } };
+            }
+            return {};
+        };
+        await btn.onclick();
+        assert(container.innerHTML.includes("100 / 100 itens"), "Sucesso integral: exibe processados e total");
+        assert(container.innerHTML.includes("80 removidos"), "Sucesso integral: exibe removidos");
+        assert(container.innerHTML.includes("20 ignorados"), "Sucesso integral: exibe ignorados");
+        assert(!container.innerHTML.includes("Parcial"), "Sucesso integral: nao exibe parcial");
+
+        // TEST: SUCCESS PARCIAL
+        iter_count = 0;
+        sandbox.window.Phoenix.bridge.call = async (ep, arg) => {
+            if (ep === "executar_limpeza") return { job_id: '997' };
+            if (ep === "verificar_tarefa") {
+                iter_count++;
+                if (iter_count === 1) return { status: "running", progresso: 50 };
+                return { status: "done", resultado: { ok: true, parcial: true, arquivos_processados: 50, arquivos_total: 100, arquivos_removidos: 40, arquivos_ignorados: 10, espaco_liberado_mb: 100 } };
+            }
+            return {};
+        };
+        await btn.onclick();
+        assert(container.innerHTML.includes("50 / 100 itens"), "Sucesso parcial: exibe processados e total");
+        assert(container.innerHTML.includes("40 removidos"), "Sucesso parcial: exibe removidos");
+        assert(container.innerHTML.includes("Parcial"), "Sucesso parcial: exibe badge parcial");
+
         console.log("Todos os testes JS de limpeza (integração real) passaram.");
     } catch(e) {
         console.error(e);

@@ -124,11 +124,16 @@
 
             div.appendChild(p);
 
+            const proc = (resultado.arquivos_processados !== undefined) ? resultado.arquivos_processados : (resultado.resultado_parcial && resultado.resultado_parcial.arquivos_processados !== undefined ? resultado.resultado_parcial.arquivos_processados : 0);
+            const tot = (resultado.arquivos_total !== undefined) ? resultado.arquivos_total : (resultado.resultado_parcial && resultado.resultado_parcial.arquivos_total !== undefined ? resultado.resultado_parcial.arquivos_total : 0);
+            const rem = (resultado.arquivos_removidos !== undefined) ? resultado.arquivos_removidos : (resultado.resultado_parcial && resultado.resultado_parcial.arquivos_removidos !== undefined ? resultado.resultado_parcial.arquivos_removidos : 0);
+            const ign = (resultado.arquivos_ignorados !== undefined) ? resultado.arquivos_ignorados : (resultado.resultado_parcial && resultado.resultado_parcial.arquivos_ignorados !== undefined ? resultado.resultado_parcial.arquivos_ignorados : 0);
+
             const resStats = document.createElement("p");
             resStats.style.marginTop = "4px";
             resStats.style.fontSize = "13px";
             resStats.style.color = "var(--cor-texto-secundario)";
-            resStats.textContent = `Processados: ${resultado.arquivos_processados || 0} (${resultado.arquivos_removidos || 0} removidos, ${resultado.arquivos_ignorados || 0} ignorados).`;
+            resStats.textContent = `Processados: ${proc} / ${tot} itens (${rem} removidos, ${ign} ignorados).`;
             div.appendChild(resStats);
 
             if (resultado.avisos && resultado.avisos.length > 0) {
