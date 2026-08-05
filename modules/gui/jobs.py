@@ -7,25 +7,27 @@ from modules.core.exceptions import JobCancelledError
 
 logger = logging.getLogger(__name__)
 
+def _sanitize_details_recursive(details, depth=0):
+    if depth > 5: return None
+    if isinstance(details, str):
+        return details[:500]
+    elif isinstance(details, (int, float, bool, type(None))):
+        return details
+    elif isinstance(details, list):
+        return [_sanitize_details_recursive(v, depth+1) for v in details[:100]]
+    elif isinstance(details, dict):
+        return {str(k)[:50]: _sanitize_details_recursive(v, depth+1) for k, v in list(details.items())[:100]}
+    else:
+        return str(details)[:500]
+
 def _sanitize_details(details):
     if not details: return None
     try:
-        j = json.dumps(details)
-        d = json.loads(j)
-        if isinstance(d, dict):
-            # Limitar strings, listas e categorias
-            safe_d = {}
-            for k, v in d.items():
-                if isinstance(v, str):
-                    safe_d[k] = v[:500]
-                elif isinstance(v, list):
-                    safe_d[k] = v[:100]
-                else:
-                    safe_d[k] = v
-            if "categorias" in safe_d and isinstance(safe_d["categorias"], list):
-                safe_d["categorias"] = safe_d["categorias"][:50]
-            return safe_d
-        return d
+        sanitized = _sanitize_details_recursive(details)
+        j = json.dumps(sanitized)
+        if len(j) > 65536:
+            return None
+        return sanitized
     except Exception:
         return None
 
@@ -74,17 +76,33 @@ class JobManager:
                 return new_id
 
     def _trigger_terminal_callback(self, job_id, job):
-        if self.on_terminal_state:
+        if not job.get("terminal_callback_emitted") and self.on_terminal_state:
+            job["terminal_callback_emitted"] = True
             try:
                 self.on_terminal_state(job_id, job)
             except Exception as e:
                 logger.error(f"Erro no terminal callback do job {job_id}: {e}")
 
     def submit(self, target_fn, *args, job_id=None, operation_name="unknown", exclusive_group=None, timeout=None, pass_job_context=False, **kwargs):
-        if job_id is None:
-            job_id = self._generate_unique_job_id()
-
         with self._lock:
+            if self._shutdown_event.is_set():
+                rej_id = self._generate_unique_job_id()
+                return self._create_rejected_job(
+                    rej_id, operation_name, exclusive_group,
+                    codigo="JOB_MANAGER_SHUTDOWN",
+                    erro="O sistema está sendo desligado."
+                )
+
+            if job_id is not None and job_id in self._jobs:
+                rej_id = self._generate_unique_job_id()
+                return self._create_rejected_job(
+                    rej_id, operation_name, exclusive_group,
+                    codigo="JOB_DUPLICATE_ID",
+                    erro="ID de tarefa duplicado."
+                )
+
+            if job_id is None:
+                job_id = self._generate_unique_job_id()
             if exclusive_group:
                 active_job = self._exclusive_groups.get(exclusive_group)
                 if active_job and active_job in self._jobs and self._jobs[active_job]["worker_alive"]:
@@ -112,7 +130,8 @@ class JobManager:
                 "deadline": deadline,
                 "progresso": 0,
                 "mensagem": "Iniciando...",
-                "last_snapshot": None
+                "last_snapshot": None,
+                "terminal_callback_emitted": False
             }
             self._jobs[job_id] = job_entry
 
@@ -156,7 +175,17 @@ class JobManager:
                             elif exception_type:
                                 job["status"] = "failed"
                             else:
-                                job["status"] = "done"
+                                try:
+                                    json.dumps(res)
+                                    job["status"] = "done"
+                                except TypeError:
+                                    res = {
+                                        "ok": False,
+                                        "codigo": "JOB_RESULT_INVALID",
+                                        "erro": "Resultado não serializável.",
+                                        "detalhe": "A operação retornou um objeto que não pode ser enviado para a interface."
+                                    }
+                                    job["status"] = "failed"
 
                             job["resultado"] = res
                             job["completed_at"] = time.time()
@@ -188,7 +217,8 @@ class JobManager:
             "exclusive_group": exclusive_group,
             "worker_alive": False,
             "cancel_event": threading.Event(),
-            "deadline": None
+            "deadline": None,
+            "terminal_callback_emitted": False
         }
         self._jobs[job_id] = job
         self._cleanup_expired()
