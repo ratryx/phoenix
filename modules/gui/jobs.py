@@ -48,6 +48,13 @@ class JobContext:
         self._update_progress_fn(self.job_id, pct, msg, details)
 
 class JobManager:
+    JOB_RESULT_INVALID = {
+        "ok": False,
+        "codigo": "JOB_RESULT_INVALID",
+        "erro": "Resultado não serializável.",
+        "detalhe": "A operação retornou um objeto que não pode ser enviado para a interface."
+    }
+
     def __init__(self, ttl_seconds=900, max_retained_jobs=100, watchdog_interval=1.0, on_terminal_state=None):
         self._jobs = {}
         self._lock = threading.RLock()
@@ -180,13 +187,8 @@ class JobManager:
                                     try:
                                         json.dumps(res)
                                         job["status"] = "done"
-                                    except (TypeError, ValueError, OverflowError, RecursionError):
-                                        res = {
-                                            "ok": False,
-                                            "codigo": "JOB_RESULT_INVALID",
-                                            "erro": "Resultado não serializável.",
-                                            "detalhe": "A operação retornou um objeto que não pode ser enviado para a interface."
-                                        }
+                                    except Exception:
+                                        res = self.JOB_RESULT_INVALID
                                         job["status"] = "failed"
 
                                 job["resultado"] = res

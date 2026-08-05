@@ -491,3 +491,80 @@ def test_recursive_sanitization():
     ev_finish.set()
     wait_for_worker_exit(jm, job_id)
     jm.shutdown()
+
+def test_recursive_serialization_error_and_finalization():
+    import sys
+    ev_start = threading.Event()
+
+    cb_calls = []
+    def term_cb(job_id, job):
+        cb_calls.append((job_id, job["status"], job["resultado"]))
+
+    jm = JobManager(watchdog_interval=0.1, on_terminal_state=term_cb)
+
+    def operacao():
+        ev_start.set()
+        d = {}
+        curr = d
+        for i in range(sys.getrecursionlimit() + 5000):
+            curr["a"] = {}
+            curr = curr["a"]
+        return d
+
+    job_id = jm.submit(operacao, exclusive_group="test_group")
+    
+    # The group may have been cleared if the thread ran too fast, so skip checking it here.
+    ev_start.wait(2.0)
+    wait_for_worker_exit(jm, job_id)
+    
+    status = jm.consultar(job_id)
+    assert status["status"] == "failed"
+    assert status["resultado"]["codigo"] == "JOB_RESULT_INVALID"
+    
+    with jm._lock:
+        job_internal = jm._jobs[job_id]
+        assert job_internal["worker_alive"] is False
+        assert job_internal["completed_at"] is not None
+    
+    assert len(cb_calls) == 1
+    assert cb_calls[0][1] == "failed"
+    assert cb_calls[0][2]["codigo"] == "JOB_RESULT_INVALID"
+    
+    assert jm._exclusive_groups.get("test_group") is None
+    jm.shutdown()
+
+def test_json_dumps_unexpected_error():
+    ev_start = threading.Event()
+
+    cb_calls = []
+    def term_cb(job_id, job):
+        cb_calls.append((job_id, job["status"], job["resultado"]))
+
+    jm = JobManager(watchdog_interval=0.1, on_terminal_state=term_cb)
+
+    class UnserializableObject:
+        pass
+
+    def operacao():
+        ev_start.set()
+        return UnserializableObject()
+
+    job_id = jm.submit(operacao, exclusive_group="test_group_2")
+    ev_start.wait(2.0)
+    
+    wait_for_worker_exit(jm, job_id)
+    
+    status = jm.consultar(job_id)
+    assert status["status"] == "failed"
+    assert status["resultado"]["codigo"] == "JOB_RESULT_INVALID"
+    
+    with jm._lock:
+        job_internal = jm._jobs[job_id]
+        assert job_internal["worker_alive"] is False
+        assert job_internal["completed_at"] is not None
+    
+    assert len(cb_calls) == 1
+    assert cb_calls[0][1] == "failed"
+    
+    assert jm._exclusive_groups.get("test_group_2") is None
+    jm.shutdown()
