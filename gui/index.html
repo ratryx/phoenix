@@ -1,444 +1,444 @@
-﻿<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-<meta charset="UTF-8">
-<title>Phoenix Optimizer</title>
-<link rel="stylesheet" href="style.css">
-</head>
-<body>
-
-<div class="fundo-gradiente"></div>
-<div id="camada-particulas"></div>
-
-<div id="tela-selecao-cliente" style="display:none;
-  position:fixed;inset:0;background:var(--cor-fundo);
-  z-index:999;align-items:center;
-  justify-content:center;flex-direction:column">
-  
-  <div style="width:520px;max-width:90vw">
-    <div style="text-align:center;margin-bottom:32px">
-      <svg width="48" height="48" viewBox="0 0 64 64" fill="none">
-        <path d="M32 8c-3 5-6 11-6 18 0 9 4 16 6 20 2-4 6-11 6-20 0-7-3-13-6-18z" fill="#D89B4A"/>
-        <path d="M32 20c-8-2-18 0-24 8 4-1 12-1 18 3-6 1-12 5-15 11 5-2 12-2 17 1-3 3-5 8-5 13 4-3 7-8 9-13" stroke="#D89B4A" stroke-width="2" fill="none" stroke-linecap="round"/>
-      </svg>
-      <div style="font-size:22px;font-weight:700;
-        color:var(--cor-primaria);margin-top:12px">
-        Phoenix Optimizer
-      </div>
-      <div style="color:var(--cor-texto-secundario);
-        font-size:13px;margin-top:4px">
-        Modo Portable â€” Selecione o cliente
-      </div>
-    </div>
-    
-    <!-- Lista de clientes existentes -->
-    <div id="lista-clientes-portable" style="margin-bottom:16px"></div>
-    
-    <!-- Novo cliente -->
-    <div class="card">
-      <div style="font-weight:600;margin-bottom:12px;
-        color:var(--cor-primaria)">+ Novo cliente</div>
-      <input type="text" id="input-novo-cliente"
-        placeholder="Nome do cliente ou PC (ex: PC do JosÃ©)"
-        style="width:100%;padding:10px 14px;
-          background:rgba(255,255,255,0.05);
-          border:1px solid var(--cor-painel-borda);
-          border-radius:var(--raio-sm);
-          color:var(--cor-texto);font-size:14px;
-        outline:none;box-sizing:border-box">
-      <div style="margin-top:12px;display:flex;
-        justify-content:flex-end">
-        <button id="btn-novo-cliente" class="botao primario">
-          Iniciar atendimento
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div id="app">
-
-  <!-- Barra de tÃ­tulo customizada -->
-  <div class="barra-titulo">
-    <div class="marca">
-      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M32 8c-3 5-6 11-6 18 0 9 4 16 6 20 2-4 6-11 6-20 0-7-3-13-6-18z" fill="#D89B4A"/>
-        <path d="M32 20c-8-2-18 0-24 8 4-1 12-1 18 3-6 1-12 5-15 11 5-2 12-2 17 1-3 3-5 8-5 13 4-3 7-8 9-13" stroke="#D89B4A" stroke-width="2" fill="none" stroke-linecap="round"/>
-        <path d="M32 20c8-2 18 0 24 8-4-1-12-1-18 3 6 1 12 5 15 11-5-2-12-2-17 1 3 3 5 8 5 13-4-3-7-8-9-13" stroke="#D89B4A" stroke-width="2" fill="none" stroke-linecap="round"/>
-      </svg>
-      PHOENIX OPTIMIZER
-    </div>
-    <div class="controles-janela">
-      <button class="botao-janela" id="btn-minimizar" aria-label="Minimizar">&#x2212;</button>
-      <button class="botao-janela fechar" id="btn-fechar" aria-label="Fechar">&#x2715;</button>
-    </div>
-  </div>
-
-  <div class="layout-principal">
-
-    <!-- Sidebar -->
-    <div class="sidebar">
-      <div class="logo-area">
-        <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <path d="M32 8c-3 5-6 11-6 18 0 9 4 16 6 20 2-4 6-11 6-20 0-7-3-13-6-18z" fill="#D89B4A"/>
-          <path d="M32 20c-8-2-18 0-24 8 4-1 12-1 18 3-6 1-12 5-15 11 5-2 12-2 17 1-3 3-5 8-5 13 4-3 7-8 9-13" stroke="#D89B4A" stroke-width="2" fill="none" stroke-linecap="round"/>
-          <path d="M32 20c8-2 18 0 24 8-4-1-12-1-18 3 6 1 12 5 15 11-5-2-12-2-17 1 3 3 5 8 5 13-4-3-7-8-9-13" stroke="#D89B4A" stroke-width="2" fill="none" stroke-linecap="round"/>
-        </svg>
-        <div>
-          <div class="nome">Phoenix</div>
-          <div class="versao">v2.0 Â· GUI</div>
-        </div>
-      </div>
-
-      <div class="item-menu ativo" data-pagina="inicio">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>
-        InÃ­cio
-      </div>
-      <div class="item-menu" data-pagina="diagnostico">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
-        DiagnÃ³stico
-      </div>
-      <div class="item-menu" data-pagina="hardware">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
-        Hardware
-      </div>
-      <div class="item-menu" data-pagina="limpeza">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
-        Limpeza
-      </div>
-      <div class="item-menu" data-pagina="hwmonitor">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-        HWMonitor
-      </div>
-      <div class="item-menu" data-pagina="otimizacao">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
-        OtimizaÃ§Ã£o
-      </div>
-      <div class="item-menu" data-pagina="servicos">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.6 1.6 0 00-1-1.5 1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1H3a2 2 0 110-4h.1a1.6 1.6 0 001.5-1 1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3h0a1.6 1.6 0 001-1.5V3a2 2 0 114 0v.1a1.6 1.6 0 001 1.5h0a1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8v0a1.6 1.6 0 001.5 1H21a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z"/></svg>
-        ServiÃ§os
-      </div>
-      <div class="item-menu" data-pagina="historico">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
-        HistÃ³rico
-      </div>
-
-      <div class="item-menu destaque" id="btn-rotina-completa">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 13l4 4L19 7"/></svg>
-        Rotina completa
-      </div>
-
-      <div class="sidebar-rodape" id="rodape-hardware">
-        <div id="texto-rodape">Detectando hardware...</div>
-        <div class="barra-progresso" id="barra-progresso-rodape" style="margin-top: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; height: 6px; overflow: hidden; display: block;">
-           <div id="preenchimento-rodape" style="width: 0%; height: 100%; background: #D89B4A; transition: width 0.3s ease-in-out;"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ConteÃºdo -->
-    <div class="conteudo">
-
-      <!-- PÃ¡gina: InÃ­cio -->
-      <div class="pagina ativa" id="pagina-inicio">
-        <div class="cabecalho-pagina">
-          <div>
-            <h1>Bem-vindo ao Phoenix Optimizer</h1>
-            <p>DiagnÃ³stico, limpeza e otimizaÃ§Ã£o de performance para Windows 10/11</p>
-          </div>
-        </div>
-
-        <div class="grade-cards" id="cards-resumo-inicio">
-          <div class="card-metrica"><div class="rotulo">CPU</div><div class="valor">--<span class="unidade">%</span></div></div>
-          <div class="card-metrica"><div class="rotulo">MemÃ³ria RAM</div><div class="valor">--<span class="unidade">%</span></div></div>
-          <div class="card-metrica"><div class="rotulo">GPU</div><div class="valor">--</div></div>
-          <div class="card-metrica"><div class="rotulo">Modo grÃ¡fico</div><div class="valor" id="valor-modo-grafico">--</div></div>
-        </div>
-
-        <div class="card">
-          <div class="flex-entre">
-            <div>
-              <strong>Pronto para otimizar?</strong>
-              <p class="texto-secundario mt-0">Execute a rotina completa para diagnosticar, limpar e otimizar o PC em sequÃªncia.</p>
-            </div>
-            <button class="botao primario" id="btn-rotina-completa-card">Executar rotina completa</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- PÃ¡gina: DiagnÃ³stico -->
-      <div class="pagina" id="pagina-diagnostico">
-        <div class="cabecalho-pagina">
-          <div>
-            <h1>DiagnÃ³stico completo</h1>
-            <p>CPU, memÃ³ria, disco e processos em tempo real</p>
-          </div>
-          <button class="botao primario" id="btn-atualizar-diagnostico">Atualizar</button>
-        </div>
-        <div id="conteudo-diagnostico">
-          <p class="texto-secundario">Clique em "Atualizar" para coletar o diagnÃ³stico.</p>
-        </div>
-      </div>
-
-      <!-- PÃ¡gina: Hardware -->
-      <div class="pagina" id="pagina-hardware">
-        <div class="cabecalho-pagina">
-          <div>
-            <h1>Hardware</h1>
-            <p>InformaÃ§Ãµes detalhadas do sistema</p>
-          </div>
-          <button class="botao primario" id="btn-atualizar-hardware">Atualizar inventÃ¡rio</button>
-        </div>
-        
-        <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
-           <span id="hw-status-badge" class="badge" style="padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;">--</span>
-           <span id="hw-data-coleta" class="texto-secundario" style="font-size: 13px;"></span>
-        </div>
-        
-        <div id="hw-conteudo"></div>
-      </div>
-
-      <!-- PÃ¡gina: Limpeza -->
-      <div class="pagina" id="pagina-limpeza">
-        <div class="cabecalho-pagina">
-          <div>
-            <h1>Limpeza do sistema</h1>
-            <p>Remove arquivos temporÃ¡rios, cache e lixo acumulado</p>
-          </div>
-          <button class="botao primario" id="btn-executar-limpeza">Executar limpeza</button>
-        </div>
-        <div id="conteudo-limpeza">
-          <p class="texto-secundario">Nenhuma limpeza executada nesta sessÃ£o ainda.</p>
-        </div>
-      </div>
-
-      <!-- PÃ¡gina: HWMonitor -->
-      <div class="pagina" id="pagina-hwmonitor">
-      </div>
-
-      <!-- PÃ¡gina: OtimizaÃ§Ã£o -->
-      <div class="pagina" id="pagina-otimizacao">
-        <div class="cabecalho-pagina">
-          <div>
-            <h1>OtimizaÃ§Ã£o de performance</h1>
-            <p>Ajustes de sistema e configuraÃ§Ãµes para jogos</p>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="flex-entre">
-            <div>
-              <strong>OtimizaÃ§Ã£o geral</strong>
-              <p class="texto-secundario mt-0">Plano de energia, efeitos visuais e apps em segundo plano.</p>
-            </div>
-            <button class="botao primario" id="btn-otimizacao-geral">Aplicar</button>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="flex-entre">
-            <div>
-              <strong>OtimizaÃ§Ã£o para jogos</strong>
-              <p class="texto-secundario mt-0">Modo de Jogo, overlay do Game Bar e agendador de GPU.</p>
-            </div>
-            <button class="botao primario" id="btn-otimizacao-gaming">Aplicar</button>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="flex-entre">
-            <div>
-              <strong>Otimizar disco</strong>
-              <p class="texto-secundario mt-0">TRIM (SSD) ou desfragmentaÃ§Ã£o (HDD), automÃ¡tico.</p>
-            </div>
-            <button class="botao primario" id="btn-otimizar-disco">Executar</button>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="flex-entre">
-            <div>
-              <strong>Liberar memÃ³ria RAM (Standby)</strong>
-              <p class="texto-secundario mt-0">
-                Libera memÃ³ria em cache que o Windows mantÃ©m reservada. 
-                Seguro e instantÃ¢neo â€” o sistema recupera o cache 
-                automaticamente conforme necessÃ¡rio.
-              </p>
-            </div>
-            <button class="botao primario" id="btn-liberar-ram">Liberar</button>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="flex-entre">
-            <div>
-              <strong>Analisar programas de inicializaÃ§Ã£o</strong>
-              <p class="texto-secundario mt-0">
-                Lista todos os programas que abrem com o Windows 
-                e identifica os que mais impactam o tempo de boot.
-              </p>
-            </div>
-            <button class="botao primario" id="btn-analisar-startup">Analisar</button>
-          </div>
-        </div>
-
-        <div id="resultado-startup" style="display:none; margin-bottom:16px;"></div>
-
-        <div id="resultado-otimizacao"></div>
-      </div>
-
-      <!-- PÃ¡gina: ServiÃ§os -->
-      <div class="pagina" id="pagina-servicos">
-        <div class="cabecalho-pagina">
-          <div>
-            <h1>ServiÃ§os do Windows</h1>
-            <p>Ative ou desative serviÃ§os nÃ£o essenciais com seguranÃ§a</p>
-          </div>
-          <button class="botao primario" id="btn-atualizar-servicos">Atualizar lista</button>
-        </div>
-        <div id="conteudo-servicos">
-          <p class="texto-secundario">Clique em "Atualizar lista" para consultar os serviÃ§os.</p>
-        </div>
-      </div>
-
-      <!-- PÃ¡gina: HistÃ³rico -->
-      <div class="pagina" id="pagina-historico">
-        <div class="cabecalho-pagina">
-          <div>
-            <h1>HistÃ³rico de atendimentos</h1>
-            <p>Todos os atendimentos jÃ¡ registrados pelo Phoenix</p>
-          </div>
-        </div>
-        <div id="conteudo-historico"></div>
-      </div>
-
-      <!-- PÃ¡gina: RelatÃ³rio (rotina completa) -->
-      <div class="pagina" id="pagina-relatorio">
-        <div class="cabecalho-pagina">
-          <div>
-            <h1>RelatÃ³rio de atendimento</h1>
-            <p>Comparativo antes / depois da rotina completa</p>
-          </div>
-        </div>
-        <div id="conteudo-relatorio"></div>
-      </div>
-
-    </div>
-  </div>
-</div>
-
-<!-- Barra de progresso global -->
-<div id="barra-progresso-global" style="
-  position: fixed;
-  top: 40px;
-  left: 0;
-  right: 0;
-  height: 3px;
-  z-index: 200;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.2s;
-">
-  <div id="barra-progresso-fill" style="
-    height: 100%;
-    background: var(--cor-primaria);
-    width: 0%;
-    transition: width 0.3s ease;
-    box-shadow: 0 0 8px rgba(216, 155, 74, 0.6);
-  "></div>
-</div>
-
-<div id="overlay-texto" style="
-  position: fixed;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(28, 24, 20, 0.95);
-  border: 1px solid var(--cor-painel-borda);
-  border-radius: var(--raio-sm);
-  padding: 8px 16px;
-  font-size: 13px;
-  color: var(--cor-texto-secundario);
-  z-index: 200;
-  opacity: 0;
-  transition: opacity 0.2s;
-  pointer-events: none;
-  white-space: nowrap;
-">Carregando...</div>
-
-<!-- Overlay de processamento -->
-<div class="overlay-processando" id="overlay-processando">
-  <div class="overlay-progresso-card">
-    <div class="overlay-icone" id="overlay-icone"></div>
-    <div class="overlay-titulo" id="overlay-titulo">Processando...</div>
-    <div class="overlay-subtitulo" id="overlay-subtitulo">
-      Aguarde, isso pode levar alguns segundos
-    </div>
-    <div class="overlay-barra-container">
-      <div class="overlay-barra-fill" id="overlay-barra-fill"></div>
-    </div>
-    <div class="overlay-status" id="overlay-status">Iniciando...</div>
-  </div>
-</div>
-
-<!-- Modal de ConfirmaÃ§Ã£o do Ponto de RestauraÃ§Ã£o -->
-<div class="modal-container" id="modal-restauracao">
-  <div class="modal-card">
-    <div class="modal-cabecalho">
-      <h2 id="modal-titulo">Ponto de RestauraÃ§Ã£o</h2>
-    </div>
-    <div class="modal-conteudo">
-      <div class="modal-status-icon" id="modal-icon"></div>
-      <p id="modal-mensagem">Iniciando processo...</p>
-    </div>
-    <div class="modal-botoes" id="modal-botoes">
-      <button class="botao primario" id="btn-modal-confirmar">Confirmar</button>
-      <button class="botao" id="btn-modal-cancelar">Cancelar</button>
-    </div>
-  </div>
-</div>
-
-<div class="modal-container" id="modal-confirmacao">
-  <div class="modal-card">
-    <div class="modal-cabecalho">
-      <div style="font-size:32px" id="modal-confirm-icone">[AVISO]</div>
-      <h2 id="modal-confirm-titulo">AtenÃ§Ã£o</h2>
-    </div>
-    <div class="modal-conteudo">
-      <p id="modal-confirm-mensagem" style="margin:0;font-size:14px;
-        line-height:1.6;color:var(--cor-texto-secundario)"></p>
-    </div>
-    <div class="modal-botoes">
-      <button class="botao" id="btn-modal-confirm-cancelar">Cancelar</button>
-      <button class="botao primario" id="btn-modal-confirm-ok">Continuar</button>
-    </div>
-  </div>
-</div>
-
-<script src="js/core/namespace.js"></script>
-<script src="js/core/state.js"></script>
-<script src="js/core/bridge.js"></script>
-<script src="js/ui/icons.js"></script><script src="js/ui/feedback.js"></script>
-<script src="js/core/jobs.js"></script>
-<script src="js/core/lifecycle.js"></script>
-<script src="js/core/router.js"></script>
-<script src="js/ui/window-controls.js"></script>
-<script src="js/ui/visual-effects.js"></script>
-<script src="js/operations/restore-point.js"></script>
-<script src="js/operations/routine.js"></script>
-<script src="js/features/client-session.js"></script>
-
-<!-- Pages -->
-<script src="js/pages/inicio.js"></script>
-<script src="js/pages/diagnostico.js"></script>
-<script src="js/pages/hardware.js"></script>
-<script src="js/pages/sensores.js"></script>
-<script src="js/pages/limpeza.js"></script>
-<script src="js/pages/otimizacao.js"></script>
-<script src="js/pages/servicos.js"></script>
-<script src="js/pages/historico.js"></script>
-<script src="js/pages/relatorio.js"></script>
-<!-- App (LÃ³gica Principal) -->
-<script src="app.js"></script>
-</body>
-</html>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Phoenix Optimizer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="fundo-gradiente"></div>
+<div id="camada-particulas"></div>
+
+<div id="tela-selecao-cliente" style="display:none;
+  position:fixed;inset:0;background:var(--cor-fundo);
+  z-index:999;align-items:center;
+  justify-content:center;flex-direction:column">
+  
+  <div style="width:520px;max-width:90vw">
+    <div style="text-align:center;margin-bottom:32px">
+      <svg width="48" height="48" viewBox="0 0 64 64" fill="none">
+        <path d="M32 8c-3 5-6 11-6 18 0 9 4 16 6 20 2-4 6-11 6-20 0-7-3-13-6-18z" fill="#D89B4A"/>
+        <path d="M32 20c-8-2-18 0-24 8 4-1 12-1 18 3-6 1-12 5-15 11 5-2 12-2 17 1-3 3-5 8-5 13 4-3 7-8 9-13" stroke="#D89B4A" stroke-width="2" fill="none" stroke-linecap="round"/>
+      </svg>
+      <div style="font-size:22px;font-weight:700;
+        color:var(--cor-primaria);margin-top:12px">
+        Phoenix Optimizer
+      </div>
+      <div style="color:var(--cor-texto-secundario);
+        font-size:13px;margin-top:4px">
+        Modo Portable — Selecione o cliente
+      </div>
+    </div>
+    
+    <!-- Lista de clientes existentes -->
+    <div id="lista-clientes-portable" style="margin-bottom:16px"></div>
+    
+    <!-- Novo cliente -->
+    <div class="card">
+      <div style="font-weight:600;margin-bottom:12px;
+        color:var(--cor-primaria)">+ Novo cliente</div>
+      <input type="text" id="input-novo-cliente"
+        placeholder="Nome do cliente ou PC (ex: PC do José)"
+        style="width:100%;padding:10px 14px;
+          background:rgba(255,255,255,0.05);
+          border:1px solid var(--cor-painel-borda);
+          border-radius:var(--raio-sm);
+          color:var(--cor-texto);font-size:14px;
+        outline:none;box-sizing:border-box">
+      <div style="margin-top:12px;display:flex;
+        justify-content:flex-end">
+        <button id="btn-novo-cliente" class="botao primario">
+          Iniciar atendimento
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="app">
+
+  <!-- Barra de título customizada -->
+  <div class="barra-titulo">
+    <div class="marca">
+      <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M32 8c-3 5-6 11-6 18 0 9 4 16 6 20 2-4 6-11 6-20 0-7-3-13-6-18z" fill="#D89B4A"/>
+        <path d="M32 20c-8-2-18 0-24 8 4-1 12-1 18 3-6 1-12 5-15 11 5-2 12-2 17 1-3 3-5 8-5 13 4-3 7-8 9-13" stroke="#D89B4A" stroke-width="2" fill="none" stroke-linecap="round"/>
+        <path d="M32 20c8-2 18 0 24 8-4-1-12-1-18 3 6 1 12 5 15 11-5-2-12-2-17 1 3 3 5 8 5 13-4-3-7-8-9-13" stroke="#D89B4A" stroke-width="2" fill="none" stroke-linecap="round"/>
+      </svg>
+      PHOENIX OPTIMIZER
+    </div>
+    <div class="controles-janela">
+      <button class="botao-janela" id="btn-minimizar" aria-label="Minimizar">&#x2212;</button>
+      <button class="botao-janela fechar" id="btn-fechar" aria-label="Fechar">&#x2715;</button>
+    </div>
+  </div>
+
+  <div class="layout-principal">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="logo-area">
+        <svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M32 8c-3 5-6 11-6 18 0 9 4 16 6 20 2-4 6-11 6-20 0-7-3-13-6-18z" fill="#D89B4A"/>
+          <path d="M32 20c-8-2-18 0-24 8 4-1 12-1 18 3-6 1-12 5-15 11 5-2 12-2 17 1-3 3-5 8-5 13 4-3 7-8 9-13" stroke="#D89B4A" stroke-width="2" fill="none" stroke-linecap="round"/>
+          <path d="M32 20c8-2 18 0 24 8-4-1-12-1-18 3 6 1 12 5 15 11-5-2-12-2-17 1 3 3 5 8 5 13-4-3-7-8-9-13" stroke="#D89B4A" stroke-width="2" fill="none" stroke-linecap="round"/>
+        </svg>
+        <div>
+          <div class="nome">Phoenix</div>
+          <div class="versao">v2.0 · GUI</div>
+        </div>
+      </div>
+
+      <div class="item-menu ativo" data-pagina="inicio">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12l9-9 9 9M5 10v10h14V10"/></svg>
+        Início
+      </div>
+      <div class="item-menu" data-pagina="diagnostico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg>
+        Diagnóstico
+      </div>
+      <div class="item-menu" data-pagina="hardware">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
+        Hardware
+      </div>
+      <div class="item-menu" data-pagina="limpeza">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+        Limpeza
+      </div>
+      <div class="item-menu" data-pagina="hwmonitor">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+        HWMonitor
+      </div>
+      <div class="item-menu" data-pagina="otimizacao">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
+        Otimização
+      </div>
+      <div class="item-menu" data-pagina="servicos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5V21a2 2 0 11-4 0v-.1a1.6 1.6 0 00-1-1.5 1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1H3a2 2 0 110-4h.1a1.6 1.6 0 001.5-1 1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3h0a1.6 1.6 0 001-1.5V3a2 2 0 114 0v.1a1.6 1.6 0 001 1.5h0a1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8v0a1.6 1.6 0 001.5 1H21a2 2 0 110 4h-.1a1.6 1.6 0 00-1.5 1z"/></svg>
+        Serviços
+      </div>
+      <div class="item-menu" data-pagina="historico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        Histórico
+      </div>
+
+      <div class="item-menu destaque" id="btn-rotina-completa">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 13l4 4L19 7"/></svg>
+        Rotina completa
+      </div>
+
+      <div class="sidebar-rodape" id="rodape-hardware">
+        <div id="texto-rodape">Detectando hardware...</div>
+        <div class="barra-progresso" id="barra-progresso-rodape" style="margin-top: 8px; background: rgba(255,255,255,0.1); border-radius: 4px; height: 6px; overflow: hidden; display: block;">
+           <div id="preenchimento-rodape" style="width: 0%; height: 100%; background: #D89B4A; transition: width 0.3s ease-in-out;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Conteúdo -->
+    <div class="conteudo">
+
+      <!-- Página: Início -->
+      <div class="pagina ativa" id="pagina-inicio">
+        <div class="cabecalho-pagina">
+          <div>
+            <h1>Bem-vindo ao Phoenix Optimizer</h1>
+            <p>Diagnóstico, limpeza e otimização de performance para Windows 10/11</p>
+          </div>
+        </div>
+
+        <div class="grade-cards" id="cards-resumo-inicio">
+          <div class="card-metrica"><div class="rotulo">CPU</div><div class="valor">--<span class="unidade">%</span></div></div>
+          <div class="card-metrica"><div class="rotulo">Memória RAM</div><div class="valor">--<span class="unidade">%</span></div></div>
+          <div class="card-metrica"><div class="rotulo">GPU</div><div class="valor">--</div></div>
+          <div class="card-metrica"><div class="rotulo">Modo gráfico</div><div class="valor" id="valor-modo-grafico">--</div></div>
+        </div>
+
+        <div class="card">
+          <div class="flex-entre">
+            <div>
+              <strong>Pronto para otimizar?</strong>
+              <p class="texto-secundario mt-0">Execute a rotina completa para diagnosticar, limpar e otimizar o PC em sequência.</p>
+            </div>
+            <button class="botao primario" id="btn-rotina-completa-card">Executar rotina completa</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Página: Diagnóstico -->
+      <div class="pagina" id="pagina-diagnostico">
+        <div class="cabecalho-pagina">
+          <div>
+            <h1>Diagnóstico completo</h1>
+            <p>CPU, memória, disco e processos em tempo real</p>
+          </div>
+          <button class="botao primario" id="btn-atualizar-diagnostico">Atualizar</button>
+        </div>
+        <div id="conteudo-diagnostico">
+          <p class="texto-secundario">Clique em "Atualizar" para coletar o diagnóstico.</p>
+        </div>
+      </div>
+
+      <!-- Página: Hardware -->
+      <div class="pagina" id="pagina-hardware">
+        <div class="cabecalho-pagina">
+          <div>
+            <h1>Hardware</h1>
+            <p>Informações detalhadas do sistema</p>
+          </div>
+          <button class="botao primario" id="btn-atualizar-hardware">Atualizar inventário</button>
+        </div>
+        
+        <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 12px;">
+           <span id="hw-status-badge" class="badge" style="padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;">--</span>
+           <span id="hw-data-coleta" class="texto-secundario" style="font-size: 13px;"></span>
+        </div>
+        
+        <div id="hw-conteudo"></div>
+      </div>
+
+      <!-- Página: Limpeza -->
+      <div class="pagina" id="pagina-limpeza">
+        <div class="cabecalho-pagina">
+          <div>
+            <h1>Limpeza do sistema</h1>
+            <p>Remove arquivos temporários, cache e lixo acumulado</p>
+          </div>
+          <button class="botao primario" id="btn-executar-limpeza">Executar limpeza</button>
+        </div>
+        <div id="conteudo-limpeza">
+          <p class="texto-secundario">Nenhuma limpeza executada nesta sessão ainda.</p>
+        </div>
+      </div>
+
+      <!-- Página: HWMonitor -->
+      <div class="pagina" id="pagina-hwmonitor">
+      </div>
+
+      <!-- Página: Otimização -->
+      <div class="pagina" id="pagina-otimizacao">
+        <div class="cabecalho-pagina">
+          <div>
+            <h1>Otimização de performance</h1>
+            <p>Ajustes de sistema e configurações para jogos</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="flex-entre">
+            <div>
+              <strong>Otimização geral</strong>
+              <p class="texto-secundario mt-0">Plano de energia, efeitos visuais e apps em segundo plano.</p>
+            </div>
+            <button class="botao primario" id="btn-otimizacao-geral">Aplicar</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="flex-entre">
+            <div>
+              <strong>Otimização para jogos</strong>
+              <p class="texto-secundario mt-0">Modo de Jogo, overlay do Game Bar e agendador de GPU.</p>
+            </div>
+            <button class="botao primario" id="btn-otimizacao-gaming">Aplicar</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="flex-entre">
+            <div>
+              <strong>Otimizar disco</strong>
+              <p class="texto-secundario mt-0">TRIM (SSD) ou desfragmentação (HDD), automático.</p>
+            </div>
+            <button class="botao primario" id="btn-otimizar-disco">Executar</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="flex-entre">
+            <div>
+              <strong>Liberar memória RAM (Standby)</strong>
+              <p class="texto-secundario mt-0">
+                Libera memória em cache que o Windows mantém reservada. 
+                Seguro e instantâneo — o sistema recupera o cache 
+                automaticamente conforme necessário.
+              </p>
+            </div>
+            <button class="botao primario" id="btn-liberar-ram">Liberar</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="flex-entre">
+            <div>
+              <strong>Analisar programas de inicialização</strong>
+              <p class="texto-secundario mt-0">
+                Lista todos os programas que abrem com o Windows 
+                e identifica os que mais impactam o tempo de boot.
+              </p>
+            </div>
+            <button class="botao primario" id="btn-analisar-startup">Analisar</button>
+          </div>
+        </div>
+
+        <div id="resultado-startup" style="display:none; margin-bottom:16px;"></div>
+
+        <div id="resultado-otimizacao"></div>
+      </div>
+
+      <!-- Página: Serviços -->
+      <div class="pagina" id="pagina-servicos">
+        <div class="cabecalho-pagina">
+          <div>
+            <h1>Serviços do Windows</h1>
+            <p>Ative ou desative serviços não essenciais com segurança</p>
+          </div>
+          <button class="botao primario" id="btn-atualizar-servicos">Atualizar lista</button>
+        </div>
+        <div id="conteudo-servicos">
+          <p class="texto-secundario">Clique em "Atualizar lista" para consultar os serviços.</p>
+        </div>
+      </div>
+
+      <!-- Página: Histórico -->
+      <div class="pagina" id="pagina-historico">
+        <div class="cabecalho-pagina">
+          <div>
+            <h1>Histórico de atendimentos</h1>
+            <p>Todos os atendimentos já registrados pelo Phoenix</p>
+          </div>
+        </div>
+        <div id="conteudo-historico"></div>
+      </div>
+
+      <!-- Página: Relatório (rotina completa) -->
+      <div class="pagina" id="pagina-relatorio">
+        <div class="cabecalho-pagina">
+          <div>
+            <h1>Relatório de atendimento</h1>
+            <p>Comparativo antes / depois da rotina completa</p>
+          </div>
+        </div>
+        <div id="conteudo-relatorio"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Barra de progresso global -->
+<div id="barra-progresso-global" style="
+  position: fixed;
+  top: 40px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 200;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+">
+  <div id="barra-progresso-fill" style="
+    height: 100%;
+    background: var(--cor-primaria);
+    width: 0%;
+    transition: width 0.3s ease;
+    box-shadow: 0 0 8px rgba(216, 155, 74, 0.6);
+  "></div>
+</div>
+
+<div id="overlay-texto" style="
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(28, 24, 20, 0.95);
+  border: 1px solid var(--cor-painel-borda);
+  border-radius: var(--raio-sm);
+  padding: 8px 16px;
+  font-size: 13px;
+  color: var(--cor-texto-secundario);
+  z-index: 200;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  white-space: nowrap;
+">Carregando...</div>
+
+<!-- Overlay de processamento -->
+<div class="overlay-processando" id="overlay-processando">
+  <div class="overlay-progresso-card">
+    <div class="overlay-icone" id="overlay-icone"></div>
+    <div class="overlay-titulo" id="overlay-titulo">Processando...</div>
+    <div class="overlay-subtitulo" id="overlay-subtitulo">
+      Aguarde, isso pode levar alguns segundos
+    </div>
+    <div class="overlay-barra-container">
+      <div class="overlay-barra-fill" id="overlay-barra-fill"></div>
+    </div>
+    <div class="overlay-status" id="overlay-status">Iniciando...</div>
+  </div>
+</div>
+
+<!-- Modal de Confirmação do Ponto de Restauração -->
+<div class="modal-container" id="modal-restauracao">
+  <div class="modal-card">
+    <div class="modal-cabecalho">
+      <h2 id="modal-titulo">Ponto de Restauração</h2>
+    </div>
+    <div class="modal-conteudo">
+      <div class="modal-status-icon" id="modal-icon"></div>
+      <p id="modal-mensagem">Iniciando processo...</p>
+    </div>
+    <div class="modal-botoes" id="modal-botoes">
+      <button class="botao primario" id="btn-modal-confirmar">Confirmar</button>
+      <button class="botao" id="btn-modal-cancelar">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-container" id="modal-confirmacao">
+  <div class="modal-card">
+    <div class="modal-cabecalho">
+      <div style="font-size:32px" id="modal-confirm-icone">[AVISO]</div>
+      <h2 id="modal-confirm-titulo">Atenção</h2>
+    </div>
+    <div class="modal-conteudo">
+      <p id="modal-confirm-mensagem" style="margin:0;font-size:14px;
+        line-height:1.6;color:var(--cor-texto-secundario)"></p>
+    </div>
+    <div class="modal-botoes">
+      <button class="botao" id="btn-modal-confirm-cancelar">Cancelar</button>
+      <button class="botao primario" id="btn-modal-confirm-ok">Continuar</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/core/namespace.js"></script>
+<script src="js/core/state.js"></script>
+<script src="js/core/bridge.js"></script>
+<script src="js/ui/icons.js"></script><script src="js/ui/feedback.js"></script>
+<script src="js/core/jobs.js"></script>
+<script src="js/core/lifecycle.js"></script>
+<script src="js/core/router.js"></script>
+<script src="js/ui/window-controls.js"></script>
+<script src="js/ui/visual-effects.js"></script>
+<script src="js/operations/restore-point.js"></script>
+<script src="js/operations/routine.js"></script>
+<script src="js/features/client-session.js"></script>
+
+<!-- Pages -->
+<script src="js/pages/inicio.js"></script>
+<script src="js/pages/diagnostico.js"></script>
+<script src="js/pages/hardware.js"></script>
+<script src="js/pages/sensores.js"></script>
+<script src="js/pages/limpeza.js"></script>
+<script src="js/pages/otimizacao.js"></script>
+<script src="js/pages/servicos.js"></script>
+<script src="js/pages/historico.js"></script>
+<script src="js/pages/relatorio.js"></script>
+<!-- App (Lógica Principal) -->
+<script src="app.js"></script>
+</body>
+</html>
