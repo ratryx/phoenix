@@ -3,6 +3,45 @@ import stat
 import time
 import fnmatch
 from pathlib import Path
+from dataclasses import dataclass
+
+from modules.core.exceptions import JobCancelledError, RootChangedError
+from modules.core.windows_known_folders import obter_local_appdata, obter_windows_directory
+
+@dataclass
+class RootValidation:
+    caminho_normalizado: str
+    realpath: str
+    st_dev: int
+    st_ino: int
+    st_mode: int
+    st_file_attributes: int
+
+def _safe_scandir(caminho: str, raiz_autorizada: str, cancel_event, root_val: RootValidation):
+    if cancel_event and cancel_event.is_set():
+        raise JobCancelledError()
+
+    try:
+        st2 = os.lstat(caminho)
+    except OSError:
+        raise RootChangedError("Raiz do alvo inacessível")
+
+    if (st2.st_ino != root_val.st_ino or
+        st2.st_dev != root_val.st_dev or
+        st2.st_mode != root_val.st_mode):
+        raise RootChangedError("Raiz alterada durante a operação")
+
+    p = Path(caminho)
+    if _classificar_item_navegador(p, st2):
+        raise RootChangedError("Link ou reparse point ignorado")
+
+    if not is_safe_path(caminho, raiz_autorizada):
+        raise RootChangedError("Caminho inseguro ignorado")
+
+    try:
+        return os.scandir(caminho)
+    except OSError:
+        raise RootChangedError("Raiz do alvo inacessível")
 
 def bytes_to_mb(valor: int) -> float:
     return round(valor / (1024 ** 2), 2)
@@ -38,43 +77,51 @@ def _classificar_item_navegador(p: Path, st=None) -> bool:
         return True
     return False
 
-def _validar_raiz(caminho: str, raiz_autorizada: str, cancel_event, on_error=None) -> bool:
+def _validar_raiz(caminho: str, raiz_autorizada: str, cancel_event, on_error=None) -> RootValidation:
     from modules.core.exceptions import JobCancelledError
     if cancel_event and cancel_event.is_set():
         raise JobCancelledError()
-    
+
     try:
         st = os.lstat(caminho)
-    except OSError as exc:
+    except OSError:
         if on_error:
-            on_error(f"Falha de lstat na raiz: {caminho} ({type(exc).__name__})")
-        return False
+            on_error("Raiz do alvo inacessível")
+        return None
 
     p = Path(caminho)
     if _classificar_item_navegador(p, st):
         if on_error:
-            on_error(f"Raiz ignorada (link/reparse): {caminho}")
-        return False
+            on_error("Link ou reparse point ignorado")
+        return None
 
     if not is_safe_path(caminho, raiz_autorizada):
         if on_error:
-            on_error(f"Raiz insegura: {caminho}")
-        return False
-        
-    return True
-
-def _enumerar_seguro(caminho: str, raiz_autorizada: str, cancel_event, on_error=None):
-    from modules.core.exceptions import JobCancelledError
-    if cancel_event and cancel_event.is_set():
-        raise JobCancelledError()
+            on_error("Caminho inseguro ignorado")
+        return None
 
     try:
-        it = os.scandir(caminho)
-    except OSError as exc:
+        real_path = os.path.normcase(os.path.normpath(os.path.realpath(caminho)))
+        norm_path = os.path.normcase(os.path.normpath(caminho))
+    except (OSError, ValueError):
         if on_error:
-            nome = os.path.basename(caminho) or caminho
-            on_error(f"Falha de acesso em diretório: {nome} ({type(exc).__name__})")
+            on_error("Raiz do alvo inacessível")
+        return None
+
+    return RootValidation(
+        caminho_normalizado=norm_path,
+        realpath=real_path,
+        st_dev=st.st_dev,
+        st_ino=st.st_ino,
+        st_mode=st.st_mode,
+        st_file_attributes=getattr(st, 'st_file_attributes', 0)
+    )
+
+def _enumerar_seguro(caminho: str, raiz_autorizada: str, cancel_event, on_error=None, root_val: RootValidation=None):
+    if root_val is None:
         return
+
+    it = _safe_scandir(caminho, raiz_autorizada, cancel_event, root_val)
 
     with it:
         for entry in it:
@@ -85,39 +132,37 @@ def _enumerar_seguro(caminho: str, raiz_autorizada: str, cancel_event, on_error=
             try:
                 st = entry.stat(follow_symlinks=False)
                 is_dir = entry.is_dir(follow_symlinks=False)
-            except OSError as exc:
+            except OSError:
                 if on_error:
-                    on_error(f"Falha de acesso em item: {entry.name} ({type(exc).__name__})")
+                    on_error("Falha de acesso em item")
                 continue
 
-            if p.is_symlink() or (hasattr(p, 'is_junction') and p.is_junction()) or _is_reparse_point(p, st):
+            if _classificar_item_navegador(p, st):
                 if on_error:
-                    on_error(f"Link ou reparse point ignorado: {entry.name}")
+                    on_error("Link ou reparse point ignorado")
                 continue
 
             if not is_safe_path(entry.path, raiz_autorizada):
                 if on_error:
-                    on_error(f"Caminho inseguro ignorado: {entry.name}")
+                    on_error("Caminho inseguro ignorado")
                 continue
 
             if is_dir:
-                yield from _enumerar_seguro(entry.path, raiz_autorizada, cancel_event, on_error)
+                val_sub = _validar_raiz(entry.path, raiz_autorizada, cancel_event, on_error)
+                if val_sub:
+                    try:
+                        yield from _enumerar_seguro(entry.path, raiz_autorizada, cancel_event, on_error, val_sub)
+                    except RootChangedError as e:
+                        if on_error: on_error(str(e))
                 yield entry.path, True
             else:
                 yield entry.path, False
 
-def _enumerar_glob_seguro(caminho_base: str, padrao: str, raiz_autorizada: str, cancel_event, on_error=None):
-    from modules.core.exceptions import JobCancelledError
-    if cancel_event and cancel_event.is_set():
-        raise JobCancelledError()
-
-    try:
-        it = os.scandir(caminho_base)
-    except OSError as exc:
-        if on_error:
-            nome = os.path.basename(caminho_base) or caminho_base
-            on_error(f"Falha de acesso na raiz glob: {nome} ({type(exc).__name__})")
+def _enumerar_glob_seguro(caminho_base: str, padrao: str, raiz_autorizada: str, cancel_event, on_error=None, root_val: RootValidation=None):
+    if root_val is None:
         return
+
+    it = _safe_scandir(caminho_base, raiz_autorizada, cancel_event, root_val)
 
     with it:
         for entry in it:
@@ -131,25 +176,25 @@ def _enumerar_glob_seguro(caminho_base: str, padrao: str, raiz_autorizada: str, 
             try:
                 st = entry.stat(follow_symlinks=False)
                 is_dir = entry.is_dir(follow_symlinks=False)
-            except OSError as exc:
+            except OSError:
                 if on_error:
-                    on_error(f"Falha de acesso em item glob: {entry.name} ({type(exc).__name__})")
+                    on_error("Falha de acesso em item glob")
                 continue
 
-            if p.is_symlink() or (hasattr(p, 'is_junction') and p.is_junction()) or _is_reparse_point(p, st):
+            if _classificar_item_navegador(p, st):
                 if on_error:
-                    on_error(f"Link ou reparse point ignorado (glob): {entry.name}")
+                    on_error("Link ou reparse point ignorado")
                 continue
 
             if not is_safe_path(entry.path, raiz_autorizada):
                 if on_error:
-                    on_error(f"Caminho inseguro ignorado (glob): {entry.name}")
+                    on_error("Caminho inseguro ignorado")
                 continue
 
             yield entry.path, is_dir
 
 def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
-    local_appdata = os.environ.get("LOCALAPPDATA", "")
+    local_appdata = obter_local_appdata()
     alvos = {}
 
     if local_appdata:
@@ -161,7 +206,7 @@ def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
             "tipo": "diretorio"
         }
 
-    windows_dir = os.environ.get("SystemRoot", r"C:\Windows")
+    windows_dir = obter_windows_directory()
     alvos["temp_windows"] = {
         "nome": "Arquivos temporários do Windows",
         "caminho": os.path.join(windows_dir, "Temp"),
@@ -373,35 +418,36 @@ def _contar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_event
         return
 
     caminho = info.get("caminho")
-    if not caminho or not os.path.exists(caminho): return
+    if not caminho: return
     raiz_autorizada = info.get("raiz_autorizada")
     if not raiz_autorizada: return
 
     def on_error(msg):
         tracker.add_count(cat_id)
 
-    if not _validar_raiz(caminho, raiz_autorizada, cancel_event, on_error):
+    val = _validar_raiz(caminho, raiz_autorizada, cancel_event, None)
+    if not val:
+        tracker.add_count(cat_id)
         return
 
-    if tipo == "diretorio":
-        for path, is_dir in _enumerar_seguro(caminho, raiz_autorizada, cancel_event, on_error):
-            tracker.add_count(cat_id)
+    try:
+        if tipo == "diretorio":
+            for path, is_dir in _enumerar_seguro(caminho, raiz_autorizada, cancel_event, on_error, val):
+                tracker.add_count(cat_id)
 
-    elif tipo == "glob":
-        for path, is_dir in _enumerar_glob_seguro(caminho, info["padrao"], raiz_autorizada, cancel_event, on_error):
-            tracker.add_count(cat_id)
+        elif tipo == "glob":
+            for path, is_dir in _enumerar_glob_seguro(caminho, info["padrao"], raiz_autorizada, cancel_event, on_error, val):
+                tracker.add_count(cat_id)
 
-    elif tipo in ("chromium_cache", "firefox_cache"):
-        try:
-            with os.scandir(caminho) as it:
+        elif tipo in ("chromium_cache", "firefox_cache"):
+            with _safe_scandir(caminho, raiz_autorizada, cancel_event, val) as it:
                 for perfil in it:
                     if cancel_event and cancel_event.is_set(): raise JobCancelledError()
                     try:
                         p = Path(perfil.path)
-                        if not _validar_raiz(str(p), raiz_autorizada, cancel_event, on_error):
-                            continue
-                        if not p.is_dir():
-                            continue
+                        val_perfil = _validar_raiz(str(p), raiz_autorizada, cancel_event, on_error)
+                        if not val_perfil: continue
+                        if not p.is_dir(): continue
                     except OSError:
                         on_error("Erro no perfil")
                         continue
@@ -410,18 +456,22 @@ def _contar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_event
                     for sub in subpastas:
                         sub_path = p / sub
                         try:
-                            if sub_path.exists():
-                                if not _validar_raiz(str(sub_path), raiz_autorizada, cancel_event, on_error):
-                                    continue
-                                if sub_path.is_dir():
-                                    for path, is_item_dir in _enumerar_seguro(str(sub_path), raiz_autorizada, cancel_event, on_error):
+                            val_sub = _validar_raiz(str(sub_path), raiz_autorizada, cancel_event, on_error)
+                            if not val_sub: continue
+                            if sub_path.is_dir():
+                                try:
+                                    for path, is_item_dir in _enumerar_seguro(str(sub_path), raiz_autorizada, cancel_event, on_error, val_sub):
                                         tracker.add_count(cat_id)
+                                except RootChangedError as e:
+                                    on_error(str(e))
                         except OSError:
                             on_error("Erro no cache subpasta")
-        except JobCancelledError:
-            raise
-        except OSError:
-            on_error("Erro raiz navegador")
+    except RootChangedError as e:
+        on_error(str(e))
+    except JobCancelledError:
+        raise
+    except OSError:
+        on_error("Erro raiz navegador")
 
 def _remover_arquivo(filepath: Path, raiz_autorizada: str, cancel_event, on_error) -> dict:
     from modules.core.exceptions import JobCancelledError
@@ -512,7 +562,7 @@ def _remover_diretorio(dirpath: Path, raiz_autorizada: str, cancel_event, on_err
         on_error(f"Erro ao remover dir: {type(e).__name__}")
         return {"removidos": 0, "ignorados": 1, "bytes": 0}
 
-def _remover_diretorio_recursivo(dirpath: Path, raiz_autorizada: str, cat_id: str, tracker: ProgressTracker, cancel_event, avisos_ref: list) -> None:
+def _remover_diretorio_recursivo(dirpath: Path, raiz_autorizada: str, cat_id: str, tracker: ProgressTracker, cancel_event, avisos_ref: list, root_val: RootValidation) -> None:
     from modules.core.exceptions import JobCancelledError
     if cancel_event and cancel_event.is_set():
         raise JobCancelledError()
@@ -525,18 +575,17 @@ def _remover_diretorio_recursivo(dirpath: Path, raiz_autorizada: str, cat_id: st
         avisos_ref.append(msg)
 
     try:
-        if not dirpath.exists():
-            return
+        pass
 
         if dirpath.is_symlink() or (hasattr(dirpath, 'is_junction') and dirpath.is_junction()) or _is_reparse_point(dirpath):
-            on_error(f"Diretório raiz ignorado (link/reparse): {dirpath.name}")
+            on_error("Diretório raiz ignorado (link/reparse)")
             return
 
         if not is_safe_path(str(dirpath), raiz_autorizada):
-            on_error(f"Diretório raiz inseguro: {dirpath.name}")
+            on_error("Diretório raiz inseguro")
             return
 
-        for item_path, is_dir in _enumerar_seguro(str(dirpath), raiz_autorizada, cancel_event, on_error):
+        for item_path, is_dir in _enumerar_seguro(str(dirpath), raiz_autorizada, cancel_event, on_error, root_val):
             if cancel_event and cancel_event.is_set():
                 raise JobCancelledError()
 
@@ -586,9 +635,9 @@ def _processar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_ev
             on_error(f"Erro lixeira ({type(e).__name__})")
         return
 
-    if not os.path.exists(caminho_base) or not raiz_autorizada:
+    if not caminho_base or not raiz_autorizada:
         return
-        
+
     def root_error(msg):
         avisos_ref.append(msg)
         tracker.increment_processed(cat_id, removed=0, ignored=1, bytes_liberados=0)
@@ -596,82 +645,80 @@ def _processar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_ev
         cat["status"] = "parcial"
         tracker.force_update()
 
-    if not _validar_raiz(caminho_base, raiz_autorizada, cancel_event, root_error):
+    val = _validar_raiz(caminho_base, raiz_autorizada, cancel_event, root_error)
+    if not val:
         return
-    if tipo == "diretorio":
-        _remover_diretorio_recursivo(Path(caminho_base), raiz_autorizada, cat_id, tracker, cancel_event, avisos_ref)
 
-    elif tipo == "glob":
-        try:
-            for filepath_str, is_dir in _enumerar_glob_seguro(caminho_base, info["padrao"], raiz_autorizada, cancel_event, on_error):
+    try:
+        if tipo == "diretorio":
+            _remover_diretorio_recursivo(Path(caminho_base), raiz_autorizada, cat_id, tracker, cancel_event, avisos_ref, val)
+
+        elif tipo == "glob":
+            for filepath_str, is_dir in _enumerar_glob_seguro(caminho_base, info["padrao"], raiz_autorizada, cancel_event, on_error, val):
                 if cancel_event and cancel_event.is_set(): raise JobCancelledError()
                 if not is_dir:
                     res = _remover_arquivo(Path(filepath_str), raiz_autorizada, cancel_event, log_error)
                     tracker.increment_processed(cat_id, removed=res["removidos"], ignored=res["ignorados"], bytes_liberados=res["bytes"])
-        except JobCancelledError:
-            raise
-        except OSError as e:
-            on_error(f"Erro no glob ({type(e).__name__})")
 
-    elif tipo == "chromium_cache":
-        try:
-            with os.scandir(caminho_base) as it:
+        elif tipo == "chromium_cache":
+            with _safe_scandir(caminho_base, raiz_autorizada, cancel_event, val) as it:
                 for perfil in it:
                     if cancel_event and cancel_event.is_set(): raise JobCancelledError()
                     try:
                         p = Path(perfil.path)
-                        if not _validar_raiz(str(p), raiz_autorizada, cancel_event, on_error):
-                            continue
-                        if not p.is_dir():
-                            continue
-                    except OSError as e:
-                        on_error(f"Erro lendo perfil Chromium ({type(e).__name__})")
+                        val_perfil = _validar_raiz(str(p), raiz_autorizada, cancel_event, on_error)
+                        if not val_perfil: continue
+                        if not p.is_dir(): continue
+                    except OSError:
+                        on_error("Erro lendo perfil Chromium")
                         continue
 
                     subpastas = ["Cache", "Code Cache", "GPUCache", "GrShaderCache", "DawnCache"]
                     for sub in subpastas:
                         sub_path = p / sub
                         try:
-                            if sub_path.exists():
-                                if not _validar_raiz(str(sub_path), raiz_autorizada, cancel_event, on_error):
-                                    continue
-                                if sub_path.is_dir():
-                                    _remover_diretorio_recursivo(sub_path, raiz_autorizada, cat_id, tracker, cancel_event, avisos_ref)
-                        except OSError as e:
-                            on_error(f"Erro no subdiretório {sub} ({type(e).__name__})")
-        except JobCancelledError:
-            raise
-        except OSError as e:
-            on_error(f"Erro Chromium ({type(e).__name__})")
+                            val_sub = _validar_raiz(str(sub_path), raiz_autorizada, cancel_event, on_error)
+                            if not val_sub: continue
+                            if sub_path.is_dir():
+                                try:
+                                    _remover_diretorio_recursivo(sub_path, raiz_autorizada, cat_id, tracker, cancel_event, avisos_ref, val_sub)
+                                except RootChangedError as e:
+                                    on_error(str(e))
+                        except OSError:
+                            on_error("Erro no subdiretório")
 
-    elif tipo == "firefox_cache":
-        try:
-            with os.scandir(caminho_base) as it:
+        elif tipo == "firefox_cache":
+            with _safe_scandir(caminho_base, raiz_autorizada, cancel_event, val) as it:
                 for perfil in it:
                     if cancel_event and cancel_event.is_set(): raise JobCancelledError()
                     p = Path(perfil.path)
                     try:
-                        if not _validar_raiz(str(p), raiz_autorizada, cancel_event, on_error):
-                            continue
-                        if not p.is_dir():
-                            continue
-                    except OSError as e:
-                        on_error(f"Erro lendo perfil Firefox ({type(e).__name__})")
+                        val_perfil = _validar_raiz(str(p), raiz_autorizada, cancel_event, on_error)
+                        if not val_perfil: continue
+                        if not p.is_dir(): continue
+                    except OSError:
+                        on_error("Erro lendo perfil Firefox")
                         continue
 
                     sub_path = p / "cache2"
                     try:
-                        if sub_path.exists():
-                            if not _validar_raiz(str(sub_path), raiz_autorizada, cancel_event, on_error):
-                                continue
-                            if sub_path.is_dir():
-                                _remover_diretorio_recursivo(sub_path, raiz_autorizada, cat_id, tracker, cancel_event, avisos_ref)
-                    except OSError as e:
-                        on_error(f"Erro no cache2 ({type(e).__name__})")
-        except JobCancelledError:
-            raise
-        except OSError as e:
-            on_error(f"Erro Firefox ({type(e).__name__})")
+                        val_sub = _validar_raiz(str(sub_path), raiz_autorizada, cancel_event, on_error)
+                        if not val_sub: continue
+                        if sub_path.is_dir():
+                            try:
+                                _remover_diretorio_recursivo(sub_path, raiz_autorizada, cat_id, tracker, cancel_event, avisos_ref, val_sub)
+                            except RootChangedError as e:
+                                on_error(str(e))
+                    except OSError:
+                        on_error("Erro no cache2")
+
+    except RootChangedError as e:
+        root_error(str(e))
+    except JobCancelledError:
+        raise
+    except OSError:
+        on_error("Erro na raiz do alvo")
+
 
 def executar_limpeza(progress_callback=None, cancel_event=None, incluir_lixeira=False, injetar_alvos=None) -> dict:
     from modules.core.exceptions import JobCancelledError

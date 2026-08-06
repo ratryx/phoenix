@@ -213,7 +213,7 @@ def test_permission_error_iterdir(tmp_path):
 
     assert result["arquivos_ignorados"] == 1
     assert result["categorias"][0]["status"] in ("parcial", "falhou")
-    assert "PermissionError" in result["avisos"][0]
+    assert "Raiz do alvo inacessível" in result["avisos"][0]
     assert result["parcial"] is True
 
 def test_no_false_complete_category(tmp_path):

@@ -44,11 +44,11 @@ def test_allowlist_exact_match(monkeypatch):
     assert set(alvos.keys()) == esperados
 
 def test_temp_manipulated_does_not_alter_target(monkeypatch):
-    monkeypatch.setenv('LOCALAPPDATA', 'C:\\Users\\Test\\AppData\\Local')
     monkeypatch.setenv('TEMP', 'C:\\Hacked\\Temp')
-    alvos = _obter_alvos_limpeza()
-    assert 'Hacked' not in alvos['temp_usuario']['caminho']
-    assert alvos['temp_usuario']['caminho'] == 'C:\\Users\\Test\\AppData\\Local\\Temp'
+    with patch('modules.core.cleanup_service.obter_local_appdata', return_value='C:\\Users\\Mocked\\AppData\\Local'):
+        alvos = _obter_alvos_limpeza()
+        assert 'Hacked' not in alvos['temp_usuario']['caminho']
+        assert alvos['temp_usuario']['caminho'] == 'C:\\Users\\Mocked\\AppData\\Local\\Temp'
 
 def test_no_iterdir_or_os_walk():
     with open('modules/core/cleanup_service.py', 'r', encoding='utf-8') as f:
@@ -76,7 +76,7 @@ def test_oserror_contabilizado_como_parcial(tmp_path):
 
     assert resultado['parcial'] == True
     assert resultado['arquivos_ignorados'] == 1
-    assert 'Falha de acesso em diretório' in resultado['avisos'][0]
+    assert 'Raiz do alvo inacessível' in resultado['avisos'][0]
 
 def test_enumerator_not_materializing_tree(tmp_path):
     # Streaming test
