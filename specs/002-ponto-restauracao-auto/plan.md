@@ -1,6 +1,6 @@
 # Implementation Plan: Ponto de Restauração Automático
 
-**Branch**: `002-ponto-restauracao-auto` | **Date**: 2026-06-25 | **Spec**: [spec.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/002-ponto-restauracao-auto/spec.md)
+**Branch**: `002-ponto-restauracao-auto` | **Date**: 2026-06-25 | **Spec**: [spec.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/002-ponto-restauracao-auto/spec.md)
 
 **Input**: Feature specification from `/specs/002-ponto-restauracao-auto/spec.md`
 

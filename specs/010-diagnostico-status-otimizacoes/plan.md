@@ -1,6 +1,6 @@
 # Implementation Plan: Diagnóstico de Status das Otimizações & Cache de Hardware (010 & 011)
 
-**Branch**: `010-diagnostico-status-otimizacoes` | **Date**: 2026-07-08 | **Spec**: [spec.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/010-diagnostico-status-otimizacoes/spec.md)
+**Branch**: `010-diagnostico-status-otimizacoes` | **Date**: 2026-07-08 | **Spec**: [spec.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/010-diagnostico-status-otimizacoes/spec.md)
 
 **Input**: Feature specification from `/specs/010-diagnostico-status-otimizacoes/spec.md` and `/specs/011-cache-hardware/spec.md`
 

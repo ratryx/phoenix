@@ -1,6 +1,6 @@
 # Implementation Plan: Windows GUI Validation
 
-**Branch**: `001-validate-gui-windows` | **Date**: 2026-06-24 | **Spec**: [spec.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/001-validate-gui-windows/spec.md)
+**Branch**: `001-validate-gui-windows` | **Date**: 2026-06-24 | **Spec**: [spec.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/001-validate-gui-windows/spec.md)
 
 **Input**: Feature specification from `specs/001-validate-gui-windows/spec.md`
 
@@ -28,7 +28,7 @@ To avoid a persistent black console window when running in GUI mode, the applica
 | :--- | :--- | :--- |
 | **Principle I: Cirúrgico e Não Destrutivo** | [OK] Pass | The changes are strictly confined to `launcher.py` (for console attachment) and `phoenix.spec` (packaging config). |
 | **Principle VI: Dual-Interface CLI/GUI** | [OK] Pass | The design ensures both CLI and GUI modes remain fully operational and share the same code logic. |
-| **Principle VII: Validação de Empacotamento** | [OK] Pass | We have defined a strict Windows validation checklist in [quickstart.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/001-validate-gui-windows/quickstart.md) to test the built executable on native Windows. |
+| **Principle VII: Validação de Empacotamento** | [OK] Pass | We have defined a strict Windows validation checklist in [quickstart.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/001-validate-gui-windows/quickstart.md) to test the built executable on native Windows. |
 
 ## Project Structure
 
@@ -75,7 +75,7 @@ We will perform automated static analysis and extensive manual validation.
   ```
 
 ### Manual Verification
-Refer to [quickstart.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/001-validate-gui-windows/quickstart.md) for step-by-step validation steps:
+Refer to [quickstart.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/001-validate-gui-windows/quickstart.md) for step-by-step validation steps:
 1. Compile using PyInstaller.
 2. Launch via double-click (validate GUI works, no command prompt window pops up).
 3. Launch from CLI terminal (validate attached console prints rich panels and accepts interactive inputs).

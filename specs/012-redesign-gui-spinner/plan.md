@@ -1,6 +1,6 @@
 # Implementation Plan: Redesign GUI + Correção Definitiva do Spinner
 
-**Branch**: `012-redesign-gui-spinner` | **Date**: 2026-07-08 | **Spec**: [specs/012-redesign-gui-spinner/spec.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/012-redesign-gui-spinner/spec.md)
+**Branch**: `012-redesign-gui-spinner` | **Date**: 2026-07-08 | **Spec**: [specs/012-redesign-gui-spinner/spec.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/012-redesign-gui-spinner/spec.md)
 
 **Input**: Feature specification from `specs/012-redesign-gui-spinner/spec.md`
 

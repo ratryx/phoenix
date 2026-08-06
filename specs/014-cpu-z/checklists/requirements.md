@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-07-08
-**Feature**: [spec.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/014-cpu-z/spec.md)
+**Feature**: [spec.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/014-cpu-z/spec.md)
 
 ## Content Quality
 

@@ -2,7 +2,7 @@
 
 **Input**: Design documents from `/specs/002-ponto-restauracao-auto/`
 
-**Prerequisites**: [plan.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/002-ponto-restauracao-auto/plan.md) (required), [spec.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/002-ponto-restauracao-auto/spec.md) (required), [research.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/002-ponto-restauracao-auto/research.md), [data-model.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/002-ponto-restauracao-auto/data-model.md), [restoration-contract.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/002-ponto-restauracao-auto/contracts/restoration-contract.md)
+**Prerequisites**: [plan.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/002-ponto-restauracao-auto/plan.md) (required), [spec.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/002-ponto-restauracao-auto/spec.md) (required), [research.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/002-ponto-restauracao-auto/research.md), [data-model.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/002-ponto-restauracao-auto/data-model.md), [restoration-contract.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/002-ponto-restauracao-auto/contracts/restoration-contract.md)
 
 **Tests**: Manual validation scenarios (as documented in `quickstart.md`).
 
@@ -20,7 +20,7 @@
 
 **Purpose**: Verify the context environment setup.
 
-- [x] T001 Verify project structure in [specs/002-ponto-restauracao-auto/](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/002-ponto-restauracao-auto/)
+- [x] T001 Verify project structure in [specs/002-ponto-restauracao-auto/](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/002-ponto-restauracao-auto/)
 
 ---
 
@@ -30,9 +30,9 @@
 
 **[AVISO] CRITICAL**: No user story work can begin until this phase is complete
 
-- [x] T002 Implement core restore point cmdlet call in [modules/otimizacao.py](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/modules/otimizacao.py)
-- [x] T003 Implement error parsing and classification in [modules/otimizacao.py](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/modules/otimizacao.py)
-- [x] T004 Expose API wrapper for restore point creation in [modules/gui_app.py](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/modules/gui_app.py)
+- [x] T002 Implement core restore point cmdlet call in [modules/otimizacao.py](file:///C:\MockUsers\Developer/Desktop/app-optimizer/modules/otimizacao.py)
+- [x] T003 Implement error parsing and classification in [modules/otimizacao.py](file:///C:\MockUsers\Developer/Desktop/app-optimizer/modules/otimizacao.py)
+- [x] T004 Expose API wrapper for restore point creation in [modules/gui_app.py](file:///C:\MockUsers\Developer/Desktop/app-optimizer/modules/gui_app.py)
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 
@@ -44,11 +44,11 @@
 
 **Independent Test**: Trigger optimizations in CLI/GUI with admin rights, see the progress status/spinner, verify successful creation message, and confirm whether to proceed.
 
-- [x] T005 [US1] Integrate restore point flow with spinner in [modules/cli_app.py](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/modules/cli_app.py)
-- [x] T006 [P] [US1] Add custom modal container HTML structure in [gui/index.html](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/gui/index.html)
-- [x] T007 [P] [US1] Implement custom modal CSS styles and animations in [gui/style.css](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/gui/style.css)
-- [x] T008 [US1] Add Javascript controller for modal status and actions in [gui/app.js](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/gui/app.js)
-- [x] T009 [US1] Create confirmed optimization execution bridges in [modules/gui_app.py](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/modules/gui_app.py)
+- [x] T005 [US1] Integrate restore point flow with spinner in [modules/cli_app.py](file:///C:\MockUsers\Developer/Desktop/app-optimizer/modules/cli_app.py)
+- [x] T006 [P] [US1] Add custom modal container HTML structure in [gui/index.html](file:///C:\MockUsers\Developer/Desktop/app-optimizer/gui/index.html)
+- [x] T007 [P] [US1] Implement custom modal CSS styles and animations in [gui/style.css](file:///C:\MockUsers\Developer/Desktop/app-optimizer/gui/style.css)
+- [x] T008 [US1] Add Javascript controller for modal status and actions in [gui/app.js](file:///C:\MockUsers\Developer/Desktop/app-optimizer/gui/app.js)
+- [x] T009 [US1] Create confirmed optimization execution bridges in [modules/gui_app.py](file:///C:\MockUsers\Developer/Desktop/app-optimizer/modules/gui_app.py)
 
 **Checkpoint**: User Story 1 should be fully functional and testable independently in both CLI and GUI.
 
@@ -62,8 +62,8 @@
 
 ### Implementation for User Story 2
 
-- [x] T010 [US2] Handle creation failure prompts in [modules/cli_app.py](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/modules/cli_app.py)
-- [x] T011 [US2] Handle creation failure states in [gui/app.js](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/gui/app.js)
+- [x] T010 [US2] Handle creation failure prompts in [modules/cli_app.py](file:///C:\MockUsers\Developer/Desktop/app-optimizer/modules/cli_app.py)
+- [x] T011 [US2] Handle creation failure states in [gui/app.js](file:///C:\MockUsers\Developer/Desktop/app-optimizer/gui/app.js)
 
 **Checkpoint**: Both user stories are complete and handle failure flows appropriately.
 
@@ -73,8 +73,8 @@
 
 **Purpose**: Cleanup, logging compliance, and end-to-end validation.
 
-- [x] T012 Verify logging outputs location in [modules/logs.py](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/modules/logs.py)
-- [x] T013 Run validation scenarios from [quickstart.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/002-ponto-restauracao-auto/quickstart.md) and document results in `walkthrough.md`
+- [x] T012 Verify logging outputs location in [modules/logs.py](file:///C:\MockUsers\Developer/Desktop/app-optimizer/modules/logs.py)
+- [x] T013 Run validation scenarios from [quickstart.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/002-ponto-restauracao-auto/quickstart.md) and document results in `walkthrough.md`
 
 ---
 

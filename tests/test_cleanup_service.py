@@ -95,8 +95,8 @@ def test_executar_limpeza_cancel_mid_recursion(tmp_path):
     assert len(remnants) == 2, "Should have 2 files left after 3 removed and cancelled"
 
 def test_temp_vs_temp2():
-    assert not is_safe_path("C:\\Users\\Bob\\AppData\\Local\\Temp2\\file.txt", "C:\\Users\\Bob\\AppData\\Local\\Temp")
-    assert is_safe_path("C:\\Users\\Bob\\AppData\\Local\\Temp\\file.txt", "C:\\Users\\Bob\\AppData\\Local\\Temp")
+    assert not is_safe_path("C:\MockUsers\Bob\\AppData\\Local\\Temp2\\file.txt", "C:\MockUsers\Bob\\AppData\\Local\\Temp")
+    assert is_safe_path("C:\MockUsers\Bob\\AppData\\Local\\Temp\\file.txt", "C:\MockUsers\Bob\\AppData\\Local\\Temp")
 
 def test_escape_dotdot():
     assert not is_safe_path("C:\\Windows\\Temp\\..\\System32\\cmd.exe", "C:\\Windows\\Temp")

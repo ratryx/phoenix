@@ -55,7 +55,7 @@ def test_4_captura_de_excecao():
 
     def funcao_que_quebra():
         ev_started.set()
-        raise ValueError(r"Falha em C:\Users\Cliente\Documents\segredo.txt dentro de executar_registro")
+        raise ValueError(r"Falha em C:\MockUsers\Cliente\Documents\segredo.txt dentro de executar_registro")
 
     job_id = jm.submit(funcao_que_quebra)
     ev_started.wait(2.0)

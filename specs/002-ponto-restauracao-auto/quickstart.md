@@ -15,7 +15,7 @@ This guide outlines the steps to run and manually validate the automatic Windows
 
 ## Validation Scenarios
 
-Refer to [restoration-contract.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/002-ponto-restauracao-auto/contracts/restoration-contract.md) and [data-model.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/002-ponto-restauracao-auto/data-model.md) for background details on the contracts and states.
+Refer to [restoration-contract.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/002-ponto-restauracao-auto/contracts/restoration-contract.md) and [data-model.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/002-ponto-restauracao-auto/data-model.md) for background details on the contracts and states.
 
 ### Scenario 1: CLI Automatic Creation and Success Flow
 1. Open PowerShell or CMD as **Administrator**.

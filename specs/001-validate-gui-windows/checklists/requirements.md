@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-06-24
-**Feature**: [spec.md](file:///c:/Users/Thiago/Desktop/phoenix-optimizer/specs/001-validate-gui-windows/spec.md)
+**Feature**: [spec.md](file:///C:\MockUsers\Developer/Desktop/app-optimizer/specs/001-validate-gui-windows/spec.md)
 
 ## Content Quality
 

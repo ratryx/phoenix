@@ -13,9 +13,9 @@ class FakeDiagnostico:
     def coletar_diagnostico_silencioso(self):
         self.calls += 1
         if self.fail_on == "initial_diag" and self.calls == 1:
-            raise RuntimeError("Sensitive failure initial diag C:\\Users\\Client\\secret.txt")
+            raise RuntimeError("Sensitive failure initial diag C:\MockUsers\Client\\secret.txt")
         if self.fail_on == "final_diag" and self.calls == 2:
-            raise RuntimeError("Sensitive failure final diag C:\\Users\\Client\\secret.txt")
+            raise RuntimeError("Sensitive failure final diag C:\MockUsers\Client\\secret.txt")
         return {"status": "ok_diag"}
 
 class FakeLimpeza:
@@ -25,7 +25,7 @@ class FakeLimpeza:
     def executar_limpeza(self, progress_callback=None, cancel_event=None, incluir_lixeira=False):
         self.calls += 1
         if self.fail_on == "cleanup":
-            raise RuntimeError("Sensitive failure cleanup C:\\Users\\Client\\secret.txt")
+            raise RuntimeError("Sensitive failure cleanup C:\MockUsers\Client\\secret.txt")
         return {"espaco_liberado_mb": 500.0, "arquivos_removidos": 100, "arquivos_ignorados": 0}
 
 class FakeOtimizacao:
@@ -37,7 +37,7 @@ class FakeOtimizacao:
         if cancel_event and cancel_event.is_set():
             return {"ok": False, "codigo": "COMMAND_CANCELLED"}
         if self.fail_on == "optimization":
-            raise RuntimeError("Sensitive failure optimization C:\\Users\\Client\\secret.txt")
+            raise RuntimeError("Sensitive failure optimization C:\MockUsers\Client\\secret.txt")
         return {"ok": True, "codigo": "COMMAND_OK"}
 
 class FakeLogs:
@@ -50,9 +50,9 @@ class FakeLogs:
     def salvar_snapshot(self, id_atendimento, etapa, dados, nome_cliente):
         self.save_calls += 1
         if self.fail_on == "initial_snapshot_persistence" and etapa == "antes":
-            raise RuntimeError("Sensitive failure snapshot antes C:\\Users\\Client\\secret.txt")
+            raise RuntimeError("Sensitive failure snapshot antes C:\MockUsers\Client\\secret.txt")
         if self.fail_on == "final_snapshot_persistence" and etapa == "depois":
-            raise RuntimeError("Sensitive failure snapshot depois C:\\Users\\Client\\secret.txt")
+            raise RuntimeError("Sensitive failure snapshot depois C:\MockUsers\Client\\secret.txt")
         if id_atendimento not in self.snapshots:
             self.snapshots[id_atendimento] = {}
         self.snapshots[id_atendimento][etapa] = dados
@@ -64,7 +64,7 @@ class FakeLogs:
     def carregar_snapshot(self, id_atendimento, etapa):
         self.load_calls += 1
         if self.fail_on == "snapshot_loading":
-            raise RuntimeError("Sensitive failure load snapshot C:\\Users\\Client\\secret.txt")
+            raise RuntimeError("Sensitive failure load snapshot C:\MockUsers\Client\\secret.txt")
         return self.snapshots.get(id_atendimento, {}).get(etapa)
 
 class FakeRelatorio:
@@ -73,7 +73,7 @@ class FakeRelatorio:
         self.exportacoes = []
     def exportar_relatorio_txt(self, antes, depois, liberado, caminho):
         if self.fail_on == "text-report_export":
-            raise RuntimeError("Sensitive failure report export C:\\Users\\Client\\secret.txt")
+            raise RuntimeError("Sensitive failure report export C:\MockUsers\Client\\secret.txt")
         self.exportacoes.append((antes, depois, liberado, caminho))
 
 def test_routine_service_sucesso():
