@@ -21,27 +21,47 @@ def _safe_scandir(caminho: str, raiz_autorizada: str, cancel_event, root_val: Ro
     if cancel_event and cancel_event.is_set():
         raise JobCancelledError()
 
+    def _revalidar():
+        try:
+            st2 = os.lstat(caminho)
+            real_path = os.path.normcase(os.path.normpath(os.path.realpath(caminho)))
+            norm_path = os.path.normcase(os.path.normpath(caminho))
+        except OSError:
+            raise RootChangedError("Raiz do alvo inacessível")
+            
+        if (norm_path != root_val.caminho_normalizado or
+            real_path != root_val.realpath or
+            st2.st_ino != root_val.st_ino or
+            st2.st_dev != root_val.st_dev or
+            st2.st_mode != root_val.st_mode or
+            getattr(st2, 'st_file_attributes', 0) != root_val.st_file_attributes):
+            raise RootChangedError("Raiz alterada durante a operação")
+            
+        p = Path(caminho)
+        if _classificar_item_navegador(p, st2):
+            raise RootChangedError("Link ou reparse point ignorado")
+            
+        if not is_safe_path(caminho, raiz_autorizada):
+            raise RootChangedError("Caminho inseguro ignorado")
+
+    # 2. imediatamente antes de os.scandir, executar novo lstat e realpath e 3. comparar todos os campos
+    _revalidar()
+
     try:
-        st2 = os.lstat(caminho)
+        # 4. abrir os.scandir
+        it = os.scandir(caminho)
     except OSError:
         raise RootChangedError("Raiz do alvo inacessível")
-
-    if (st2.st_ino != root_val.st_ino or
-        st2.st_dev != root_val.st_dev or
-        st2.st_mode != root_val.st_mode):
-        raise RootChangedError("Raiz alterada durante a operação")
-
-    p = Path(caminho)
-    if _classificar_item_navegador(p, st2):
-        raise RootChangedError("Link ou reparse point ignorado")
-
-    if not is_safe_path(caminho, raiz_autorizada):
-        raise RootChangedError("Caminho inseguro ignorado")
-
+        
     try:
-        return os.scandir(caminho)
-    except OSError:
-        raise RootChangedError("Raiz do alvo inacessível")
+        # 5. imediatamente após adquirir o iterador, revalidar novamente
+        _revalidar()
+    except RootChangedError:
+        # 6. se houver divergência, fechar o iterador e lançar RootChangedError
+        it.close()
+        raise
+        
+    return it
 
 def bytes_to_mb(valor: int) -> float:
     return round(valor / (1024 ** 2), 2)
@@ -205,14 +225,27 @@ def _obter_alvos_limpeza(incluir_lixeira=False) -> dict:
             "raiz_autorizada": local_appdata,
             "tipo": "diretorio"
         }
+    else:
+        alvos["erro_appdata"] = {
+            "nome": "Pastas do Usuário",
+            "tipo": "erro",
+            "mensagem": "Não foi possível resolver a pasta segura do usuário"
+        }
 
     windows_dir = obter_windows_directory()
-    alvos["temp_windows"] = {
-        "nome": "Arquivos temporários do Windows",
-        "caminho": os.path.join(windows_dir, "Temp"),
-        "raiz_autorizada": windows_dir,
-        "tipo": "diretorio"
-    }
+    if windows_dir:
+        alvos["temp_windows"] = {
+            "nome": "Arquivos temporários do Windows",
+            "caminho": os.path.join(windows_dir, "Temp"),
+            "raiz_autorizada": windows_dir,
+            "tipo": "diretorio"
+        }
+    else:
+        alvos["erro_windows"] = {
+            "nome": "Pastas do Windows",
+            "tipo": "erro",
+            "mensagem": "Não foi possível resolver a pasta segura do sistema"
+        }
 
     if local_appdata:
         wer_archive = os.path.join(local_appdata, "Microsoft", "Windows", "WER", "ReportArchive")
@@ -417,6 +450,10 @@ def _contar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_event
         tracker.add_count(cat_id)
         return
 
+    if tipo == "erro":
+        tracker.add_count(cat_id)
+        return
+
     caminho = info.get("caminho")
     if not caminho: return
     raiz_autorizada = info.get("raiz_autorizada")
@@ -575,8 +612,6 @@ def _remover_diretorio_recursivo(dirpath: Path, raiz_autorizada: str, cat_id: st
         avisos_ref.append(msg)
 
     try:
-        pass
-
         if dirpath.is_symlink() or (hasattr(dirpath, 'is_junction') and dirpath.is_junction()) or _is_reparse_point(dirpath):
             on_error("Diretório raiz ignorado (link/reparse)")
             return
@@ -633,6 +668,14 @@ def _processar_alvo(cat_id: str, info: dict, tracker: ProgressTracker, cancel_ev
             raise
         except OSError as e:
             on_error(f"Erro lixeira ({type(e).__name__})")
+        return
+
+    if tipo == "erro":
+        tracker.increment_processed(cat_id, removed=0, ignored=1, bytes_liberados=0)
+        avisos_ref.append(info.get("mensagem", "Erro ao resolver pasta autorizada"))
+        cat = tracker.cat_map[cat_id]
+        cat["status"] = "falhou"
+        tracker.force_update()
         return
 
     if not caminho_base or not raiz_autorizada:
