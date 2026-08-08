@@ -162,3 +162,48 @@ def test_atomic_write_json_failure(mock_replace, tmp_path):
     assert json.loads(arquivo.read_text(encoding="utf-8")) == {"velho": 2}
     # Tmp file should be deleted
     assert not (tmp_path / "teste_atomic2.tmp").exists()
+
+from modules.servicos import _is_managed_by_phoenix
+
+@patch("modules.servicos.run_windows_command")
+def test_managed_valid_backup_currently_disabled(mock_run, mock_backup_path):
+    mock_backup_path.write_text(json.dumps({"DiagTrack": {"start_type": "auto", "status": "rodando"}}), encoding="utf-8")
+    mock_run.return_value = fake_res(stdout="TIPO_DE_INICIO : 4 DISABLED")
+    assert _is_managed_by_phoenix("DiagTrack") is True
+
+@patch("modules.servicos.run_windows_command")
+def test_managed_backup_for_another_service(mock_run, mock_backup_path):
+    mock_backup_path.write_text(json.dumps({"OtherService": {"start_type": "auto", "status": "rodando"}}), encoding="utf-8")
+    assert _is_managed_by_phoenix("DiagTrack") is False
+    mock_run.assert_not_called()
+
+@patch("modules.servicos.run_windows_command")
+def test_managed_corrupt_backup(mock_run, mock_backup_path):
+    mock_backup_path.write_text("corrupt json", encoding="utf-8")
+    assert _is_managed_by_phoenix("DiagTrack") is False
+    mock_run.assert_not_called()
+
+@patch("modules.servicos.run_windows_command")
+def test_managed_stale_backup_changed_externally(mock_run, mock_backup_path):
+    mock_backup_path.write_text(json.dumps({"DiagTrack": {"start_type": "auto", "status": "rodando"}}), encoding="utf-8")
+    mock_run.return_value = fake_res(stdout="TIPO_DE_INICIO : 3 DEMAND_START")
+    assert _is_managed_by_phoenix("DiagTrack") is False
+
+@patch("modules.servicos.run_windows_command")
+def test_salvar_estado_stale_backup_recaptures_state(mock_run, mock_backup_path):
+    mock_backup_path.write_text(json.dumps({"DiagTrack": {"start_type": "old", "status": "old"}}), encoding="utf-8")
+    
+    def side_effect(cmd, **kwargs):
+        if cmd[1] == "qc":
+            return fake_res(stdout="TIPO_DE_INICIO : 3 DEMAND_START")
+        elif cmd[1] == "query":
+            return fake_res(stdout="STATE : 4 RUNNING")
+        return fake_res()
+    
+    mock_run.side_effect = side_effect
+
+    res = _salvar_estado_servico("DiagTrack")
+    assert res["ok"] is True
+
+    saved = json.loads(mock_backup_path.read_text(encoding="utf-8"))
+    assert saved["DiagTrack"] == {"start_type": "demand", "status": "rodando"}

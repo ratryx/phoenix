@@ -59,7 +59,7 @@ def listar_status_servicos() -> list:
             else:
                 status = "Desconhecido"
 
-        tem_backup = _has_backup(nome_servico)
+        tem_backup = _is_managed_by_phoenix(nome_servico)
         resultados.append({
             "nome_servico": nome_servico,
             "nome_amigavel": nome_amigavel,
@@ -133,7 +133,7 @@ def _atomic_write_json(caminho, dados: dict) -> bool:
             pass
         return False
 
-def _has_backup(nome_servico: str) -> bool:
+def _is_managed_by_phoenix(nome_servico: str) -> bool:
     import json
     caminho = _obter_arquivo_backup_servicos()
     if not caminho.exists():
@@ -141,7 +141,16 @@ def _has_backup(nome_servico: str) -> bool:
     try:
         with open(caminho, "r", encoding="utf-8") as f:
             backup = json.load(f)
-        return nome_servico in backup
+        if nome_servico not in backup:
+            return False
+            
+        res_qc = run_windows_command(
+            ["sc", "qc", nome_servico],
+            operation_name=f"Consultar config {nome_servico}",
+            timeout_seconds=5.0,
+            acceptable_returncodes=(0, 1060)
+        )
+        return res_qc.ok and "DISABLED" in res_qc.stdout.upper()
     except Exception:
         return False
 
@@ -181,7 +190,7 @@ def _salvar_estado_servico(nome_servico: str) -> dict:
         if caminho.exists():
             with open(caminho, "r", encoding="utf-8") as f:
                 backup = json.load(f)
-        if nome_servico not in backup:
+        if nome_servico not in backup or not _is_managed_by_phoenix(nome_servico):
             backup[nome_servico] = estado
             if not _atomic_write_json(caminho, backup):
                 return {"ok": False, "erro": "Falha ao gravar arquivo de backup do serviço.", "codigo": "PERSISTENCE_ERROR"}
