@@ -83,7 +83,7 @@
     operation.runProtected = async function (acaoFn) {
         if (criandoPonto) return;
         
-        if (STATE.restorePointCreatedThisSession) {
+        if (STATE.protectionState === 'restore_created' || STATE.protectionState === 'risk_accepted') {
             return await acaoFn();
         }
 
@@ -115,7 +115,7 @@
             clearInterval(progressoTimer);
             
             if (res && res.ok) {
-                STATE.restorePointCreatedThisSession = true;
+                STATE.protectionState = 'restore_created';
                 feedback.atualizarOverlay('Ponto de restauração criado!', 100);
                 
                 return new Promise((resolve, reject) => {
@@ -142,16 +142,21 @@
                         criandoPonto = false;
                         if (continuar) {
                             try {
-                                await Phoenix.bridge.call("confirmar_risco_protecao");
+                                const confirmacao = await Phoenix.bridge.call("confirmar_risco_protecao");
+                                if (confirmacao && confirmacao.ok) {
+                                    STATE.protectionState = 'risk_accepted';
+                                    try {
+                                        const result = await acaoFn();
+                                        resolve(result);
+                                    } catch (err) {
+                                        reject(err);
+                                    }
+                                } else {
+                                    resolve(undefined);
+                                }
                             } catch (e) {
                                 console.error("[ERRO] Falha ao confirmar risco:", e);
-                            }
-                            STATE.restorePointCreatedThisSession = true;
-                            try {
-                                const result = await acaoFn();
-                                resolve(result);
-                            } catch (err) {
-                                reject(err);
+                                resolve(undefined);
                             }
                         } else {
                             resolve(undefined);
@@ -162,7 +167,8 @@
         } catch(e) {
             console.error("[ERRO] Ponto de restauração:", e);
             clearInterval(progressoTimer);
-            feedback.esconderOverlay(true, false);
+            feedback.esconderOverlay(true, true);
+            
             return new Promise((resolve, reject) => {
                 setTimeout(async () => {
                     const continuar = await confirmarComModalLegado(
@@ -173,16 +179,21 @@
                     criandoPonto = false;
                     if (continuar) {
                         try {
-                            await Phoenix.bridge.call("confirmar_risco_protecao");
+                            const confirmacao = await Phoenix.bridge.call("confirmar_risco_protecao");
+                            if (confirmacao && confirmacao.ok) {
+                                STATE.protectionState = 'risk_accepted';
+                                try {
+                                    const result = await acaoFn();
+                                    resolve(result);
+                                } catch (err) {
+                                    reject(err);
+                                }
+                            } else {
+                                resolve(undefined);
+                            }
                         } catch (e) {
                             console.error("[ERRO] Falha ao confirmar risco:", e);
-                        }
-                        STATE.restorePointCreatedThisSession = true;
-                        try {
-                            const result = await acaoFn();
-                            resolve(result);
-                        } catch (err) {
-                            reject(err);
+                            resolve(undefined);
                         }
                     } else {
                         resolve(undefined);

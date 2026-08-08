@@ -8,7 +8,10 @@ async function runTests() {
         window: {
             Phoenix: {
                 bridge: { call: async (ep) => {
-                    if (ep === 'confirmar_risco_protecao') sandbox.confirmarRiscoChamado = true;
+                    if (ep === 'confirmar_risco_protecao') {
+                        sandbox.confirmarRiscoChamado = true;
+                        return { ok: true };
+                    }
                     return { job_id: '123' };
                 }},
                 jobs: { awaitJob: async () => ({ ok: true }) },
@@ -19,7 +22,7 @@ async function runTests() {
                         atualizarOverlay: () => {}
                     }
                 },
-                state: { restorePointCreatedThisSession: false },
+                state: { protectionState: 'not_attempted' },
                 operations: {}
             },
             document: {
@@ -86,7 +89,7 @@ async function runTests() {
         assert(acaoChamada === 0, "não iniciou ação no carregamento");
 
         // 3. ponto já criado executa ação diretamente
-        sandbox.Phoenix.state.restorePointCreatedThisSession = true;
+        sandbox.Phoenix.state.protectionState = 'restore_created';
         let bridgeChamada = false;
         sandbox.Phoenix.bridge.call = async () => { bridgeChamada = true; };
         await operation.runProtected(mockAction);
@@ -94,12 +97,15 @@ async function runTests() {
         assert(!bridgeChamada, "bridge não chamada");
 
         // 4, 5, 6, 7. ponto não criado chama endpoint, awaitJob, marca estado, executa uma vez
-        sandbox.Phoenix.state.restorePointCreatedThisSession = false;
+        sandbox.Phoenix.state.protectionState = 'not_attempted';
         acaoChamada = 0;
         let jobAguardado = false;
         sandbox.Phoenix.bridge.call = async (ep) => {
             if (ep === 'criar_ponto_restauracao') bridgeChamada = true;
-            if (ep === 'confirmar_risco_protecao') sandbox.confirmarRiscoChamado = true;
+            if (ep === 'confirmar_risco_protecao') {
+                sandbox.confirmarRiscoChamado = true;
+                return { ok: true };
+            }
             return { job_id: 'abc' };
         };
         sandbox.Phoenix.jobs.awaitJob = async (jid) => {
@@ -109,13 +115,13 @@ async function runTests() {
         const res3 = await operation.runProtected(mockAction);
         assert(bridgeChamada, "endpoint chamado");
         assert(jobAguardado, "job aguardado");
-        assert(sandbox.Phoenix.state.restorePointCreatedThisSession === true, "estado marcado");
+        assert(sandbox.Phoenix.state.protectionState === 'restore_created', "estado marcado como restore_created");
         assert(acaoChamada === 1, "ação executada uma vez"); // 7
         assert(res3 === "resultado-acao", "retorno preservado"); // 15
         assert(!sandbox.overlayAberto, "overlay fechado"); // 12. flag libera (implícito se overlay fechado e não pendente)
 
         // Reset
-        sandbox.Phoenix.state.restorePointCreatedThisSession = false;
+        sandbox.Phoenix.state.protectionState = 'not_attempted';
         acaoChamada = 0;
 
         // 8, 9, 10. falha não marca estado (até escolher), abortar não executa, continuar executa
@@ -125,7 +131,7 @@ async function runTests() {
         // modal deve abrir
         await new Promise(r => setImmediate(r));
         assert(sandbox.modalAberto, "modal abre na falha");
-        assert(sandbox.Phoenix.state.restorePointCreatedThisSession === false, "falha não marca estado"); // 8
+        assert(sandbox.Phoenix.state.protectionState === 'not_attempted', "falha não marca estado"); // 8
         sandbox.mockCancelarClick(); // 9
         const resAbort = await promiseAbortar;
         assert(acaoChamada === 0, "abortar não executa ação");
@@ -140,11 +146,11 @@ async function runTests() {
         const resCont = await promiseContinuar;
         assert(acaoChamada === 1, "continuar executa ação");
         assert(sandbox.confirmarRiscoChamado, "deve chamar confirmar_risco_protecao na ponte");
-        assert(sandbox.Phoenix.state.restorePointCreatedThisSession === true, "continuar marca estado para futuras");
+        assert(sandbox.Phoenix.state.protectionState === 'risk_accepted', "continuar marca estado para futuras");
         assert(resCont === "resultado-acao");
 
         // 11. duas solicitações não criam dois pontos
-        sandbox.Phoenix.state.restorePointCreatedThisSession = false;
+        sandbox.Phoenix.state.protectionState = 'not_attempted';
         let chamadasBridge = 0;
         sandbox.Phoenix.bridge.call = async () => {
             chamadasBridge++;
@@ -170,7 +176,7 @@ async function runTests() {
         assert(resB === undefined, "action B explícita e controladamente ignorada"); // Opção B atendida (rejeitada/ignorada)
 
         // 18. segunda ação durante modal
-        sandbox.Phoenix.state.restorePointCreatedThisSession = false;
+        sandbox.Phoenix.state.protectionState = 'not_attempted';
         sandbox.Phoenix.jobs.awaitJob = async () => ({ ok: false }); // forçar falha para abrir modal
         
         let promessaModalA = operation.runProtected(actionA);
@@ -186,7 +192,7 @@ async function runTests() {
         assert(resModalA === undefined, "A foi cancelada");
 
         // 16. erro da ação é preservado
-        sandbox.Phoenix.state.restorePointCreatedThisSession = true;
+        sandbox.Phoenix.state.protectionState = 'restore_created';
         let erroAcao = false;
         try {
             await operation.runProtected(async () => { throw new Error("Erro teste"); });

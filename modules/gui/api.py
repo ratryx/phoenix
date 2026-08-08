@@ -38,6 +38,8 @@ class PhoenixAPI:
             from modules.core.routine_service import RoutineService
             routine_service = RoutineService()
         self._routine_service = routine_service
+        self._protection_state = "not_attempted"
+        self._restore_attempt_failed = False
         
         GUILogger.setup()
 
@@ -249,11 +251,17 @@ class PhoenixAPI:
 
     def criar_ponto_restauracao(self) -> dict:
         """Cria um ponto de restauração em segundo plano (fire-and-forget)."""
+        self._protection_state = "not_attempted"
+        self._restore_attempt_failed = False
         def worker(job_context):
             res = otimizacao.criar_ponto_restauracao(cancel_event=job_context.cancel_event)
             if res.get("codigo") == "COMMAND_CANCELLED":
                 from modules.core.exceptions import JobCancelledError
                 raise JobCancelledError()
+            if res.get("ok"):
+                self._protection_state = "restore_created"
+            else:
+                self._restore_attempt_failed = True
             return res
         return self._iniciar_job(
             worker,
@@ -301,9 +309,21 @@ class PhoenixAPI:
         self._job_manager.update_progress(job_id, 0, "Iniciando detecção forçada...")
         return {"job_id": job_id}
 
+    def confirmar_risco_protecao(self) -> dict:
+        if self._restore_attempt_failed:
+            self._protection_state = "risk_accepted"
+            return {"ok": True}
+        return {"ok": False, "erro": "Não é possível confirmar risco sem uma falha prévia de restauração.", "codigo": "INVALID_RISK_ACCEPTANCE"}
+
+    def _require_protection(self):
+        if self._protection_state not in ("restore_created", "risk_accepted"):
+            from modules.core.exceptions import ProtectionError
+            raise ProtectionError("Operação bloqueada: O sistema não está protegido. Execute criar_ponto_restauracao antes.")
+
     def executar_otimizacao_geral(self) -> dict:
         """Aplica otimizações gerais em segundo plano (fire-and-forget)."""
         def acao(job_context):
+            self._require_protection()
             res = otimizacao.executar_otimizacao_geral(self._id_atendimento, cancel_event=job_context.cancel_event)
             if res.get("codigo") == "COMMAND_CANCELLED":
                 from modules.core.exceptions import JobCancelledError
@@ -314,6 +334,7 @@ class PhoenixAPI:
     def executar_otimizacao_gaming(self, resetar_rede: bool = False) -> dict:
         """Aplica otimizações para jogos em segundo plano (fire-and-forget)."""
         def acao(job_context):
+            self._require_protection()
             res = otimizacao.executar_otimizacao_gaming(self._id_atendimento, resetar_rede=resetar_rede, cancel_event=job_context.cancel_event)
             if res.get("codigo") == "COMMAND_CANCELLED":
                 from modules.core.exceptions import JobCancelledError
@@ -393,6 +414,7 @@ class PhoenixAPI:
         self.iniciar_atendimento(nome_cliente)
 
         def rotina(job_context=None):
+            self._require_protection()
             return self._routine_service.executar(
                 id_atendimento=self._id_atendimento,
                 nome_cliente=self._nome_cliente,
