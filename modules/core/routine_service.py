@@ -41,15 +41,17 @@ class RoutineService:
         self._logs = logs_module
         self._relatorio = relatorio_module
 
-    def executar(self, id_atendimento: str, nome_cliente: str = "", job_context=None) -> dict:
+    def executar(self, id_atendimento: str, nome_cliente: str = "Desconhecido", job_context=None, protection_state=None) -> dict:
         """
-        Executa o fluxo completo do atendimento:
+        Orquestra a rotina completa:
         1. Diagnóstico Inicial
         2. Limpeza
-        3. Otimização
+        3. Otimização Geral
         4. Diagnóstico Final
-        5. Exportação de Relatório
+        5. Geração de Relatório
         """
+        from datetime import datetime
+        t_start = datetime.now()
         if not id_atendimento:
             raise ValueError("ID do atendimento é obrigatório para iniciar a rotina.")
 
@@ -82,7 +84,7 @@ class RoutineService:
                         mensagem,
                         details=detalhes
                     )
-                    
+
             limpeza_resultado = self._limpeza.executar_limpeza(
                 progress_callback=cleanup_progress,
                 cancel_event=job_context.cancel_event if job_context else None,
@@ -103,10 +105,10 @@ class RoutineService:
                 id_atendimento,
                 cancel_event=job_context.cancel_event if job_context else None,
             )
-            
+
             if optimization_result.get("codigo") == "COMMAND_CANCELLED":
                 raise JobCancelledError()
-                
+
             if not optimization_result.get("ok"):
                 self._logs.registrar_acao(id_atendimento, "Rotina interrompida devido a falha na otimização")
                 return {
@@ -136,23 +138,34 @@ class RoutineService:
 
             pasta_logs = self._logs.obter_pasta_logs()
             caminho_txt = pasta_logs / f"{id_atendimento}_relatorio.txt"
+            caminho_html = pasta_logs / f"{id_atendimento}_relatorio.html"
 
             snapshot_antes = self._logs.carregar_snapshot(id_atendimento, "antes")
             snapshot_depois = self._logs.carregar_snapshot(id_atendimento, "depois")
 
-            self._relatorio.exportar_relatorio_txt(snapshot_antes, snapshot_depois, espaco_liberado_mb, caminho_txt)
+            # Calculate actual duration
+            duracao = (datetime.now() - t_start).total_seconds()
+
+            payload = {
+                "ok": True,
+                "id_atendimento": id_atendimento,
+                "duracao_segundos": int(duracao),
+                "antes": dados_antes,
+                "depois": dados_depois,
+                "limpeza": limpeza_resultado,
+                "otimizacao": optimization_result,
+                "protecao": protection_state or {"status": "unknown"},
+                "relatorio_txt": str(caminho_txt),
+                "relatorio_html": str(caminho_html)
+            }
+
+            self._relatorio.exportar_relatorio_txt(payload, snapshot_antes, snapshot_depois, caminho_txt)
+            self._relatorio.exportar_relatorio_html(payload, snapshot_antes, snapshot_depois, caminho_html)
 
             self._logs.registrar_acao(id_atendimento, "Rotina concluída com sucesso")
             if job_context: job_context.update_progress(100, "Concluído!")
 
-            return {
-                "ok": True,
-                "id_atendimento": id_atendimento,
-                "antes": dados_antes,
-                "depois": dados_depois,
-                "espaco_liberado_mb": espaco_liberado_mb,
-                "relatorio_txt": str(caminho_txt),
-            }
+            return payload
 
         except JobCancelledError:
             self._logs.registrar_acao(

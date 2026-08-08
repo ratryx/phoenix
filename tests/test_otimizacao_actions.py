@@ -21,8 +21,10 @@ def test_reaplicar_todas_inativas_falhas(mock_reaplicar, mock_pr):
 
 @patch("modules.otimizacao.is_admin")
 @patch("modules.otimizacao.run_windows_command")
-def test_criar_ponto_restauracao_cancelled(mock_run, mock_admin):
+@patch("modules.otimizacao.obter_ultimo_restore_point_sequence")
+def test_criar_ponto_restauracao_cancelled(mock_seq, mock_run, mock_admin):
     mock_admin.return_value = True
+    mock_seq.return_value = 0
     from modules.core.windows_command import CommandResult
     mock_run.return_value = CommandResult(
         ok=False, code="COMMAND_CANCELLED", returncode=None, stdout="", stderr="",

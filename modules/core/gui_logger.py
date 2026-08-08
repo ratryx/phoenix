@@ -3,7 +3,10 @@ import logging.handlers
 import queue
 import ctypes
 import sys
+import threading
+from datetime import datetime
 from rich.console import Console
+from rich.progress import Progress, TextColumn, BarColumn, TaskProgressColumn, TimeElapsedColumn
 
 ENABLE_EXTENDED_FLAGS = 0x0080
 ENABLE_QUICK_EDIT_MODE = 0x0040
@@ -35,26 +38,30 @@ class RichTerminalHandler(logging.Handler):
 
 class GUILogger:
     _instance = None
-    
+    _lock = threading.Lock()
+    _console = Console()
+    _progress = None
+    _tasks = {}
+
     def __init__(self):
         self.log_queue = queue.Queue(-1)
         from modules.shared import console as shared_console
-        
+
         rich_handler = RichTerminalHandler(shared_console)
         rich_handler.setFormatter(logging.Formatter("%(message)s"))
-        
+
         self.queue_listener = logging.handlers.QueueListener(
-            self.log_queue, 
-            rich_handler, 
+            self.log_queue,
+            rich_handler,
             respect_handler_level=True
         )
-        
+
         self.logger = logging.getLogger("gui_terminal_logger")
         self.logger.setLevel(logging.INFO)
-        
+
         if self.logger.hasHandlers():
             self.logger.handlers.clear()
-            
+
         queue_handler = logging.handlers.QueueHandler(self.log_queue)
         self.logger.addHandler(queue_handler)
         self.logger.propagate = False
@@ -65,7 +72,7 @@ class GUILogger:
             disable_quickedit()
             cls._instance = cls()
             cls._instance.queue_listener.start()
-            
+
     @classmethod
     def shutdown(cls):
         if cls._instance is not None:
@@ -81,20 +88,48 @@ class GUILogger:
                 "AVISO": "yellow",
                 "ERRO": "red"
             }.get(status, "white")
-            
+
             if status == "INICIO":
                 formatted = f"[dim]\\[GUI][/dim] [[{color}]{status}[/{color}]] {operation}"
             else:
                 formatted = f"[dim]\\[GUI][/dim] [[{color}]{status}[/{color}]] {message}"
-                
+
             cls._instance.logger.info(formatted)
 
     @classmethod
+    def log_job_progress(cls, job_id, pct, msg, details=None):
+        with cls._lock:
+            if cls._progress is None:
+                cls._progress = Progress(
+                    TextColumn("[cyan]{task.description}"),
+                    BarColumn(bar_width=40),
+                    TaskProgressColumn(),
+                    TimeElapsedColumn(),
+                    console=cls._console,
+                    transient=True
+                )
+                cls._progress.start()
+
+            if job_id not in cls._tasks:
+                cls._tasks[job_id] = cls._progress.add_task(msg, total=100)
+
+            cls._progress.update(cls._tasks[job_id], completed=pct, description=msg)
+
+    @classmethod
     def log_job_terminal_state(cls, job_id, job):
+        with cls._lock:
+            if job_id in cls._tasks and cls._progress:
+                cls._progress.remove_task(cls._tasks[job_id])
+                del cls._tasks[job_id]
+
+                if not cls._tasks:
+                    cls._progress.stop()
+                    cls._progress = None
+
         status = job.get("status")
         res = job.get("resultado") or {}
         op_raw = job.get("operation_name", "unknown")
-        
+
         friendly_names = {
             "executar_limpeza": "Limpeza do sistema",
             "criar_ponto_restauracao": "Ponto de restauração",
@@ -106,7 +141,7 @@ class GUILogger:
             "otimizacao_gaming": "Otimização para jogos"
         }
         op = friendly_names.get(op_raw, op_raw)
-        
+
         if status == "done":
             parcial = res.get("parcial", False)
             if parcial:

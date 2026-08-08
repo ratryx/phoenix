@@ -55,13 +55,14 @@ class JobManager:
         "detalhe": "A operação retornou um objeto que não pode ser enviado para a interface."
     }
 
-    def __init__(self, ttl_seconds=900, max_retained_jobs=100, watchdog_interval=1.0, on_terminal_state=None):
+    def __init__(self, ttl_seconds=900, max_retained_jobs=100, watchdog_interval=1.0, on_terminal_state=None, on_progress_update=None):
         self._jobs = {}
         self._lock = threading.RLock()
         self.ttl_seconds = ttl_seconds
         self.max_retained_jobs = max_retained_jobs
         self._exclusive_groups = {}
         self.on_terminal_state = on_terminal_state
+        self.on_progress_update = on_progress_update
 
         self._shutdown_event = threading.Event()
         self._watchdog_interval = watchdog_interval
@@ -258,6 +259,12 @@ class JobManager:
                 if details is not None:
                     job["last_snapshot"] = _sanitize_details(details)
                     job["detalhes_progresso"] = job["last_snapshot"]
+
+                if self.on_progress_update:
+                    try:
+                        self.on_progress_update(job_id, pct, safe_msg, details)
+                    except Exception as e:
+                        logger.error(f"Erro no progress callback do job {job_id}: {type(e).__name__}")
 
     def get_progress(self, job_id):
         with self._lock:

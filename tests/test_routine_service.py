@@ -71,10 +71,12 @@ class FakeRelatorio:
     def __init__(self, fail_on=None):
         self.fail_on = fail_on
         self.exportacoes = []
-    def exportar_relatorio_txt(self, antes, depois, liberado, caminho):
+    def exportar_relatorio_txt(self, payload, antes, depois, caminho):
         if self.fail_on == "text-report_export":
             raise RuntimeError("Sensitive failure report export C:\MockUsers\Client\\secret.txt")
-        self.exportacoes.append((antes, depois, liberado, caminho))
+        self.exportacoes.append((payload, antes, depois, caminho))
+    def exportar_relatorio_html(self, payload, antes, depois, caminho):
+        self.exportacoes.append((payload, antes, depois, caminho))
 
 def test_routine_service_sucesso():
     f_diag = FakeDiagnostico()
@@ -95,8 +97,9 @@ def test_routine_service_sucesso():
 
     assert res["ok"] is True
     assert res["id_atendimento"] == "123"
-    assert res["espaco_liberado_mb"] == 500.0
+    assert res["limpeza"]["espaco_liberado_mb"] == 500.0
     assert "123_relatorio.txt" in res["relatorio_txt"]
+    assert "123_relatorio.html" in res["relatorio_html"]
 
     assert len(f_logs.acoes) == 4 # 2 diags + 1 limpeza + 1 conclusão
     assert f_logs.acoes[0] == ("123", "Diagnóstico inicial coletado")

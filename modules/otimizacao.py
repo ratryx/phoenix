@@ -175,6 +175,18 @@ def is_admin() -> bool:
         return False
 
 
+def obter_ultimo_restore_point_sequence() -> int:
+    """Retorna o maior SequenceNumber dos pontos de restauração atuais ou 0 se não houver."""
+    comando = [
+        "powershell", "-NoProfile", "-NonInteractive", "-Command",
+        "Get-ComputerRestorePoint | Sort-Object SequenceNumber -Descending | Select-Object -First 1 -ExpandProperty SequenceNumber"
+    ]
+    res = run_windows_command(comando, operation_name="Verificar Restore Point", timeout_seconds=15.0)
+    if res.ok and res.stdout.strip().isdigit():
+        return int(res.stdout.strip())
+    return 0
+
+
 def criar_ponto_restauracao(cancel_event=None) -> dict:
     """
     Cria um ponto de restauração do sistema operacional Windows via PowerShell.
@@ -187,13 +199,15 @@ def criar_ponto_restauracao(cancel_event=None) -> dict:
             "codigo": "NO_ADMIN"
         }
 
+    seq_antes = obter_ultimo_restore_point_sequence()
+
     comando = [
         "powershell",
         "-NoProfile",
         "-NonInteractive",
         "-ExecutionPolicy", "Bypass",
         "-Command",
-        "Checkpoint-Computer -Description 'Phoenix Optimizer - Pré-Otimização' -RestorePointType 'MODIFY_SETTINGS'"
+        "$ErrorActionPreference = 'Stop'; Checkpoint-Computer -Description 'Phoenix Optimizer - Pré-Otimização' -RestorePointType 'MODIFY_SETTINGS' -ErrorAction Stop"
     ]
 
     resultado = run_windows_command(comando, operation_name="Criar Ponto de Restauração", timeout_seconds=120.0, cancel_event=cancel_event)
@@ -205,7 +219,9 @@ def criar_ponto_restauracao(cancel_event=None) -> dict:
             "erro": "A operação foi cancelada pelo usuário."
         }
 
-    if resultado.ok:
+    seq_depois = obter_ultimo_restore_point_sequence()
+
+    if resultado.ok and seq_depois > seq_antes:
         return {
             "ok": True,
             "mensagem": "Ponto de restauração 'Phoenix Optimizer - Pré-Otimização' criado com sucesso."
@@ -217,7 +233,7 @@ def criar_ponto_restauracao(cancel_event=None) -> dict:
                 "erro": "Tempo limite excedido ao tentar criar o ponto de restauração.",
                 "codigo": "TIMEOUT"
             }
-        
+
         erro_str = (resultado.stderr + "\n" + resultado.stdout).strip()
 
         if "0x80042316" in erro_str or "24 hours" in erro_str or "24 horas" in erro_str:
@@ -230,8 +246,8 @@ def criar_ponto_restauracao(cancel_event=None) -> dict:
             codigo = "NO_ADMIN"
             erro = "Privilégios de Administrador insuficientes."
         else:
-            codigo = "UNKNOWN"
-            erro = "Falha ao criar ponto de restauração do Windows."
+            codigo = "RESTORE_VERIFICATION_FAILED"
+            erro = "Falha ao criar ou confirmar a criação do ponto de restauração do Windows."
 
         return {
             "ok": False,

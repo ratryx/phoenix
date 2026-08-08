@@ -112,18 +112,28 @@ def gerar_relatorio_comparativo(snapshot_antes: dict, snapshot_depois: dict, esp
     console.print(Panel(resumo, title="[bold yellow]Resumo do Atendimento[/bold yellow]", border_style="green"))
 
 
-def exportar_relatorio_txt(snapshot_antes: dict, snapshot_depois: dict, espaco_liberado_mb: float, caminho_saida) -> None:
+def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois: dict, caminho_saida) -> None:
     """Exporta o relatório comparativo em formato .txt simples, pra entregar/mostrar ao cliente."""
     dados_antes = snapshot_antes["dados"]
     dados_depois = snapshot_depois["dados"]
     cliente = snapshot_antes.get("cliente", "não informado")
+    limpeza = payload.get("limpeza", {})
+    otim = payload.get("otimizacao", {})
+    prot = payload.get("protecao", {})
 
     linhas = [
         "=" * 50,
-        "PHOENIX OPTIMIZER - RELATÓRIO DE ATENDIMENTO",
+        "PHOENIX OPTIMIZER - RELATÓRIO TÉCNICO V2",
         "=" * 50,
         f"Cliente: {cliente}",
         f"Data: {snapshot_depois.get('data_hora', '')}",
+        f"Duração: {payload.get('duracao_segundos', 0)}s",
+        "",
+        "--- RESUMO ---",
+        f"Espaço liberado: {limpeza.get('espaco_liberado_mb', 0):.2f} MB",
+        f"Arquivos removidos: {limpeza.get('arquivos_removidos', 0)}",
+        f"Otimizações aplicadas: {otim.get('sucessos', 0)} de {otim.get('total', 0)}",
+        f"Status de proteção: {prot.get('status', 'N/D')}",
         "",
         "--- CPU & MEMÓRIA ---",
         f"Uso de CPU:      {dados_antes['cpu']['uso_percentual']}%  ->  {dados_depois['cpu']['uso_percentual']}%",
@@ -150,7 +160,7 @@ def exportar_relatorio_txt(snapshot_antes: dict, snapshot_depois: dict, espaco_l
         f.write("\n".join(linhas))
 
 
-def exportar_relatorio_html(snapshot_antes: dict, snapshot_depois: dict, espaco_liberado_mb: float, caminho_saida) -> None:
+def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois: dict, caminho_saida) -> None:
     """
     Exporta o relatório comparativo em formato HTML estilizado, pronto
     para abrir no navegador e imprimir como PDF (Ctrl+P → Salvar como PDF).
@@ -161,6 +171,9 @@ def exportar_relatorio_html(snapshot_antes: dict, snapshot_depois: dict, espaco_
     dados_depois = snapshot_depois["dados"]
     cliente = html.escape(snapshot_antes.get("cliente", "não informado"), quote=True)
     data = html.escape(snapshot_depois.get("data_hora", ""), quote=True)
+    limpeza = payload.get("limpeza", {})
+    otim = payload.get("otimizacao", {})
+    prot = payload.get("protecao", {})
 
     def _seta_html(antes: float, depois: float, menor_melhor: bool = True) -> str:
         diff = depois - antes
@@ -198,11 +211,16 @@ def exportar_relatorio_html(snapshot_antes: dict, snapshot_depois: dict, espaco_
     ganho_ram = ram_disp_depois - ram_disp_antes
     reducao_cpu = cpu_antes - cpu_depois
 
+    espaco_liberado_mb = limpeza.get('espaco_liberado_mb', 0)
+
     resumo_items = f'<li>Espaço liberado: <strong>{espaco_liberado_mb:.2f} MB</strong></li>'
     if ganho_ram > 0:
         resumo_items += f'<li>RAM adicional disponível: <strong>{ganho_ram:.2f} GB</strong></li>'
     if reducao_cpu > 0:
         resumo_items += f'<li>Redução no uso de CPU: <strong>{reducao_cpu:.1f}%</strong></li>'
+    resumo_items += f'<li>Otimizações aplicadas: <strong>{otim.get("sucessos", 0)}/{otim.get("total", 0)}</strong></li>'
+    resumo_items += f'<li>Status de proteção: <strong>{prot.get("status", "N/D")}</strong></li>'
+    resumo_items += f'<li>Duração: <strong>{payload.get("duracao_segundos", 0)}s</strong></li>'
 
     html = f"""<!DOCTYPE html>
 <html lang="pt-BR">

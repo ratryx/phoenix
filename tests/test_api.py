@@ -88,7 +88,7 @@ def test_api_delegacao_routine_service(monkeypatch):
     class MockRoutineService:
         def __init__(self):
             self.chamadas = []
-        def executar(self, id_atendimento, nome_cliente, job_context=None):
+        def executar(self, id_atendimento, nome_cliente, job_context=None, protection_state=None):
             self.chamadas.append((id_atendimento, nome_cliente))
             return {"ok": True, "res": "mockado"}
 

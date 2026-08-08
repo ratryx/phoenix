@@ -30,7 +30,13 @@ def test_exportar_relatorio_html_escapes_xss(tmp_path):
         }
     }
     
-    exportar_relatorio_html(snapshot_antes, snapshot_depois, 500, saida)
+    payload_mock = {
+        "limpeza": {"espaco_liberado_mb": 500},
+        "otimizacao": {},
+        "protecao": {}
+    }
+
+    exportar_relatorio_html(payload_mock, snapshot_antes, snapshot_depois, saida)
     
     conteudo = saida.read_text(encoding="utf-8")
     

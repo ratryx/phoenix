@@ -22,7 +22,10 @@ class PhoenixAPI:
         self._hw_info = hw_info
         self._id_atendimento = None
         self._nome_cliente = ""
-        self._job_manager = job_manager or JobManager(on_terminal_state=GUILogger.log_job_terminal_state)
+        self._job_manager = job_manager or JobManager(
+            on_terminal_state=GUILogger.log_job_terminal_state,
+            on_progress_update=GUILogger.log_job_progress
+        )
 
         if hardware_service is None:
             from modules.core.hardware_service import HardwareService
@@ -430,11 +433,12 @@ class PhoenixAPI:
         self.iniciar_atendimento(nome_cliente)
 
         def rotina(job_context=None):
-            self._require_protection()
+            protection_state = self._require_protection()
             return self._routine_service.executar(
                 id_atendimento=self._id_atendimento,
                 nome_cliente=self._nome_cliente,
-                job_context=job_context
+                job_context=job_context,
+                protection_state=protection_state
             )
 
         return self._iniciar_job(rotina, operation_name="rotina_completa", exclusive_group="system_mutation", pass_job_context=True)
