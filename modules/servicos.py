@@ -109,26 +109,33 @@ def _obter_arquivo_backup_servicos():
     return pasta / "servicos_backup.json"
 
 
-def _salvar_estado_servico(nome_servico: str):
+def _salvar_estado_servico(nome_servico: str) -> dict:
     import json
     res_qc = run_windows_command(["sc.exe", "qc", nome_servico], operation_name=f"Consultar config {nome_servico}", timeout_seconds=10.0)
     res_query = run_windows_command(["sc.exe", "query", nome_servico], operation_name=f"Consultar status {nome_servico}", timeout_seconds=10.0)
     
-    estado = {"start_type": "auto", "status": "parado"}
-    if res_qc.ok:
-        stdout = res_qc.stdout.upper()
-        if "DELAYED" in stdout:
-            estado["start_type"] = "delayed-auto"
-        elif "AUTO_START" in stdout:
-            estado["start_type"] = "auto"
-        elif "DEMAND_START" in stdout:
-            estado["start_type"] = "demand"
-        elif "DISABLED" in stdout:
-            estado["start_type"] = "disabled"
-            
-    if res_query.ok:
-        if "RUNNING" in res_query.stdout.upper():
-            estado["status"] = "rodando"
+    if not res_qc.ok or not res_query.ok:
+        return {"ok": False, "erro": "Não foi possível consultar o estado atual do serviço."}
+        
+    estado = {"start_type": None, "status": None}
+    stdout_qc = res_qc.stdout.upper()
+    if "DELAYED" in stdout_qc:
+        estado["start_type"] = "delayed-auto"
+    elif "AUTO_START" in stdout_qc:
+        estado["start_type"] = "auto"
+    elif "DEMAND_START" in stdout_qc:
+        estado["start_type"] = "demand"
+    elif "DISABLED" in stdout_qc:
+        estado["start_type"] = "disabled"
+        
+    stdout_query = res_query.stdout.upper()
+    if "RUNNING" in stdout_query:
+        estado["status"] = "rodando"
+    elif "STOPPED" in stdout_query:
+        estado["status"] = "parado"
+        
+    if not estado["start_type"] or not estado["status"]:
+        return {"ok": False, "erro": "Estado do serviço não pôde ser interpretado."}
             
     caminho = _obter_arquivo_backup_servicos()
     try:
@@ -140,8 +147,9 @@ def _salvar_estado_servico(nome_servico: str):
             backup[nome_servico] = estado
             with open(caminho, "w", encoding="utf-8") as f:
                 json.dump(backup, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "erro": f"Falha ao persistir backup do serviço: {e}"}
 
 
 def desativar_servico(nome_servico: str, cancel_event=None) -> dict:
@@ -150,7 +158,9 @@ def desativar_servico(nome_servico: str, cancel_event=None) -> dict:
         console.print(f"  [red][ERRO][/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
         return {"ok": False, "erro": "Serviço não está na lista segura.", "codigo": "INVALID_SERVICE"}
     
-    _salvar_estado_servico(nome_servico)
+    res_backup = _salvar_estado_servico(nome_servico)
+    if not res_backup.get("ok"):
+        return {"ok": False, "erro": res_backup.get("erro"), "codigo": "BACKUP_FAILED"}
     
     res_stop = run_windows_command(
         ["sc", "stop", nome_servico],
@@ -175,28 +185,31 @@ def desativar_servico(nome_servico: str, cancel_event=None) -> dict:
 
 
 def ativar_servico(nome_servico: str, cancel_event=None) -> dict:
-    """Reativa um serviço restaurando seu estado original (ou auto se não houver backup)."""
+    """Reativa um serviço restaurando seu estado original salvo."""
     import json
     if not _validar_nome_servico(nome_servico):
         console.print(f"  [red][ERRO][/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
         return {"ok": False, "erro": "Serviço não está na lista segura.", "codigo": "INVALID_SERVICE"}
         
-    start_type = "auto"
-    deve_iniciar = True
     caminho = _obter_arquivo_backup_servicos()
+    backup_data = None
     if caminho.exists():
         try:
             with open(caminho, "r", encoding="utf-8") as f:
                 backup = json.load(f)
             if nome_servico in backup:
-                estado = backup[nome_servico]
-                start_type = estado.get("start_type", "auto")
-                deve_iniciar = (estado.get("status") == "rodando")
+                backup_data = backup[nome_servico]
         except Exception:
             pass
 
+    if not backup_data or "start_type" not in backup_data:
+        return {"ok": False, "erro": "Não há backup de estado original para este serviço.", "codigo": "NO_BACKUP"}
+
+    start_type = backup_data["start_type"]
+    deve_iniciar = (backup_data.get("status") == "rodando")
+
     res_config = run_windows_command(
-        ["sc", "config", nome_servico, f"start={start_type}"],
+        ["sc", "config", nome_servico, "start=", start_type],
         operation_name=f"Restaurar config {nome_servico}",
         timeout_seconds=15.0,
         cancel_event=cancel_event
@@ -215,6 +228,17 @@ def ativar_servico(nome_servico: str, cancel_event=None) -> dict:
         if not res_start.ok and "1056" not in res_start.stdout and "1056" not in res_start.stderr:
             return to_public_result(res_start, error_message=f"Falha ao iniciar o serviço {nome_servico}.")
             
+    # Consume backup on success
+    try:
+        with open(caminho, "r", encoding="utf-8") as f:
+            backup_full = json.load(f)
+        if nome_servico in backup_full:
+            del backup_full[nome_servico]
+            with open(caminho, "w", encoding="utf-8") as f:
+                json.dump(backup_full, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+        
     return {"ok": True, "codigo": "COMMAND_OK"}
 
 

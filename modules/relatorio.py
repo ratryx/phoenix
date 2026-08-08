@@ -159,8 +159,8 @@ def exportar_relatorio_html(snapshot_antes: dict, snapshot_depois: dict, espaco_
     import html
     dados_antes = snapshot_antes["dados"]
     dados_depois = snapshot_depois["dados"]
-    cliente = html.escape(snapshot_antes.get("cliente", "não informado"))
-    data = html.escape(snapshot_depois.get("data_hora", ""))
+    cliente = html.escape(snapshot_antes.get("cliente", "não informado"), quote=True)
+    data = html.escape(snapshot_depois.get("data_hora", ""), quote=True)
 
     def _seta_html(antes: float, depois: float, menor_melhor: bool = True) -> str:
         diff = depois - antes
@@ -178,10 +178,11 @@ def exportar_relatorio_html(snapshot_antes: dict, snapshot_depois: dict, espaco_
     for unidade, info_antes in discos_antes.items():
         info_depois = discos_depois.get(unidade)
         if info_depois:
+            unidade_esc = html.escape(unidade, quote=True)
             variacao = _seta_html(info_antes["livre_gb"], info_depois["livre_gb"], menor_melhor=False)
             disco_rows += f"""
             <tr>
-                <td>{unidade}</td>
+                <td>{unidade_esc}</td>
                 <td>{info_antes['livre_gb']} GB</td>
                 <td>{info_depois['livre_gb']} GB</td>
                 <td>{variacao}</td>

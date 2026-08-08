@@ -96,6 +96,7 @@ def test_api_delegacao_routine_service(monkeypatch):
     manager = JobManager()
     
     api = PhoenixAPI({}, job_manager=manager, routine_service=mock_routine)
+    api._require_protection = lambda: None
     
     # Chama o endpoint
     res = api.executar_rotina_completa(nome_cliente="Fulano")
@@ -395,6 +396,7 @@ def test_nested_cancellation_network_reset(monkeypatch):
     
     jm = JobManager()
     api = PhoenixAPI(hw_info={}, job_manager=jm)
+    api._require_protection = lambda: None
     
     # Mock otimizacao.executar_otimizacao_gaming to return COMMAND_CANCELLED
     def mock_gaming(*args, **kwargs):
