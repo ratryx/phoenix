@@ -59,11 +59,13 @@ def listar_status_servicos() -> list:
             else:
                 status = "Desconhecido"
 
+        tem_backup = _has_backup(nome_servico)
         resultados.append({
             "nome_servico": nome_servico,
             "nome_amigavel": nome_amigavel,
             "descricao": descricao,
             "status": status,
+            "managed_by_phoenix": tem_backup
         })
     return resultados
 
@@ -109,14 +111,50 @@ def _obter_arquivo_backup_servicos():
     return pasta / "servicos_backup.json"
 
 
+def _atomic_write_json(caminho, dados: dict) -> bool:
+    import json
+    import os
+    import logging
+    logger = logging.getLogger(__name__)
+    tmp_caminho = caminho.with_suffix(".tmp")
+    try:
+        with open(tmp_caminho, "w", encoding="utf-8") as f:
+            json.dump(dados, f, ensure_ascii=False, indent=2)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_caminho, caminho)
+        return True
+    except Exception as e:
+        logger.error(f"Falha na gravação atômica do backup de serviços: {e}")
+        try:
+            if tmp_caminho.exists():
+                tmp_caminho.unlink()
+        except Exception:
+            pass
+        return False
+
+def _has_backup(nome_servico: str) -> bool:
+    import json
+    caminho = _obter_arquivo_backup_servicos()
+    if not caminho.exists():
+        return False
+    try:
+        with open(caminho, "r", encoding="utf-8") as f:
+            backup = json.load(f)
+        return nome_servico in backup
+    except Exception:
+        return False
+
+
+
 def _salvar_estado_servico(nome_servico: str) -> dict:
     import json
     res_qc = run_windows_command(["sc.exe", "qc", nome_servico], operation_name=f"Consultar config {nome_servico}", timeout_seconds=10.0)
     res_query = run_windows_command(["sc.exe", "query", nome_servico], operation_name=f"Consultar status {nome_servico}", timeout_seconds=10.0)
-    
+
     if not res_qc.ok or not res_query.ok:
         return {"ok": False, "erro": "Não foi possível consultar o estado atual do serviço."}
-        
+
     estado = {"start_type": None, "status": None}
     stdout_qc = res_qc.stdout.upper()
     if "DELAYED" in stdout_qc:
@@ -127,16 +165,16 @@ def _salvar_estado_servico(nome_servico: str) -> dict:
         estado["start_type"] = "demand"
     elif "DISABLED" in stdout_qc:
         estado["start_type"] = "disabled"
-        
+
     stdout_query = res_query.stdout.upper()
     if "RUNNING" in stdout_query:
         estado["status"] = "rodando"
     elif "STOPPED" in stdout_query:
         estado["status"] = "parado"
-        
+
     if not estado["start_type"] or not estado["status"]:
         return {"ok": False, "erro": "Estado do serviço não pôde ser interpretado."}
-            
+
     caminho = _obter_arquivo_backup_servicos()
     try:
         backup = {}
@@ -145,11 +183,13 @@ def _salvar_estado_servico(nome_servico: str) -> dict:
                 backup = json.load(f)
         if nome_servico not in backup:
             backup[nome_servico] = estado
-            with open(caminho, "w", encoding="utf-8") as f:
-                json.dump(backup, f, ensure_ascii=False, indent=2)
+            if not _atomic_write_json(caminho, backup):
+                return {"ok": False, "erro": "Falha ao gravar arquivo de backup do serviço.", "codigo": "PERSISTENCE_ERROR"}
         return {"ok": True}
     except Exception as e:
-        return {"ok": False, "erro": f"Falha ao persistir backup do serviço: {e}"}
+        import logging
+        logging.getLogger(__name__).error(f"Falha ao persistir backup do serviço: {e}")
+        return {"ok": False, "erro": "Erro inesperado ao acessar o sistema de arquivos.", "codigo": "PERSISTENCE_ERROR"}
 
 
 def desativar_servico(nome_servico: str, cancel_event=None) -> dict:
@@ -157,11 +197,11 @@ def desativar_servico(nome_servico: str, cancel_event=None) -> dict:
     if not _validar_nome_servico(nome_servico):
         console.print(f"  [red][ERRO][/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
         return {"ok": False, "erro": "Serviço não está na lista segura.", "codigo": "INVALID_SERVICE"}
-    
+
     res_backup = _salvar_estado_servico(nome_servico)
     if not res_backup.get("ok"):
         return {"ok": False, "erro": res_backup.get("erro"), "codigo": "BACKUP_FAILED"}
-    
+
     res_stop = run_windows_command(
         ["sc", "stop", nome_servico],
         operation_name=f"Parar {nome_servico}",
@@ -171,7 +211,7 @@ def desativar_servico(nome_servico: str, cancel_event=None) -> dict:
     )
     if not res_stop.ok and "1062" not in res_stop.stdout and "1062" not in res_stop.stderr:
         return to_public_result(res_stop, error_message=f"Falha ao parar o serviço {nome_servico}.")
-        
+
     res_config = run_windows_command(
         ["sc", "config", nome_servico, "start=", "disabled"],
         operation_name=f"Desativar {nome_servico}",
@@ -180,17 +220,17 @@ def desativar_servico(nome_servico: str, cancel_event=None) -> dict:
     )
     if not res_config.ok:
         return to_public_result(res_config, error_message=f"Falha ao configurar o serviço {nome_servico}.")
-        
+
     return {"ok": True, "codigo": "COMMAND_OK"}
 
 
-def ativar_servico(nome_servico: str, cancel_event=None) -> dict:
+def restaurar_servico(nome_servico: str, cancel_event=None) -> dict:
     """Reativa um serviço restaurando seu estado original salvo."""
     import json
     if not _validar_nome_servico(nome_servico):
         console.print(f"  [red][ERRO][/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
         return {"ok": False, "erro": "Serviço não está na lista segura.", "codigo": "INVALID_SERVICE"}
-        
+
     caminho = _obter_arquivo_backup_servicos()
     backup_data = None
     if caminho.exists():
@@ -216,7 +256,7 @@ def ativar_servico(nome_servico: str, cancel_event=None) -> dict:
     )
     if not res_config.ok:
         return to_public_result(res_config, error_message=f"Falha ao configurar o serviço {nome_servico}.")
-        
+
     if deve_iniciar:
         res_start = run_windows_command(
             ["sc", "start", nome_servico],
@@ -227,18 +267,39 @@ def ativar_servico(nome_servico: str, cancel_event=None) -> dict:
         )
         if not res_start.ok and "1056" not in res_start.stdout and "1056" not in res_start.stderr:
             return to_public_result(res_start, error_message=f"Falha ao iniciar o serviço {nome_servico}.")
-            
+
     # Consume backup on success
     try:
         with open(caminho, "r", encoding="utf-8") as f:
             backup_full = json.load(f)
         if nome_servico in backup_full:
             del backup_full[nome_servico]
-            with open(caminho, "w", encoding="utf-8") as f:
-                json.dump(backup_full, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
-        
+            if not _atomic_write_json(caminho, backup_full):
+                import logging
+                logging.getLogger(__name__).error("Falha ao atualizar backup após restauração de serviço.")
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Exceção ao consumir backup de serviço: {e}")
+
+    return {"ok": True, "codigo": "COMMAND_OK"}
+
+
+def iniciar_servico(nome_servico: str, cancel_event=None) -> dict:
+    """Inicia um serviço sem alterar seu tipo de inicialização (apenas start)."""
+    if not _validar_nome_servico(nome_servico):
+        console.print(f"  [red][ERRO][/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
+        return {"ok": False, "erro": "Serviço não está na lista segura.", "codigo": "INVALID_SERVICE"}
+
+    res_start = run_windows_command(
+        ["sc", "start", nome_servico],
+        operation_name=f"Iniciar manual {nome_servico}",
+        timeout_seconds=15.0,
+        acceptable_returncodes=(0, 1056),
+        cancel_event=cancel_event
+    )
+    if not res_start.ok and "1056" not in res_start.stdout and "1056" not in res_start.stderr:
+        return to_public_result(res_start, error_message=f"Falha ao iniciar o serviço {nome_servico}.")
+
     return {"ok": True, "codigo": "COMMAND_OK"}
 
 

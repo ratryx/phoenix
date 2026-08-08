@@ -27,8 +27,8 @@
 
         try {
             var jobRes = await Phoenix.bridge.call("listar_servicos");
-            if (!jobRes || !jobRes.job_id) { 
-                return; 
+            if (!jobRes || !jobRes.job_id) {
+                return;
             }
             var resultado = await Phoenix.jobs.awaitJob(jobRes.job_id);
 
@@ -59,12 +59,12 @@
             });
             thead.appendChild(trHead);
             table.appendChild(thead);
-            
+
             var tbody = document.createElement("tbody");
             (resultado.servicos || []).forEach(function (s) {
                 var ativo = s.status === "Rodando";
                 var tr = document.createElement("tr");
-                
+
                 var tdInfo = document.createElement("td");
                 var strong = document.createElement("strong");
                 strong.textContent = s.nome_amigavel;
@@ -74,25 +74,26 @@
                 tdInfo.appendChild(strong);
                 tdInfo.appendChild(divDesc);
                 tr.appendChild(tdInfo);
-                
+
                 var tdStatus = document.createElement("td");
                 var spanStatus = document.createElement("span");
                 spanStatus.className = "badge " + (ativo ? "sucesso" : "neutro");
                 spanStatus.textContent = s.status;
                 tdStatus.appendChild(spanStatus);
                 tr.appendChild(tdStatus);
-                
+
                 var tdAcao = document.createElement("td");
                 var divToggle = document.createElement("div");
                 divToggle.className = "toggle " + (ativo ? "ativo" : "");
                 divToggle.dataset.servico = s.nome_servico;
                 divToggle.dataset.ativo = ativo.toString();
+                divToggle.dataset.gerenciado = (s.managed_by_phoenix === true) ? "true" : "false";
                 var divBola = document.createElement("div");
                 divBola.className = "bola";
                 divToggle.appendChild(divBola);
                 tdAcao.appendChild(divToggle);
                 tr.appendChild(tdAcao);
-                
+
                 tbody.appendChild(tr);
             });
             table.appendChild(tbody);
@@ -103,9 +104,9 @@
             container.querySelectorAll(".toggle").forEach(function (toggle) {
                 toggle.addEventListener("click", function () {
                     var nomeServico = toggle.dataset.servico;
-                    
+
                     if (servicosEmAlteracao.has(nomeServico)) return;
-                    
+
                     var estaAtivo = toggle.dataset.ativo === "true";
 
                     Phoenix.operations.restorePoint.runProtected(async function () {
@@ -116,16 +117,28 @@
                             estaAtivo ? "Desativando serviço..." : "Ativando serviço..."
                         );
                         try {
-                            var metodoAcao = estaAtivo ? "desativar_servico" : "ativar_servico";
+                            var gerenciado = toggle.dataset.gerenciado === "true";
+                            var metodoAcao;
+                            if (estaAtivo) {
+                                metodoAcao = "desativar_servico";
+                            } else {
+                                metodoAcao = gerenciado ? "restaurar_servico" : "iniciar_servico";
+                            }
+
                             var mutRes = await Phoenix.bridge.call(metodoAcao, nomeServico);
-                            if (!mutRes || !mutRes.job_id) { 
-                                return; 
+                            if (!mutRes || !mutRes.job_id) {
+                                return;
                             }
                             var mutResultado = await Phoenix.jobs.awaitJob(mutRes.job_id);
 
                             if (mutResultado && mutResultado.ok) {
                                 toggle.classList.toggle("ativo");
                                 toggle.dataset.ativo = (!estaAtivo).toString();
+                                if (estaAtivo) {
+                                    toggle.dataset.gerenciado = "true";
+                                } else if (gerenciado) {
+                                    toggle.dataset.gerenciado = "false";
+                                }
                             }
                         } catch (e) {
                             console.error("[ERRO] Toggle serviço:", e);

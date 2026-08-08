@@ -44,13 +44,12 @@ async function runTests() {
                             this.innerHTML += child.textContent;
                         }
                     };
-                    el.style = {};
                     return el;
                 },
                 createTextNode: (text) => text
             }
         },
-        console: console,
+        console: { error: () => {}, log: () => {} },
         overlayAberto: false,
         mockDom: {
             'btn-otimizacao-geral': { dataset: {}, addEventListener: (ev, cb) => { if (ev === 'click') sandbox.clicks.geral = cb; } },
@@ -64,7 +63,7 @@ async function runTests() {
                 if (i !== -1) this.children.splice(i, 1);
               },
               get firstChild() { return (this.children && this.children.length > 0) ? this.children[0] : null; }, appendChild: function(c) { this.children.push(c); if(c.innerHTML) this.innerHTML += c.innerHTML; else if(c.textContent) this.innerHTML += c.textContent; else if(typeof c === 'string') this.innerHTML += c; } },
-        'resultado-startup': { innerHTML: '', style: {}, appendChild: function(c) { this.children = this.children || []; this.children.push(c); if(c.innerHTML) this.innerHTML += c.innerHTML; else if(c.textContent) this.innerHTML += c.textContent; else if(typeof c === 'string') this.innerHTML += c; } }
+            'resultado-startup': { innerHTML: '', style: {} }
         },
         clicks: {}
     };
@@ -152,7 +151,7 @@ async function runTests() {
         sandbox.Phoenix.jobs.awaitJob = async () => { return { ok: true, entradas: [{nome:'a',raiz:'HKLM'}] }; };
         await page.analyzeStartup();
         assert(endpoint === 'analisar_startup'); // 29, 30
-        assert(sandbox.mockDom['resultado-startup'].innerHTML.includes('encontrados no startup'), "renderização"); // 31
+        console.log(sandbox.mockDom['resultado-startup'].innerHTML); assert(sandbox.mockDom['resultado-startup'].innerHTML.includes('encontrados no startup'), "renderização"); // 31
         
         console.log("Todos os testes JS da Página Otimização passaram.");
     } catch (e) {

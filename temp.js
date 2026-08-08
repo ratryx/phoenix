@@ -44,13 +44,12 @@ async function runTests() {
                             this.innerHTML += child.textContent;
                         }
                     };
-                    el.style = {};
                     return el;
                 },
                 createTextNode: (text) => text
             }
         },
-        console: console,
+        console: { error: () => {}, log: () => {} },
         overlayAberto: false,
         mockDom: {
             'btn-otimizacao-geral': { dataset: {}, addEventListener: (ev, cb) => { if (ev === 'click') sandbox.clicks.geral = cb; } },

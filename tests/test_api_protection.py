@@ -94,4 +94,7 @@ def test_endpoint_coverage(api):
         _run_sync(api, "desativar_servico", "DiagTrack")
 
     with pytest.raises(ProtectionError):
-        _run_sync(api, "ativar_servico", "DiagTrack")
+        _run_sync(api, "restaurar_servico", "DiagTrack")
+
+    with pytest.raises(ProtectionError):
+        _run_sync(api, "iniciar_servico", "DiagTrack")

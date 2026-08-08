@@ -384,18 +384,34 @@ class PhoenixAPI:
             pass_job_context=True
         )
 
-    def ativar_servico(self, nome_servico: str) -> dict:
-        """Ativa um serviço em segundo plano (fire-and-forget)."""
+    def restaurar_servico(self, nome_servico: str) -> dict:
+        """Restaura um serviço gerenciado pelo Phoenix (fire-and-forget)."""
         def worker(job_context):
             self._require_protection()
-            res = servicos.ativar_servico(nome_servico, cancel_event=job_context.cancel_event)
+            res = servicos.restaurar_servico(nome_servico, cancel_event=job_context.cancel_event)
             if res.get("codigo") == "COMMAND_CANCELLED":
                 from modules.core.exceptions import JobCancelledError
                 raise JobCancelledError()
             return res
         return self._iniciar_job(
             worker,
-            operation_name="ativar_servico",
+            operation_name="restaurar_servico",
+            exclusive_group="system_mutation",
+            pass_job_context=True
+        )
+
+    def iniciar_servico(self, nome_servico: str) -> dict:
+        """Inicia um serviço que estava parado normalmente (fire-and-forget)."""
+        def worker(job_context):
+            self._require_protection()
+            res = servicos.iniciar_servico(nome_servico, cancel_event=job_context.cancel_event)
+            if res.get("codigo") == "COMMAND_CANCELLED":
+                from modules.core.exceptions import JobCancelledError
+                raise JobCancelledError()
+            return res
+        return self._iniciar_job(
+            worker,
+            operation_name="iniciar_servico",
             exclusive_group="system_mutation",
             pass_job_context=True
         )
