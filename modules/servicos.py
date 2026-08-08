@@ -96,11 +96,61 @@ def _validar_nome_servico(nome_servico: str) -> bool:
     return nome_servico in SERVICOS_SEGUROS
 
 
+def _obter_arquivo_backup_servicos():
+    import sys
+    import os
+    from pathlib import Path
+    if sys.platform == "win32":
+        base = Path(os.environ.get("PROGRAMDATA", Path.home())) / "PhoenixOptimizer"
+    else:
+        base = Path(__file__).resolve().parent.parent
+    pasta = base / "backups"
+    pasta.mkdir(parents=True, exist_ok=True)
+    return pasta / "servicos_backup.json"
+
+
+def _salvar_estado_servico(nome_servico: str):
+    import json
+    res_qc = run_windows_command(["sc.exe", "qc", nome_servico], operation_name=f"Consultar config {nome_servico}", timeout_seconds=10.0)
+    res_query = run_windows_command(["sc.exe", "query", nome_servico], operation_name=f"Consultar status {nome_servico}", timeout_seconds=10.0)
+    
+    estado = {"start_type": "auto", "status": "parado"}
+    if res_qc.ok:
+        stdout = res_qc.stdout.upper()
+        if "DELAYED" in stdout:
+            estado["start_type"] = "delayed-auto"
+        elif "AUTO_START" in stdout:
+            estado["start_type"] = "auto"
+        elif "DEMAND_START" in stdout:
+            estado["start_type"] = "demand"
+        elif "DISABLED" in stdout:
+            estado["start_type"] = "disabled"
+            
+    if res_query.ok:
+        if "RUNNING" in res_query.stdout.upper():
+            estado["status"] = "rodando"
+            
+    caminho = _obter_arquivo_backup_servicos()
+    try:
+        backup = {}
+        if caminho.exists():
+            with open(caminho, "r", encoding="utf-8") as f:
+                backup = json.load(f)
+        if nome_servico not in backup:
+            backup[nome_servico] = estado
+            with open(caminho, "w", encoding="utf-8") as f:
+                json.dump(backup, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
 def desativar_servico(nome_servico: str, cancel_event=None) -> dict:
     """Para e desativa a inicialização automática de um serviço específico."""
     if not _validar_nome_servico(nome_servico):
         console.print(f"  [red][ERRO][/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
         return {"ok": False, "erro": "Serviço não está na lista segura.", "codigo": "INVALID_SERVICE"}
+    
+    _salvar_estado_servico(nome_servico)
     
     res_stop = run_windows_command(
         ["sc", "stop", nome_servico],
@@ -125,30 +175,46 @@ def desativar_servico(nome_servico: str, cancel_event=None) -> dict:
 
 
 def ativar_servico(nome_servico: str, cancel_event=None) -> dict:
-    """Reativa um serviço (volta para início automático e inicia o serviço)."""
+    """Reativa um serviço restaurando seu estado original (ou auto se não houver backup)."""
+    import json
     if not _validar_nome_servico(nome_servico):
         console.print(f"  [red][ERRO][/red] Serviço '{nome_servico}' não está na lista de serviços seguros.")
         return {"ok": False, "erro": "Serviço não está na lista segura.", "codigo": "INVALID_SERVICE"}
         
+    start_type = "auto"
+    deve_iniciar = True
+    caminho = _obter_arquivo_backup_servicos()
+    if caminho.exists():
+        try:
+            with open(caminho, "r", encoding="utf-8") as f:
+                backup = json.load(f)
+            if nome_servico in backup:
+                estado = backup[nome_servico]
+                start_type = estado.get("start_type", "auto")
+                deve_iniciar = (estado.get("status") == "rodando")
+        except Exception:
+            pass
+
     res_config = run_windows_command(
-        ["sc", "config", nome_servico, "start=", "auto"],
-        operation_name=f"Ativar auto {nome_servico}",
+        ["sc", "config", nome_servico, f"start={start_type}"],
+        operation_name=f"Restaurar config {nome_servico}",
         timeout_seconds=15.0,
         cancel_event=cancel_event
     )
     if not res_config.ok:
         return to_public_result(res_config, error_message=f"Falha ao configurar o serviço {nome_servico}.")
         
-    res_start = run_windows_command(
-        ["sc", "start", nome_servico],
-        operation_name=f"Iniciar {nome_servico}",
-        timeout_seconds=15.0,
-        acceptable_returncodes=(0, 1056),
-        cancel_event=cancel_event
-    )
-    if not res_start.ok and "1056" not in res_start.stdout and "1056" not in res_start.stderr:
-        return to_public_result(res_start, error_message=f"Falha ao iniciar o serviço {nome_servico}.")
-        
+    if deve_iniciar:
+        res_start = run_windows_command(
+            ["sc", "start", nome_servico],
+            operation_name=f"Iniciar {nome_servico}",
+            timeout_seconds=15.0,
+            acceptable_returncodes=(0, 1056),
+            cancel_event=cancel_event
+        )
+        if not res_start.ok and "1056" not in res_start.stdout and "1056" not in res_start.stderr:
+            return to_public_result(res_start, error_message=f"Falha ao iniciar o serviço {nome_servico}.")
+            
     return {"ok": True, "codigo": "COMMAND_OK"}
 
 
