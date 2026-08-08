@@ -350,6 +350,7 @@ class PhoenixAPI:
     def desativar_servico(self, nome_servico: str) -> dict:
         """Desativa um serviço em segundo plano (fire-and-forget)."""
         def worker(job_context):
+            self._require_protection()
             res = servicos.desativar_servico(nome_servico, cancel_event=job_context.cancel_event)
             if res.get("codigo") == "COMMAND_CANCELLED":
                 from modules.core.exceptions import JobCancelledError
@@ -365,6 +366,7 @@ class PhoenixAPI:
     def ativar_servico(self, nome_servico: str) -> dict:
         """Ativa um serviço em segundo plano (fire-and-forget)."""
         def worker(job_context):
+            self._require_protection()
             res = servicos.ativar_servico(nome_servico, cancel_event=job_context.cancel_event)
             if res.get("codigo") == "COMMAND_CANCELLED":
                 from modules.core.exceptions import JobCancelledError
