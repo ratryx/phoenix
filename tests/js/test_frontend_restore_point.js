@@ -7,7 +7,10 @@ async function runTests() {
     const sandbox = {
         window: {
             Phoenix: {
-                bridge: { call: async () => ({ job_id: '123' }) },
+                bridge: { call: async (ep) => {
+                    if (ep === 'confirmar_risco_protecao') sandbox.confirmarRiscoChamado = true;
+                    return { job_id: '123' };
+                }},
                 jobs: { awaitJob: async () => ({ ok: true }) },
                 ui: {
                     feedback: {
@@ -54,7 +57,8 @@ async function runTests() {
         },
         modalAberto: false,
         mockConfirmarClick: null,
-        mockCancelarClick: null
+        mockCancelarClick: null,
+        confirmarRiscoChamado: false
     };
 
     sandbox.document = sandbox.window.document;
@@ -130,9 +134,11 @@ async function runTests() {
         // Continuar
         let promiseContinuar = operation.runProtected(mockAction);
         await new Promise(r => setImmediate(r));
+        sandbox.confirmarRiscoChamado = false;
         sandbox.mockConfirmarClick(); // 10
         const resCont = await promiseContinuar;
         assert(acaoChamada === 1, "continuar executa ação");
+        assert(sandbox.confirmarRiscoChamado, "deve chamar confirmar_risco_protecao na ponte");
         assert(sandbox.Phoenix.state.restorePointCreatedThisSession === true, "continuar marca estado para futuras");
         assert(resCont === "resultado-acao");
 

@@ -141,6 +141,11 @@
                         );
                         criandoPonto = false;
                         if (continuar) {
+                            try {
+                                await Phoenix.bridge.call("confirmar_risco_protecao");
+                            } catch (e) {
+                                console.error("[ERRO] Falha ao confirmar risco:", e);
+                            }
                             STATE.restorePointCreatedThisSession = true;
                             try {
                                 const result = await acaoFn();
@@ -167,6 +172,11 @@
                     );
                     criandoPonto = false;
                     if (continuar) {
+                        try {
+                            await Phoenix.bridge.call("confirmar_risco_protecao");
+                        } catch (e) {
+                            console.error("[ERRO] Falha ao confirmar risco:", e);
+                        }
                         STATE.restorePointCreatedThisSession = true;
                         try {
                             const result = await acaoFn();
