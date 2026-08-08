@@ -11,6 +11,20 @@ function setupEnvironment() {
     const context = {
         window: {},
         document: {
+            createElement: function(tag) {
+                return {
+                    tagName: tag.toUpperCase(),
+                    className: '',
+                    children: [],
+                    _textContent: '',
+                    get textContent() { return this._textContent; },
+                    set textContent(val) { this._textContent = val; },
+                    appendChild: function(child) { this.children.push(child); }
+                };
+            },
+            createTextNode: function(text) {
+                return { isTextNode: true, textContent: text };
+            },
             getElementById: function (id) {
                 if (id === 'conteudo-historico') {
                     return context.container;
@@ -49,7 +63,9 @@ function setupEnvironment() {
     };
     context.window.Phoenix = context.Phoenix;
     context.container = {
-        innerHTML: ''
+        innerHTML: '',
+        children: [],
+        appendChild: function(c) { this.children.push(c); }
     };
     context.errors = [];
     context.logs = [];
@@ -88,7 +104,7 @@ async function runTests() {
         assert.strictEqual(ctx.bridgeCalls[0].endpoint, "obter_historico");
         assert.strictEqual(ctx.jobCalls.length, 0);
         
-        assert.ok(ctx.container.innerHTML.includes("Nenhum atendimento registrado ainda"), "Deve exibir mensagem de estado vazio");
+        assert.ok(ctx.container.children.length > 0 && ctx.container.children[0].textContent.includes("Nenhum atendimento registrado ainda"), "Deve exibir mensagem de estado vazio");
         assert.strictEqual(ctx.overlaysHidden, 1, "Overlay deve ser escondido após consultar");
     }
 
@@ -104,10 +120,11 @@ async function runTests() {
         };
         await ctx.Phoenix.pages.historico.load();
         
-        assert.ok(ctx.container.innerHTML.includes("João Silva"), "Deve conter Cliente João Silva");
-        assert.ok(ctx.container.innerHTML.includes("Maria Souza"), "Deve conter Cliente Maria Souza");
-        assert.ok(ctx.container.innerHTML.includes("20260717"), "Deve conter ID do atendimento");
-        assert.ok(ctx.container.innerHTML.includes("tabela-dados"), "Deve renderizar na tabela de dados");
+        const renderizado = JSON.stringify(ctx.container.children);
+        assert.ok(renderizado.includes("João Silva"), "Deve conter Cliente João Silva");
+        assert.ok(renderizado.includes("Maria Souza"), "Deve conter Cliente Maria Souza");
+        assert.ok(renderizado.includes("20260717"), "Deve conter ID do atendimento");
+        assert.ok(renderizado.includes("tabela-dados"), "Deve renderizar na tabela de dados");
     }
 
     // Teste 4: Falha na listagem (Estado erro)
@@ -115,8 +132,9 @@ async function runTests() {
         const ctx = setupEnvironment();
         ctx.mockBridgeResult = { ok: false, erro: "Falha de disco" };
         await ctx.Phoenix.pages.historico.load();
-        assert.ok(ctx.container.innerHTML.includes("Falha de disco"), "Deve exibir a badge de erro e a mensagem");
-        assert.ok(ctx.container.innerHTML.includes("badge erro"));
+        const renderizado = JSON.stringify(ctx.container.children);
+        assert.ok(renderizado.includes("Falha de disco"), "Deve exibir a badge de erro e a mensagem");
+        assert.ok(renderizado.includes("badge erro"));
         assert.strictEqual(ctx.overlaysHidden, 1);
     }
 

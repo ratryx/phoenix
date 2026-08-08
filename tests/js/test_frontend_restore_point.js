@@ -99,6 +99,7 @@ async function runTests() {
         let jobAguardado = false;
         sandbox.Phoenix.bridge.call = async (ep) => {
             if (ep === 'criar_ponto_restauracao') bridgeChamada = true;
+            if (ep === 'confirmar_risco_protecao') sandbox.confirmarRiscoChamado = true;
             return { job_id: 'abc' };
         };
         sandbox.Phoenix.jobs.awaitJob = async (jid) => {
