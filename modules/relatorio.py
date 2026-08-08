@@ -121,6 +121,14 @@ def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois:
     otim = payload.get("otimizacao", {})
     prot = payload.get("protecao", {})
 
+    protecao_status = prot.get("status", "N/D")
+    if protecao_status == "restore_created":
+        protecao_text = "Ponto de restauração criado e verificado"
+    elif protecao_status == "risk_accepted":
+        protecao_text = "Executado sem ponto de restauração — risco aceito pelo operador"
+    else:
+        protecao_text = "Não tentado"
+
     linhas = [
         "=" * 50,
         "PHOENIX OPTIMIZER - RELATÓRIO TÉCNICO V2",
@@ -131,11 +139,10 @@ def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois:
         "",
         "--- RESUMO ---",
         f"Espaço liberado: {limpeza.get('espaco_liberado_mb', 0):.2f} MB",
-        f"Arquivos removidos: {limpeza.get('arquivos_removidos', 0)}",
         f"Otimizações aplicadas: {otim.get('sucessos', 0)} de {otim.get('total', 0)}",
-        f"Status de proteção: {prot.get('status', 'N/D')}",
+        f"Status de proteção: {protecao_text}",
         "",
-        "--- CPU & MEMÓRIA ---",
+        "--- ESTADO OBSERVADO DO SISTEMA (Antes -> Depois) ---",
         f"Uso de CPU:      {dados_antes['cpu']['uso_percentual']}%  ->  {dados_depois['cpu']['uso_percentual']}%",
         f"Uso de RAM:      {dados_antes['memoria']['percentual_uso']}%  ->  {dados_depois['memoria']['percentual_uso']}%",
         f"RAM disponível:  {dados_antes['memoria']['disponivel_gb']} GB  ->  {dados_depois['memoria']['disponivel_gb']} GB",
@@ -160,10 +167,11 @@ def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois:
     else:
         for cat in categorias:
             nome = cat.get("nome", "Desconhecido")
-            arquivos = cat.get("arquivos_removidos", 0) + cat.get("arquivos_ignorados", 0)
+            removidos = cat.get("arquivos_removidos", 0)
+            ignorados = cat.get("arquivos_ignorados", 0)
             mb = cat.get("espaco_liberado_bytes", 0) / (1024*1024)
             status = str(cat.get("status", "desconhecido")).upper()
-            linhas.append(f"- {nome}: {arquivos} arquivos, {mb:.2f} MB liberados [{status}]")
+            linhas.append(f"- {nome}: {removidos} removidos, {ignorados} ignorados, {mb:.2f} MB recuperados [{status}]")
 
     linhas.append("")
     linhas.append("--- OTIMIZAÇÕES APLICADAS ---")
@@ -173,7 +181,8 @@ def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois:
     else:
         for k, v in resultados_otim.items():
             status = "OK" if v.get("ok") else "FALHOU"
-            linhas.append(f"- {k}: [{status}]")
+            nome = v.get("descricao", k)
+            linhas.append(f"- {nome}: [{status}]")
 
     linhas.append("")
     linhas.append(f"Espaço total liberado: {limpeza.get('espaco_liberado_mb', 0):.2f} MB")
@@ -198,10 +207,14 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
     otim = payload.get("otimizacao", {})
     prot = payload.get("protecao", {})
 
-    def _seta_html(antes: float, depois: float, menor_melhor: bool = True) -> str:
+    def _seta_html(antes: float, depois: float, menor_melhor: bool = True, neutra: bool = False) -> str:
         diff = depois - antes
         if abs(diff) < 0.01:
             return '<span style="color:#888">= sem alteração</span>'
+        if neutra:
+            cor = "#888"
+            seta = "▼" if diff < 0 else "▲"
+            return f'<span style="color:{cor};font-weight:bold">{seta} {abs(diff):.2f}</span>'
         melhorou = (diff < 0) if menor_melhor else (diff > 0)
         cor = "#4CAF50" if melhorou else "#F44336"
         seta = "▼" if diff < 0 else "▲"
@@ -231,20 +244,16 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
     ram_disp_antes = dados_antes["memoria"]["disponivel_gb"]
     ram_disp_depois = dados_depois["memoria"]["disponivel_gb"]
 
-    ganho_ram = ram_disp_depois - ram_disp_antes
-    reducao_cpu = cpu_antes - cpu_depois
-
-    espaco_liberado_mb = limpeza.get('espaco_liberado_mb', 0)
-
-    resumo_items = f'<li>Espaço liberado: <strong>{espaco_liberado_mb:.2f} MB</strong></li>'
-    if ganho_ram > 0:
-        resumo_items += f'<li>RAM adicional disponível: <strong>{ganho_ram:.2f} GB</strong></li>'
-    if reducao_cpu > 0:
-        resumo_items += f'<li>Redução no uso de CPU: <strong>{reducao_cpu:.1f}%</strong></li>'
+    resumo_items = f'<li>Espaço liberado: <strong>{limpeza.get("espaco_liberado_mb", 0):.2f} MB</strong></li>'
     resumo_items += f'<li>Otimizações aplicadas: <strong>{otim.get("sucessos", 0)}/{otim.get("total", 0)}</strong></li>'
 
     protecao_status = prot.get("status", "N/D")
-    protecao_text = "Ponto de restauração verificado" if protecao_status == "restore_created" else ("Risco aceito (sem restauração)" if protecao_status == "risk_accepted" else "Não tentado")
+    if protecao_status == "restore_created":
+        protecao_text = "Ponto de restauração criado e verificado"
+    elif protecao_status == "risk_accepted":
+        protecao_text = "Executado sem ponto de restauração — risco aceito pelo operador"
+    else:
+        protecao_text = "Não tentado"
     resumo_items += f'<li>Status de proteção: <strong>{protecao_text}</strong></li>'
     resumo_items += f'<li>Duração: <strong>{payload.get("duracao_segundos", 0)}s</strong></li>'
 
@@ -252,15 +261,16 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
     limpeza_rows = ""
     categorias = limpeza.get("categorias", [])
     if not categorias:
-        limpeza_rows = "<tr><td colspan='4' style='text-align:center'>Nenhuma categoria processada.</td></tr>"
+        limpeza_rows = "<tr><td colspan='5' style='text-align:center'>Nenhuma categoria processada.</td></tr>"
     else:
         for cat in categorias:
             nome = html.escape(cat.get("nome", "Desconhecido"), quote=True)
-            arquivos = cat.get("arquivos_removidos", 0) + cat.get("arquivos_ignorados", 0)
+            removidos = cat.get("arquivos_removidos", 0)
+            ignorados = cat.get("arquivos_ignorados", 0)
             mb = cat.get("espaco_liberado_bytes", 0) / (1024*1024)
             status = cat.get("status", "desconhecido")
             cor_status = "#4CAF50" if status == "concluido" else ("#F44336" if status == "falhou" else "#FFC107")
-            limpeza_rows += f"<tr><td>{nome}</td><td>{arquivos}</td><td>{mb:.2f} MB</td><td><span style='color:{cor_status};font-weight:bold'>{status.upper()}</span></td></tr>"
+            limpeza_rows += f"<tr><td>{nome}</td><td>{removidos}</td><td>{ignorados}</td><td>{mb:.2f} MB</td><td><span style='color:{cor_status};font-weight:bold'>{status.upper()}</span></td></tr>"
 
     # Otimizações
     otim_rows = ""
@@ -269,12 +279,13 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
         otim_rows = "<tr><td colspan='2' style='text-align:center'>Nenhuma otimização aplicada.</td></tr>"
     else:
         for k, v in resultados_otim.items():
-            k_esc = html.escape(k, quote=True)
+            nome_otim = v.get("descricao", k)
+            k_esc = html.escape(nome_otim, quote=True)
             status_text = "OK" if v.get("ok") else "FALHOU"
             cor_status = "#4CAF50" if v.get("ok") else "#F44336"
             otim_rows += f"<tr><td>{k_esc}</td><td><span style='color:{cor_status};font-weight:bold'>{status_text}</span></td></tr>"
 
-    html = f"""<!DOCTYPE html>
+    html_content = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
@@ -399,7 +410,7 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
         }}
 
         .resumo li::before {{
-            content: "[OK] ";
+            content: "• ";
             color: #6FAE7C;
             font-weight: bold;
         }}
@@ -447,19 +458,19 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
                     <td>Uso de CPU</td>
                     <td>{cpu_antes}%</td>
                     <td>{cpu_depois}%</td>
-                    <td>{_seta_html(cpu_antes, cpu_depois, menor_melhor=True)}</td>
+                    <td>{_seta_html(cpu_antes, cpu_depois, menor_melhor=True, neutra=True)}</td>
                 </tr>
                 <tr>
                     <td>Uso de RAM</td>
                     <td>{ram_antes}%</td>
                     <td>{ram_depois}%</td>
-                    <td>{_seta_html(ram_antes, ram_depois, menor_melhor=True)}</td>
+                    <td>{_seta_html(ram_antes, ram_depois, menor_melhor=True, neutra=True)}</td>
                 </tr>
                 <tr>
                     <td>RAM disponível</td>
                     <td>{ram_disp_antes} GB</td>
                     <td>{ram_disp_depois} GB</td>
-                    <td>{_seta_html(ram_disp_antes, ram_disp_depois, menor_melhor=False)}</td>
+                    <td>{_seta_html(ram_disp_antes, ram_disp_depois, menor_melhor=False, neutra=True)}</td>
                 </tr>
             </tbody>
         </table>
@@ -477,7 +488,7 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
         <h2>Detalhes da Limpeza</h2>
         <table>
             <thead>
-                <tr><th>Categoria</th><th>Arquivos</th><th>Espaço</th><th>Status</th></tr>
+                <tr><th>Categoria</th><th>Itens removidos</th><th>Itens ignorados</th><th>Espaço recuperado</th><th>Status</th></tr>
             </thead>
             <tbody>
                 {limpeza_rows}
@@ -509,4 +520,4 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
 </html>"""
 
     with open(caminho_saida, "w", encoding="utf-8") as f:
-        f.write(html)
+        f.write(html_content)

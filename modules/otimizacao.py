@@ -196,10 +196,10 @@ def _verificar_ponto_restauracao_especifico(baseline_seq: int, expected_desc: st
     """Verifica se existe um ponto de restauração com SequenceNumber > baseline e descrição esperada."""
     comando = [
         "powershell", "-NoProfile", "-NonInteractive", "-Command",
-        f"$ErrorActionPreference = 'Stop'; $pts = Get-ComputerRestorePoint; if ($null -ne $pts) {{ $match = $pts | Where-Object {{ $_.SequenceNumber -gt {baseline_seq} -and $_.Description -match '{expected_desc}' }}; if ($match) {{ Write-Output 'FOUND' }} else {{ Write-Output 'NOT_FOUND' }} }} else {{ Write-Output 'NOT_FOUND' }}"
+        f"$ErrorActionPreference = 'Stop'; $pts = Get-ComputerRestorePoint; if ($null -ne $pts) {{ $match = $pts | Where-Object {{ $_.SequenceNumber -gt {baseline_seq} -and $_.Description -eq '{expected_desc}' }}; if ($match) {{ Write-Output 'FOUND' }} else {{ Write-Output 'NOT_FOUND' }} }} else {{ Write-Output 'NOT_FOUND' }}"
     ]
     res = run_windows_command(comando, operation_name="Verificar Restore Point Específico", timeout_seconds=15.0)
-    return res.ok and "FOUND" in res.stdout
+    return res.ok and res.stdout.strip() == "FOUND"
 
 def criar_ponto_restauracao(cancel_event=None) -> dict:
     """
@@ -281,12 +281,14 @@ def _executar_comando(comando: list, nome_acao: str, cancel_event=None, timeout_
     """Executa um comando do sistema e retorna resultado estruturado."""
     resultado = run_windows_command(comando, operation_name=nome_acao, timeout_seconds=timeout_seconds, cancel_event=cancel_event)
     if resultado.code == "COMMAND_CANCELLED":
-        return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
+        return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário.", "descricao": nome_acao}
     if not resultado.ok:
         console.print(f"  [yellow][AVISO][/yellow] {nome_acao} (falhou)")
-        return to_public_result(resultado)
+        res = to_public_result(resultado)
+        res["descricao"] = nome_acao
+        return res
     console.print(f"  [green][OK][/green] {nome_acao}")
-    return {"ok": True, "codigo": "COMMAND_OK"}
+    return {"ok": True, "codigo": "COMMAND_OK", "descricao": nome_acao}
 
 
 def ativar_plano_energia_alto_desempenho(cancel_event=None):
@@ -498,7 +500,8 @@ def limpar_dns_e_rede(cancel_event=None):
     return {
         "ok": todos_ok,
         "codigo": "OPERATION_OK" if todos_ok else "OPERATION_PARTIAL_FAILURE",
-        "resultados": resultados
+        "resultados": resultados,
+        "descricao": "Otimização de DNS e Rede"
     }
 
 

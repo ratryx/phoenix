@@ -66,11 +66,11 @@
         var otim = resultado.otimizacao || {};
         var protecao = resultado.protecao || {};
 
-        function addLinhaComparativa(tbody, rotulo, valorAntes, valorDepois, sufixo, menorEMelhor) {
+        function addLinhaComparativa(tbody, rotulo, valorAntes, valorDepois, sufixo, menorEMelhor, neutra) {
             var diferenca = valorDepois - valorAntes;
             var melhorou = menorEMelhor ? diferenca < 0 : diferenca > 0;
-            var corDif = Math.abs(diferenca) < 0.01 ? "neutro" : (melhorou ? "sucesso" : "erro");
-            var seta = Math.abs(diferenca) < 0.01 ? "=" : (melhorou ? "\u25BC" : "\u25B2");
+            var corDif = (Math.abs(diferenca) < 0.01 || neutra) ? "neutro" : (melhorou ? "sucesso" : "erro");
+            var seta = Math.abs(diferenca) < 0.01 ? "=" : (diferenca < 0 ? "\u25BC" : "\u25B2");
 
             var tr = document.createElement("tr");
             tr.appendChild(createEl("td", "", rotulo));
@@ -114,7 +114,7 @@
         var tabLimpeza = createEl("table", "tabela-dados");
         tabLimpeza.style.marginTop = "12px";
         var tHeadLimpeza = document.createElement("thead");
-        tHeadLimpeza.innerHTML = "<tr><th>Categoria</th><th>Arquivos</th><th>Espaço</th><th>Status</th></tr>";
+        tHeadLimpeza.innerHTML = "<tr><th>Categoria</th><th>Itens removidos</th><th>Itens ignorados</th><th>Espaço recuperado</th><th>Status</th></tr>";
         tabLimpeza.appendChild(tHeadLimpeza);
 
         var tBodyLimpeza = document.createElement("tbody");
@@ -127,12 +127,14 @@
             tBodyLimpeza.appendChild(trVazioL);
         } else {
             categorias.forEach(function(cat) {
-                var arquivos = (cat.arquivos_removidos || 0) + (cat.arquivos_ignorados || 0);
+                var removidos = cat.arquivos_removidos || 0;
+                var ignorados = cat.arquivos_ignorados || 0;
                 var mb = (cat.espaco_liberado_bytes || 0) / (1024*1024);
 
                 var tr = document.createElement("tr");
                 tr.appendChild(createEl("td", "", cat.nome || "Desconhecido"));
-                tr.appendChild(createEl("td", "", String(arquivos)));
+                tr.appendChild(createEl("td", "", String(removidos)));
+                tr.appendChild(createEl("td", "", String(ignorados)));
                 tr.appendChild(createEl("td", "", formatarBytes(mb)));
 
                 var tdStatus = document.createElement("td");
@@ -173,9 +175,10 @@
                 var r = resultados_otim[k];
                 var status = r.ok ? "OK" : "FALHOU";
                 var cor = r.ok ? "sucesso" : "erro";
+                var nome = r.descricao || k;
 
                 var tr = document.createElement("tr");
-                tr.appendChild(createEl("td", "", k));
+                tr.appendChild(createEl("td", "", nome));
                 var tdStatus = document.createElement("td");
                 tdStatus.appendChild(createEl("span", "badge " + cor, status));
                 tr.appendChild(tdStatus);
@@ -205,11 +208,11 @@
         var tBodyEstado = document.createElement("tbody");
 
         if (antes.cpu && depois.cpu) {
-            addLinhaComparativa(tBodyEstado, "Uso de CPU", antes.cpu.uso_percentual, depois.cpu.uso_percentual, "%", true);
+            addLinhaComparativa(tBodyEstado, "Uso de CPU", antes.cpu.uso_percentual, depois.cpu.uso_percentual, "%", true, true);
         }
         if (antes.memoria && depois.memoria) {
-            addLinhaComparativa(tBodyEstado, "Uso de RAM", antes.memoria.percentual_uso, depois.memoria.percentual_uso, "%", true);
-            addLinhaComparativa(tBodyEstado, "RAM disponível", antes.memoria.disponivel_gb, depois.memoria.disponivel_gb, " GB", false);
+            addLinhaComparativa(tBodyEstado, "Uso de RAM", antes.memoria.percentual_uso, depois.memoria.percentual_uso, "%", true, true);
+            addLinhaComparativa(tBodyEstado, "RAM disponível", antes.memoria.disponivel_gb, depois.memoria.disponivel_gb, " GB", false, true);
         }
 
         var discosAntes = {};
@@ -219,7 +222,7 @@
 
         Object.keys(discosAntes).forEach(function(unidade) {
             if (discosDepois[unidade] !== undefined) {
-                addLinhaComparativa(tBodyEstado, "Livre " + unidade, discosAntes[unidade], discosDepois[unidade], " GB", false);
+                addLinhaComparativa(tBodyEstado, "Livre " + unidade, discosAntes[unidade], discosDepois[unidade], " GB", false, false);
             }
         });
 

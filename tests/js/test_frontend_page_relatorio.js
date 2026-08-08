@@ -114,8 +114,8 @@ async function runTests() {
         const ctx = setupEnvironment();
         const payload = {
             ok: true,
-            antes: { cpu: { uso_percentual: 80.0 }, memoria: { percentual_uso: 90.0, disponivel_gb: 1.0 } },
-            depois: { cpu: { uso_percentual: 50.0 }, memoria: { percentual_uso: 60.0, disponivel_gb: 4.0 } },
+            antes: { cpu: { uso_percentual: 80.0 }, memoria: { percentual_uso: 90.0, disponivel_gb: 1.0 }, discos: [{unidade: "C:", livre_gb: 100}] },
+            depois: { cpu: { uso_percentual: 50.0 }, memoria: { percentual_uso: 60.0, disponivel_gb: 4.0 }, discos: [{unidade: "C:", livre_gb: 150}] },
             limpeza: { espaco_liberado_mb: 2048 },
             relatorio_txt: "C:\\Fake\\Relatorio.txt"
         };
@@ -127,11 +127,13 @@ async function runTests() {
         // Caminho
         assert.ok(ctx.container.innerHTML.includes("C:\\Fake\\Relatorio.txt"), "Deve conter o caminho do relatório");
         
-        // Deltas - O CPU foi de 80 para 50 (diferença -30). Como é true (menor é melhor), diferença < 0 = melhora
-        // A badge de sucesso deve ter a seta para baixo e "30.0%"
-        assert.ok(ctx.container.innerHTML.includes("30.0%"), "Deve formatar variação");
-        assert.ok(ctx.container.innerHTML.includes('badge sucesso'), "Deve conter badge sucesso para melhora");
-        assert.ok(ctx.container.innerHTML.includes('\u25BC'), "Deve conter seta pra baixo em melhoras em métricas inversas");
+        // Deltas - O CPU foi de 80 para 50 (diferença -30). Como é true (neutro), a badge deve ser neutro.
+        assert.ok(ctx.container.innerHTML.includes("30.0%"), "Deve formatar variação de CPU/RAM");
+        assert.ok(ctx.container.innerHTML.includes('badge neutro'), "Deve conter badge neutro para CPU/RAM, mesmo com mudança");
+        
+        // O disco foi de 100 para 150 (ganho de 50GB). A badge do disco é sucesso.
+        assert.ok(ctx.container.innerHTML.includes('badge sucesso'), "Deve conter badge sucesso para aumento no espaço do disco");
+        assert.ok(ctx.container.innerHTML.includes('\u25B2'), "Deve conter seta pra cima em aumento de disco");
     }
 
     // Teste 5: showResult com piora
@@ -139,8 +141,8 @@ async function runTests() {
         const ctx = setupEnvironment();
         const payload = {
             ok: true,
-            antes: { cpu: { uso_percentual: 10.0 }, memoria: { percentual_uso: 10.0, disponivel_gb: 8.0 } },
-            depois: { cpu: { uso_percentual: 90.0 }, memoria: { percentual_uso: 90.0, disponivel_gb: 2.0 } }, // Piorou!
+            antes: { cpu: { uso_percentual: 10.0 }, memoria: { percentual_uso: 10.0, disponivel_gb: 8.0 }, discos: [{unidade: "C:", livre_gb: 100}] },
+            depois: { cpu: { uso_percentual: 90.0 }, memoria: { percentual_uso: 90.0, disponivel_gb: 2.0 }, discos: [{unidade: "C:", livre_gb: 50}] }, // Disco reduziu
             limpeza: { espaco_liberado_mb: 0 },
             relatorio_txt: ""
         };
@@ -148,8 +150,8 @@ async function runTests() {
         
         assert.ok(ctx.container.innerHTML.includes("0.0 MB"), "Deve formatar 0 MB pra 0.0 MB");
         assert.ok(ctx.container.innerHTML.includes("Indisponível"), "Deve exibir fallback de txt vazio");
-        assert.ok(ctx.container.innerHTML.includes('badge erro'), "Deve exibir badge de erro para piora");
-        assert.ok(ctx.container.innerHTML.includes('\u25B2'), "Deve exibir seta pra cima para aumentos em métricas inversas");
+        assert.ok(ctx.container.innerHTML.includes('badge erro'), "Deve exibir badge de erro para piora de disco");
+        assert.ok(ctx.container.innerHTML.includes('\u25BC'), "Deve exibir seta pra baixo para perda de espaço em disco");
     }
 
     // Teste 6: Neutro

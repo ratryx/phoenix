@@ -140,3 +140,35 @@ def test_criar_ponto_restauracao_unrelated_point_appearing(mock_verif, mock_run,
     res = criar_ponto_restauracao()
     assert res["ok"] is False
     assert res["codigo"] == "RESTORE_VERIFICATION_FAILED"
+
+from modules.otimizacao import _verificar_ponto_restauracao_especifico
+
+@patch('modules.otimizacao.run_windows_command')
+def test_verificar_ponto_restauracao_especifico_found(mock_run):
+    from modules.core.windows_command import CommandResult
+    mock_run.return_value = CommandResult(ok=True, code='COMMAND_OK', returncode=0, stdout='FOUND', stderr='', timed_out=False, cancelled=False, duration_ms=10, termination_ok=True)
+    assert _verificar_ponto_restauracao_especifico(5, 'Teste') is True
+
+@patch('modules.otimizacao.run_windows_command')
+def test_verificar_ponto_restauracao_especifico_found_newline(mock_run):
+    from modules.core.windows_command import CommandResult
+    mock_run.return_value = CommandResult(ok=True, code='COMMAND_OK', returncode=0, stdout='FOUND\r\n', stderr='', timed_out=False, cancelled=False, duration_ms=10, termination_ok=True)
+    assert _verificar_ponto_restauracao_especifico(5, 'Teste') is True
+
+@patch('modules.otimizacao.run_windows_command')
+def test_verificar_ponto_restauracao_especifico_not_found(mock_run):
+    from modules.core.windows_command import CommandResult
+    mock_run.return_value = CommandResult(ok=True, code='COMMAND_OK', returncode=0, stdout='NOT_FOUND', stderr='', timed_out=False, cancelled=False, duration_ms=10, termination_ok=True)
+    assert _verificar_ponto_restauracao_especifico(5, 'Teste') is False
+
+@patch('modules.otimizacao.run_windows_command')
+def test_verificar_ponto_restauracao_especifico_empty(mock_run):
+    from modules.core.windows_command import CommandResult
+    mock_run.return_value = CommandResult(ok=True, code='COMMAND_OK', returncode=0, stdout='', stderr='', timed_out=False, cancelled=False, duration_ms=10, termination_ok=True)
+    assert _verificar_ponto_restauracao_especifico(5, 'Teste') is False
+
+@patch('modules.otimizacao.run_windows_command')
+def test_verificar_ponto_restauracao_especifico_failure(mock_run):
+    from modules.core.windows_command import CommandResult
+    mock_run.return_value = CommandResult(ok=False, code='COMMAND_FAILED', returncode=1, stdout='FOUND', stderr='', timed_out=False, cancelled=False, duration_ms=10, termination_ok=True)
+    assert _verificar_ponto_restauracao_especifico(5, 'Teste') is False
