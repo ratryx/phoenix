@@ -241,9 +241,9 @@ def criar_ponto_restauracao(cancel_event=None) -> dict:
 
 
 
-def _executar_comando(comando: list, nome_acao: str, cancel_event=None) -> dict:
+def _executar_comando(comando: list, nome_acao: str, cancel_event=None, timeout_seconds: float = 30.0) -> dict:
     """Executa um comando do sistema e retorna resultado estruturado."""
-    resultado = run_windows_command(comando, operation_name=nome_acao, timeout_seconds=30.0, cancel_event=cancel_event)
+    resultado = run_windows_command(comando, operation_name=nome_acao, timeout_seconds=timeout_seconds, cancel_event=cancel_event)
     if resultado.code == "COMMAND_CANCELLED":
         return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
     if not resultado.ok:
@@ -407,7 +407,8 @@ def executar_verificacao_integridade_sistema(id_atendimento: str = None, cancel_
     res_dism = _executar_comando(
         ["DISM", "/Online", "/Cleanup-Image", "/RestoreHealth"],
         "DISM: Store de componentes verificado/reparado",
-        cancel_event=cancel_event
+        cancel_event=cancel_event,
+        timeout_seconds=900.0
     )
     if res_dism.get("codigo") == "COMMAND_CANCELLED":
         return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
@@ -417,7 +418,8 @@ def executar_verificacao_integridade_sistema(id_atendimento: str = None, cancel_
     res_sfc = _executar_comando(
         ["sfc", "/scannow"],
         "SFC: Arquivos do sistema verificados",
-        cancel_event=cancel_event
+        cancel_event=cancel_event,
+        timeout_seconds=900.0
     )
     if res_sfc.get("codigo") == "COMMAND_CANCELLED":
         return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
