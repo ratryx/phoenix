@@ -39,7 +39,6 @@ class RichTerminalHandler(logging.Handler):
 class GUILogger:
     _instance = None
     _lock = threading.Lock()
-    _console = Console()
     _progress = None
     _tasks = {}
 
@@ -78,6 +77,11 @@ class GUILogger:
         if cls._instance is not None:
             cls._instance.queue_listener.stop()
             cls._instance = None
+        with cls._lock:
+            if cls._progress is not None:
+                cls._progress.stop()
+                cls._progress = None
+            cls._tasks.clear()
 
     @classmethod
     def log(cls, operation, status, message=""):
@@ -100,12 +104,13 @@ class GUILogger:
     def log_job_progress(cls, job_id, pct, msg, details=None):
         with cls._lock:
             if cls._progress is None:
+                from modules.shared import console as shared_console
                 cls._progress = Progress(
                     TextColumn("[cyan]{task.description}"),
                     BarColumn(bar_width=40),
                     TaskProgressColumn(),
                     TimeElapsedColumn(),
-                    console=cls._console,
+                    console=shared_console,
                     transient=True
                 )
                 cls._progress.start()

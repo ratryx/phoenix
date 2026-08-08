@@ -322,6 +322,7 @@ class PhoenixAPI:
         if self._protection_state not in ("restore_created", "risk_accepted"):
             from modules.core.exceptions import ProtectionError
             raise ProtectionError("Operação bloqueada: O sistema não está protegido. Execute criar_ponto_restauracao antes.")
+        return {"status": self._protection_state}
 
     def executar_otimizacao_geral(self) -> dict:
         """Aplica otimizações gerais em segundo plano (fire-and-forget)."""

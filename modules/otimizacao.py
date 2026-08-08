@@ -64,7 +64,7 @@ def verificar_status_otimizacoes() -> dict:
         "total_inativos": 0,
         "itens": []
     }
-    
+
     # Check planos de energia (requires subprocess, we use a fast approach if possible, or just powercfg)
     try:
         res = run_windows_command(["powercfg", "/getactivescheme"], operation_name="Verificar plano de energia", timeout_seconds=5.0)
@@ -82,7 +82,7 @@ def verificar_status_otimizacoes() -> dict:
             "ativo": False,
             "detalhe": f"Erro: {e}"
         })
-    
+
     # Check registry keys
     for key_id, config in ITENS_VERIFICACAO.items():
         if config["tipo"] == "registro":
@@ -105,18 +105,18 @@ def verificar_status_otimizacoes() -> dict:
             except Exception as e:
                 ativo = False
                 detalhe_erro = "Caminho do registro não existe ou sem permissão."
-                
+
             resultados["itens"].append({
                 "id": key_id,
                 "descricao": config["descricao"],
                 "ativo": ativo,
                 "detalhe": "Ativo" if ativo else detalhe_erro
             })
-            
+
     # Count totals
     resultados["total_ativos"] = sum(1 for item in resultados["itens"] if item["ativo"])
     resultados["total_inativos"] = len(resultados["itens"]) - resultados["total_ativos"]
-    
+
     return resultados
 
 def reaplicar_otimizacao(id_otimizacao: str) -> dict:
@@ -124,11 +124,11 @@ def reaplicar_otimizacao(id_otimizacao: str) -> dict:
     if id_otimizacao == "plano_energia":
         res = ativar_plano_energia_alto_desempenho()
         return {"ok": res.get("ok", False), "id": id_otimizacao, "codigo": res.get("codigo")}
-        
+
     config = ITENS_VERIFICACAO.get(id_otimizacao)
     if not config:
         return {"ok": False, "erro": "ID não encontrado"}
-        
+
     if config["tipo"] == "registro":
         res = {"ok": False}
         if id_otimizacao == "modo_jogo":
@@ -142,7 +142,7 @@ def reaplicar_otimizacao(id_otimizacao: str) -> dict:
         elif id_otimizacao == "apps_segundo_plano":
             res = limitar_processos_em_segundo_plano()
         return {"ok": res.get("ok", False), "id": id_otimizacao, "codigo": res.get("codigo")}
-        
+
     return {"ok": False, "erro": "Tipo de otimização não suportado"}
 
 def reaplicar_todas_inativas(status_atual: dict) -> dict:
@@ -150,10 +150,10 @@ def reaplicar_todas_inativas(status_atual: dict) -> dict:
     res_pr = criar_ponto_restauracao()
     if not res_pr.get("ok"):
         return res_pr
-        
+
     reaplicadas = []
     falhas = []
-    
+
     for item in status_atual.get("itens", []):
         if not item["ativo"]:
             res = reaplicar_otimizacao(item["id"])
@@ -161,7 +161,7 @@ def reaplicar_todas_inativas(status_atual: dict) -> dict:
                 reaplicadas.append(item["id"])
             else:
                 falhas.append(item["id"])
-                
+
     if falhas:
         return {"ok": False, "codigo": "OPERATION_PARTIAL_FAILURE", "reaplicadas": reaplicadas, "falhas": falhas}
     return {"ok": True, "reaplicadas": reaplicadas}
@@ -175,17 +175,31 @@ def is_admin() -> bool:
         return False
 
 
-def obter_ultimo_restore_point_sequence() -> int:
-    """Retorna o maior SequenceNumber dos pontos de restauração atuais ou 0 se não houver."""
+def obter_ultimo_restore_point_sequence() -> dict:
+    """Retorna o status da consulta e o maior SequenceNumber dos pontos de restauração."""
     comando = [
         "powershell", "-NoProfile", "-NonInteractive", "-Command",
-        "Get-ComputerRestorePoint | Sort-Object SequenceNumber -Descending | Select-Object -First 1 -ExpandProperty SequenceNumber"
+        "$ErrorActionPreference = 'Stop'; $pts = Get-ComputerRestorePoint; if ($null -eq $pts) { Write-Output 0 } else { $pts | Sort-Object SequenceNumber -Descending | Select-Object -First 1 -ExpandProperty SequenceNumber }"
     ]
     res = run_windows_command(comando, operation_name="Verificar Restore Point", timeout_seconds=15.0)
-    if res.ok and res.stdout.strip().isdigit():
-        return int(res.stdout.strip())
-    return 0
 
+    if not res.ok:
+        return {"ok": False, "codigo": "RESTORE_QUERY_FAILED", "erro": "Falha ao consultar pontos de restauração do sistema."}
+
+    out = res.stdout.strip()
+    if not out: out = "0"
+    if out.isdigit():
+        return {"ok": True, "sequence": int(out)}
+    return {"ok": False, "codigo": "RESTORE_QUERY_FAILED", "erro": "Falha ao interpretar saída da consulta de restauração."}
+
+def _verificar_ponto_restauracao_especifico(baseline_seq: int, expected_desc: str) -> bool:
+    """Verifica se existe um ponto de restauração com SequenceNumber > baseline e descrição esperada."""
+    comando = [
+        "powershell", "-NoProfile", "-NonInteractive", "-Command",
+        f"$ErrorActionPreference = 'Stop'; $pts = Get-ComputerRestorePoint; if ($null -ne $pts) {{ $match = $pts | Where-Object {{ $_.SequenceNumber -gt {baseline_seq} -and $_.Description -match '{expected_desc}' }}; if ($match) {{ Write-Output 'FOUND' }} else {{ Write-Output 'NOT_FOUND' }} }} else {{ Write-Output 'NOT_FOUND' }}"
+    ]
+    res = run_windows_command(comando, operation_name="Verificar Restore Point Específico", timeout_seconds=15.0)
+    return res.ok and "FOUND" in res.stdout
 
 def criar_ponto_restauracao(cancel_event=None) -> dict:
     """
@@ -199,7 +213,15 @@ def criar_ponto_restauracao(cancel_event=None) -> dict:
             "codigo": "NO_ADMIN"
         }
 
-    seq_antes = obter_ultimo_restore_point_sequence()
+    seq_antes_info = obter_ultimo_restore_point_sequence()
+    if not seq_antes_info["ok"]:
+        return {
+            "ok": False,
+            "erro": seq_antes_info["erro"],
+            "codigo": seq_antes_info["codigo"]
+        }
+
+    seq_antes = seq_antes_info["sequence"]
 
     comando = [
         "powershell",
@@ -219,9 +241,7 @@ def criar_ponto_restauracao(cancel_event=None) -> dict:
             "erro": "A operação foi cancelada pelo usuário."
         }
 
-    seq_depois = obter_ultimo_restore_point_sequence()
-
-    if resultado.ok and seq_depois > seq_antes:
+    if resultado.ok and _verificar_ponto_restauracao_especifico(seq_antes, 'Phoenix Optimizer - Pré-Otimização'):
         return {
             "ok": True,
             "mensagem": "Ponto de restauração 'Phoenix Optimizer - Pré-Otimização' criado com sucesso."
@@ -348,14 +368,14 @@ def listar_itens_inicializacao() -> dict:
     )
     if resultado.code == "COMMAND_CANCELLED":
         return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
-    
+
     if not resultado.ok:
         return {
             "ok": False,
             "codigo": resultado.code,
             "erro": "Falha ao listar programas de inicialização." if not resultado.timed_out else "Tempo limite excedido."
         }
-    
+
     saida = resultado.stdout.strip()
     if not saida:
         return {
@@ -474,7 +494,7 @@ def limpar_dns_e_rede(cancel_event=None):
         resultados[nome] = res
         if not res.get("ok"):
             todos_ok = False
-            
+
     return {
         "ok": todos_ok,
         "codigo": "OPERATION_OK" if todos_ok else "OPERATION_PARTIAL_FAILURE",
@@ -524,13 +544,13 @@ def executar_otimizacao_geral(id_atendimento: str = None, cancel_event=None) -> 
     }
 
 
-def executar_otimizacao_gaming(id_atendimento: str = None, 
+def executar_otimizacao_gaming(id_atendimento: str = None,
                                 resetar_rede: bool = False, cancel_event=None) -> dict:
     console.print(Panel(
-        "[bold yellow]Aplicando otimizações para jogos (FPS)...[/bold yellow]", 
+        "[bold yellow]Aplicando otimizações para jogos (FPS)...[/bold yellow]",
         border_style="orange3"
     ))
-    
+
     acoes = [
         ("plano_energia", ativar_plano_energia_alto_desempenho),
         ("modo_jogo", ativar_modo_jogo_windows),
@@ -543,7 +563,7 @@ def executar_otimizacao_gaming(id_atendimento: str = None,
         if res.get("codigo") == "COMMAND_CANCELLED":
             return {"ok": False, "codigo": "COMMAND_CANCELLED", "erro": "A operação foi cancelada pelo usuário."}
         resultados[nome] = res
-        
+
     if resetar_rede:
         res = limpar_dns_e_rede(cancel_event=cancel_event)
         if res.get("codigo") == "COMMAND_CANCELLED":
@@ -570,7 +590,7 @@ def executar_otimizacao_gaming(id_atendimento: str = None,
         from modules import logs
         msg = "Otimização para jogos concluída parcialmente" if not todos_ok else "Otimização para jogos aplicada"
         logs.registrar_acao(id_atendimento, msg, f"{sucesso}/{total} sucessos")
-    
+
     return {
         "ok": todos_ok,
         "codigo": "OPERATION_OK" if todos_ok else "OPERATION_PARTIAL_FAILURE",
@@ -589,7 +609,7 @@ def liberar_memoria_standby() -> bool:
         # Método via API nativa do Windows
         import ctypes
         # 0x80000000 = MemoryPurgeStandbyList
-        ctypes.windll.ntdll.NtSetSystemInformation(80, 
+        ctypes.windll.ntdll.NtSetSystemInformation(80,
             ctypes.byref(ctypes.c_int(4)), ctypes.sizeof(ctypes.c_int))
         return True
     except Exception:
@@ -597,7 +617,7 @@ def liberar_memoria_standby() -> bool:
 
 def desativar_suspensao_energia() -> bool:
     """
-    Configura o Windows para nunca suspender quando conectado 
+    Configura o Windows para nunca suspender quando conectado
     na energia elétrica. Ideal para sessões de otimização longas.
     """
     res1 = run_windows_command(["powercfg", "/change", "standby-timeout-ac", "0"], operation_name="Desativar suspensão", timeout_seconds=10.0)
@@ -612,9 +632,9 @@ def analisar_startup() -> list:
     import winreg
     entradas = []
     chaves = [
-        (winreg.HKEY_CURRENT_USER, 
+        (winreg.HKEY_CURRENT_USER,
          r"Software\Microsoft\Windows\CurrentVersion\Run"),
-        (winreg.HKEY_LOCAL_MACHINE, 
+        (winreg.HKEY_LOCAL_MACHINE,
          r"Software\Microsoft\Windows\CurrentVersion\Run"),
     ]
     for raiz, caminho in chaves:
@@ -627,7 +647,7 @@ def analisar_startup() -> list:
                         entradas.append({
                             "nome": nome,
                             "comando": valor,
-                            "raiz": "HKCU" if raiz == winreg.HKEY_CURRENT_USER 
+                            "raiz": "HKCU" if raiz == winreg.HKEY_CURRENT_USER
                                     else "HKLM"
                         })
                         i += 1

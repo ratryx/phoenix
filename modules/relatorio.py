@@ -153,7 +153,30 @@ def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois:
             )
 
     linhas.append("")
-    linhas.append(f"Espaço total liberado: {espaco_liberado_mb:.2f} MB")
+    linhas.append("--- DETALHES DA LIMPEZA ---")
+    categorias = limpeza.get("categorias", [])
+    if not categorias:
+        linhas.append("Nenhuma categoria processada.")
+    else:
+        for cat in categorias:
+            nome = cat.get("nome", "Desconhecido")
+            arquivos = cat.get("arquivos_removidos", 0) + cat.get("arquivos_ignorados", 0)
+            mb = cat.get("espaco_liberado_bytes", 0) / (1024*1024)
+            status = str(cat.get("status", "desconhecido")).upper()
+            linhas.append(f"- {nome}: {arquivos} arquivos, {mb:.2f} MB liberados [{status}]")
+
+    linhas.append("")
+    linhas.append("--- OTIMIZAÇÕES APLICADAS ---")
+    resultados_otim = otim.get("resultados", {})
+    if not resultados_otim:
+        linhas.append("Nenhuma otimização aplicada.")
+    else:
+        for k, v in resultados_otim.items():
+            status = "OK" if v.get("ok") else "FALHOU"
+            linhas.append(f"- {k}: [{status}]")
+
+    linhas.append("")
+    linhas.append(f"Espaço total liberado: {limpeza.get('espaco_liberado_mb', 0):.2f} MB")
     linhas.append("=" * 50)
 
     with open(caminho_saida, "w", encoding="utf-8") as f:
@@ -219,8 +242,37 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
     if reducao_cpu > 0:
         resumo_items += f'<li>Redução no uso de CPU: <strong>{reducao_cpu:.1f}%</strong></li>'
     resumo_items += f'<li>Otimizações aplicadas: <strong>{otim.get("sucessos", 0)}/{otim.get("total", 0)}</strong></li>'
-    resumo_items += f'<li>Status de proteção: <strong>{prot.get("status", "N/D")}</strong></li>'
+
+    protecao_status = prot.get("status", "N/D")
+    protecao_text = "Ponto de restauração verificado" if protecao_status == "restore_created" else ("Risco aceito (sem restauração)" if protecao_status == "risk_accepted" else "Não tentado")
+    resumo_items += f'<li>Status de proteção: <strong>{protecao_text}</strong></li>'
     resumo_items += f'<li>Duração: <strong>{payload.get("duracao_segundos", 0)}s</strong></li>'
+
+    # Detalhes da Limpeza
+    limpeza_rows = ""
+    categorias = limpeza.get("categorias", [])
+    if not categorias:
+        limpeza_rows = "<tr><td colspan='4' style='text-align:center'>Nenhuma categoria processada.</td></tr>"
+    else:
+        for cat in categorias:
+            nome = html.escape(cat.get("nome", "Desconhecido"), quote=True)
+            arquivos = cat.get("arquivos_removidos", 0) + cat.get("arquivos_ignorados", 0)
+            mb = cat.get("espaco_liberado_bytes", 0) / (1024*1024)
+            status = cat.get("status", "desconhecido")
+            cor_status = "#4CAF50" if status == "concluido" else ("#F44336" if status == "falhou" else "#FFC107")
+            limpeza_rows += f"<tr><td>{nome}</td><td>{arquivos}</td><td>{mb:.2f} MB</td><td><span style='color:{cor_status};font-weight:bold'>{status.upper()}</span></td></tr>"
+
+    # Otimizações
+    otim_rows = ""
+    resultados_otim = otim.get("resultados", {})
+    if not resultados_otim:
+        otim_rows = "<tr><td colspan='2' style='text-align:center'>Nenhuma otimização aplicada.</td></tr>"
+    else:
+        for k, v in resultados_otim.items():
+            k_esc = html.escape(k, quote=True)
+            status_text = "OK" if v.get("ok") else "FALHOU"
+            cor_status = "#4CAF50" if v.get("ok") else "#F44336"
+            otim_rows += f"<tr><td>{k_esc}</td><td><span style='color:{cor_status};font-weight:bold'>{status_text}</span></td></tr>"
 
     html = f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -419,6 +471,26 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
             </thead>
             <tbody>
                 {disco_rows}
+            </tbody>
+        </table>
+
+        <h2>Detalhes da Limpeza</h2>
+        <table>
+            <thead>
+                <tr><th>Categoria</th><th>Arquivos</th><th>Espaço</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                {limpeza_rows}
+            </tbody>
+        </table>
+
+        <h2>Otimizações Aplicadas</h2>
+        <table>
+            <thead>
+                <tr><th>Ação</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+                {otim_rows}
             </tbody>
         </table>
 

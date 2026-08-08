@@ -17,6 +17,23 @@ function setupEnvironment() {
                     return context.container;
                 }
                 return null;
+            },
+            createElement: function(tag) {
+                return {
+                    tagName: tag.toUpperCase(),
+                    className: '',
+                    style: {},
+                    children: [],
+                    _textContent: '',
+                    get textContent() { return this._textContent; },
+                    set textContent(val) { this._textContent = val; },
+                    appendChild: function(child) {
+                        this.children.push(child);
+                    }
+                };
+            },
+            createTextNode: function(text) {
+                return { isTextNode: true, textContent: text };
             }
         },
         console: {
@@ -28,8 +45,34 @@ function setupEnvironment() {
         }
     };
     context.window.Phoenix = context.Phoenix;
+    function getHTML(node) {
+        if (node.isTextNode) return node.textContent;
+        var html = `<${node.tagName || 'div'} class="${node.className || ''}">`;
+        for (var i = 0; i < (node.children || []).length; i++) {
+            html += getHTML(node.children[i]);
+        }
+        if (node._textContent) html += node._textContent;
+        html += `</${node.tagName || 'div'}>`;
+        return html;
+    }
+
     context.container = {
-        innerHTML: ''
+        _innerHTML: '',
+        get innerHTML() {
+            var html = this._innerHTML;
+            for (var i = 0; i < (this.children || []).length; i++) {
+                html += getHTML(this.children[i]);
+            }
+            return html;
+        },
+        set innerHTML(val) {
+            this._innerHTML = val;
+            this.children = [];
+        },
+        children: [],
+        appendChild: function(child) {
+            this.children.push(child);
+        }
     };
     context.errors = [];
     context.logs = [];
@@ -73,7 +116,7 @@ async function runTests() {
             ok: true,
             antes: { cpu: { uso_percentual: 80.0 }, memoria: { percentual_uso: 90.0, disponivel_gb: 1.0 } },
             depois: { cpu: { uso_percentual: 50.0 }, memoria: { percentual_uso: 60.0, disponivel_gb: 4.0 } },
-            espaco_liberado_mb: 2048,
+            limpeza: { espaco_liberado_mb: 2048 },
             relatorio_txt: "C:\\Fake\\Relatorio.txt"
         };
         ctx.Phoenix.pages.relatorio.showResult(payload);
@@ -98,13 +141,13 @@ async function runTests() {
             ok: true,
             antes: { cpu: { uso_percentual: 10.0 }, memoria: { percentual_uso: 10.0, disponivel_gb: 8.0 } },
             depois: { cpu: { uso_percentual: 90.0 }, memoria: { percentual_uso: 90.0, disponivel_gb: 2.0 } }, // Piorou!
-            espaco_liberado_mb: 0,
+            limpeza: { espaco_liberado_mb: 0 },
             relatorio_txt: ""
         };
         ctx.Phoenix.pages.relatorio.showResult(payload);
         
         assert.ok(ctx.container.innerHTML.includes("0.0 MB"), "Deve formatar 0 MB pra 0.0 MB");
-        assert.ok(ctx.container.innerHTML.includes("Caminho indisponível"), "Deve exibir fallback de txt vazio");
+        assert.ok(ctx.container.innerHTML.includes("Indisponível"), "Deve exibir fallback de txt vazio");
         assert.ok(ctx.container.innerHTML.includes('badge erro'), "Deve exibir badge de erro para piora");
         assert.ok(ctx.container.innerHTML.includes('\u25B2'), "Deve exibir seta pra cima para aumentos em métricas inversas");
     }

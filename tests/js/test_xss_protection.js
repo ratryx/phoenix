@@ -91,17 +91,17 @@ function findTextContent(node) {
 async function testHistorico() {
     const ctx = createMockDOM();
     loadScript(ctx, 'historico.js');
-    
+
     const payload = "<img src=x onerror=\"window.__xss=1\">";
     ctx.mockBridgeResult = {
         ok: true,
         atendimentos: [ { id_atendimento: "1", cliente: payload, data_hora: "2026-07-17" } ]
     };
-    
+
     await ctx.Phoenix.pages.historico.load();
     const container = ctx.document.elements['conteudo-historico'];
     assert.strictEqual(container.innerHTML, "");
-    
+
     const text = findTextContent(container);
     assert.ok(text.includes(payload), "Payload deve estar seguro como texto no Histórico");
 }
@@ -109,7 +109,7 @@ async function testHistorico() {
 async function testDiagnostico() {
     const ctx = createMockDOM();
     loadScript(ctx, 'diagnostico.js');
-    
+
     const payload = "<svg onload=\"window.__xss=1\"></svg>";
     ctx.mockBridgeResult = {
         ok: true,
@@ -121,10 +121,10 @@ async function testDiagnostico() {
             processos: [ { name: payload, cpu_percent: 25, memory_percent: 10 } ]
         }
     };
-    
+
     await ctx.Phoenix.pages.diagnostico.load();
     if (ctx.errors.length > 0) console.error("Errors:", ctx.errors);
-    
+
     const container = ctx.document.elements['conteudo-diagnostico'];
     const text = findTextContent(container);
     if (!text.includes(payload)) {
@@ -132,23 +132,23 @@ async function testDiagnostico() {
         console.error("Children length:", container.children.length);
     }
     assert.ok(text.includes(payload), "Payload de processo deve ser texto seguro");
-    
+
 
 }
 
 async function testOtimizacao() {
     const ctx = createMockDOM();
     loadScript(ctx, 'otimizacao.js');
-    
+
     const payload = "\"><img src=x onerror=alert(1)>";
     ctx.mockBridgeResult = {
         ok: true,
         isJobResult: true,
         entradas: [ { nome: payload, comando: payload, raiz: payload } ]
     };
-    
+
     await ctx.Phoenix.pages.otimizacao.analyzeStartup();
-    
+
     const lista = ctx.document.elements['resultado-startup'];
     assert.strictEqual(lista.innerHTML, "");
     assert.ok(findTextContent(lista).includes(payload), "Payload de startup deve ser texto seguro");
@@ -157,19 +157,72 @@ async function testOtimizacao() {
 async function testServicos() {
     const ctx = createMockDOM();
     loadScript(ctx, 'servicos.js');
-    
+
     const payload = "<script>alert(1)</script>";
     ctx.mockBridgeResult = {
         ok: true,
         isJobResult: true,
         servicos: [ { nome_servico: "S1", nome_amigavel: payload, descricao: payload, status: "Parado" } ]
     };
-    
+
     await ctx.Phoenix.pages.servicos.load();
-    
+
     const tabela = ctx.document.elements['conteudo-servicos'];
     assert.strictEqual(tabela.innerHTML, "");
     assert.ok(findTextContent(tabela).includes(payload), "Payload de serviço deve ser texto seguro");
+}
+
+async function testRelatorioV2() {
+    const ctx = createMockDOM();
+    loadScript(ctx, 'relatorio.js');
+
+    const payload1 = "<img src=x onerror=\"window.__xss=1\">";
+    const payload2 = "<svg onload=\"window.__xss=1\"></svg>";
+
+    const resultado = {
+        antes: {
+            cpu: { uso_percentual: 50 },
+            memoria: { percentual_uso: 50, disponivel_gb: 4 },
+            discos: [{ unidade: payload1, livre_gb: 10 }]
+        },
+        depois: {
+            cpu: { uso_percentual: 40 },
+            memoria: { percentual_uso: 40, disponivel_gb: 6 },
+            discos: [{ unidade: payload1, livre_gb: 20 }]
+        },
+        limpeza: {
+            espaco_liberado_mb: 500,
+            categorias: [
+                { nome: payload2, arquivos_removidos: 10, espaco_liberado_bytes: 100, status: "concluido" }
+            ]
+        },
+        otimizacao: {
+            resultados: {
+                [payload1]: { ok: true }
+            }
+        },
+        relatorio_txt: payload1,
+        relatorio_html: payload2
+    };
+
+    ctx.Phoenix.pages.relatorio.showResult(resultado);
+
+    const container = ctx.document.getElementById('conteudo-relatorio');
+
+    // Check if XSS was evaluated via innerHTML
+    if (container.innerHTML.includes("<img")) {
+        console.error("XSS vulnerability found in relatorio HTML path!");
+        process.exit(1);
+    }
+
+    // Verify content text
+    const allText = findTextContent(container);
+    if (!allText.includes(payload1) || !allText.includes(payload2)) {
+        console.error("Payload not found in textContent!");
+        process.exit(1);
+    }
+
+    console.log("testRelatorioV2 - XSS protection OK");
 }
 
 async function runAll() {
@@ -178,6 +231,7 @@ async function runAll() {
     await testDiagnostico();
     await testOtimizacao();
     await testServicos();
+    await testRelatorioV2();
     console.log("Testes de XSS completados e innerHTML não foi abusado.");
 }
 

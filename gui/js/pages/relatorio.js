@@ -38,12 +38,25 @@
         return "Não tentado";
     }
 
+    function createEl(tag, className, text) {
+        var el = document.createElement(tag);
+        if (className) el.className = className;
+        if (text !== undefined && text !== null) el.textContent = text;
+        return el;
+    }
+
     page.showResult = function (resultado) {
         var container = document.getElementById("conteudo-relatorio");
         if (!container) return;
 
+        container.innerHTML = "";
+
         if (!resultado || !resultado.antes || !resultado.depois) {
-            container.innerHTML = '<div class="card"><span class="badge erro">Erro</span> Falha ao processar relatório (dados ausentes)</div>';
+            var errDiv = createEl("div", "card");
+            var badge = createEl("span", "badge erro", "Erro");
+            errDiv.appendChild(badge);
+            errDiv.appendChild(document.createTextNode(" Falha ao processar relatório (dados ausentes)"));
+            container.appendChild(errDiv);
             return;
         }
 
@@ -53,128 +66,151 @@
         var otim = resultado.otimizacao || {};
         var protecao = resultado.protecao || {};
 
-        function linhaComparativa(rotulo, valorAntes, valorDepois, sufixo, menorEMelhor) {
+        function addLinhaComparativa(tbody, rotulo, valorAntes, valorDepois, sufixo, menorEMelhor) {
             var diferenca = valorDepois - valorAntes;
             var melhorou = menorEMelhor ? diferenca < 0 : diferenca > 0;
-            var corDif =
-                Math.abs(diferenca) < 0.01
-                    ? "neutro"
-                    : melhorou
-                        ? "sucesso"
-                        : "erro";
-            var seta =
-                Math.abs(diferenca) < 0.01
-                    ? "="
-                    : melhorou
-                        ? "\u25BC"
-                        : "\u25B2";
-            return (
-                "<tr>" +
-                "<td>" + rotulo + "</td>" +
-                "<td>" + valorAntes + sufixo + "</td>" +
-                "<td>" + valorDepois + sufixo + "</td>" +
-                '<td><span class="badge ' + corDif + '">' +
-                seta + " " + Math.abs(diferenca).toFixed(1) + sufixo +
-                "</span></td>" +
-                "</tr>"
-            );
+            var corDif = Math.abs(diferenca) < 0.01 ? "neutro" : (melhorou ? "sucesso" : "erro");
+            var seta = Math.abs(diferenca) < 0.01 ? "=" : (melhorou ? "\u25BC" : "\u25B2");
+
+            var tr = document.createElement("tr");
+            tr.appendChild(createEl("td", "", rotulo));
+            tr.appendChild(createEl("td", "", valorAntes + sufixo));
+            tr.appendChild(createEl("td", "", valorDepois + sufixo));
+
+            var tdRes = document.createElement("td");
+            var spanRes = createEl("span", "badge " + corDif, seta + " " + Math.abs(diferenca).toFixed(1) + sufixo);
+            tdRes.appendChild(spanRes);
+            tr.appendChild(tdRes);
+            tbody.appendChild(tr);
         }
 
-        var html = '<div class="grade-cards" style="margin-bottom: 20px;">' +
-            '<div class="card-metrica">' +
-            '<div class="rotulo">Duração</div>' +
-            '<div class="valor">' + formatarSegundos(resultado.duracao_segundos) + "</div>" +
-            "</div>" +
-            '<div class="card-metrica">' +
-            '<div class="rotulo">Espaço Liberado</div>' +
-            '<div class="valor">' + formatarBytes(limpeza.espaco_liberado_mb) + "</div>" +
-            "</div>" +
-            '<div class="card-metrica">' +
-            '<div class="rotulo">Otimizações</div>' +
-            '<div class="valor">' + (otim.sucessos || 0) + "/" + (otim.total || 0) + "</div>" +
-            "</div>" +
-            '<div class="card-metrica">' +
-            '<div class="rotulo">Proteção</div>' +
-            '<div class="valor" style="font-size: 14px; margin-top: 8px;">' + formatarProtecao(protecao.status) + "</div>" +
-            "</div>" +
-            "</div>";
+        // Grade Cards
+        var gradeCards = createEl("div", "grade-cards");
+        gradeCards.style.marginBottom = "20px";
+
+        var metricas = [
+            { r: "Duração", v: formatarSegundos(resultado.duracao_segundos) },
+            { r: "Espaço Liberado", v: formatarBytes(limpeza.espaco_liberado_mb) },
+            { r: "Otimizações", v: (otim.sucessos || 0) + "/" + (otim.total || 0) },
+            { r: "Proteção", v: formatarProtecao(protecao.status), style: "font-size: 14px; margin-top: 8px;" }
+        ];
+
+        metricas.forEach(function(m) {
+            var card = createEl("div", "card-metrica");
+            card.appendChild(createEl("div", "rotulo", m.r));
+            var vEl = createEl("div", "valor", m.v);
+            if (m.style) vEl.style.cssText = m.style;
+            card.appendChild(vEl);
+            gradeCards.appendChild(card);
+        });
+        container.appendChild(gradeCards);
 
         // Detalhes da Limpeza
-        html += '<div class="card">' +
-            "<strong>Detalhes da Limpeza</strong>" +
-            '<table class="tabela-dados" style="margin-top:12px">' +
-            "<thead><tr><th>Categoria</th><th>Arquivos</th><th>Espaço</th><th>Status</th></tr></thead>" +
-            "<tbody>";
+        var cardLimpeza = createEl("div", "card");
+        var strLimpeza = document.createElement("strong");
+        strLimpeza.textContent = "Detalhes da Limpeza";
+        cardLimpeza.appendChild(strLimpeza);
 
+        var tabLimpeza = createEl("table", "tabela-dados");
+        tabLimpeza.style.marginTop = "12px";
+        var tHeadLimpeza = document.createElement("thead");
+        tHeadLimpeza.innerHTML = "<tr><th>Categoria</th><th>Arquivos</th><th>Espaço</th><th>Status</th></tr>";
+        tabLimpeza.appendChild(tHeadLimpeza);
+
+        var tBodyLimpeza = document.createElement("tbody");
         var categorias = limpeza.categorias || [];
         if (categorias.length === 0) {
-            html += '<tr><td colspan="4" class="texto-secundario">Nenhuma categoria processada.</td></tr>';
+            var trVazioL = document.createElement("tr");
+            var tdVazioL = createEl("td", "texto-secundario", "Nenhuma categoria processada.");
+            tdVazioL.colSpan = 4;
+            trVazioL.appendChild(tdVazioL);
+            tBodyLimpeza.appendChild(trVazioL);
         } else {
             categorias.forEach(function(cat) {
                 var arquivos = (cat.arquivos_removidos || 0) + (cat.arquivos_ignorados || 0);
                 var mb = (cat.espaco_liberado_bytes || 0) / (1024*1024);
-                html += '<tr>' +
-                    '<td>' + (cat.nome || "Desconhecido") + '</td>' +
-                    '<td>' + arquivos + '</td>' +
-                    '<td>' + formatarBytes(mb) + '</td>' +
-                    '<td><span class="badge ' + (cat.status === "concluido" ? "sucesso" : (cat.status === "falhou" ? "erro" : "aviso")) + '">' + (cat.status || "desconhecido").toUpperCase() + '</span></td>' +
-                    '</tr>';
+
+                var tr = document.createElement("tr");
+                tr.appendChild(createEl("td", "", cat.nome || "Desconhecido"));
+                tr.appendChild(createEl("td", "", String(arquivos)));
+                tr.appendChild(createEl("td", "", formatarBytes(mb)));
+
+                var tdStatus = document.createElement("td");
+                var badgeClass = cat.status === "concluido" ? "sucesso" : (cat.status === "falhou" ? "erro" : "aviso");
+                tdStatus.appendChild(createEl("span", "badge " + badgeClass, (cat.status || "desconhecido").toUpperCase()));
+                tr.appendChild(tdStatus);
+                tBodyLimpeza.appendChild(tr);
             });
         }
-        html += "</tbody></table></div>";
+        tabLimpeza.appendChild(tBodyLimpeza);
+        cardLimpeza.appendChild(tabLimpeza);
+        container.appendChild(cardLimpeza);
 
         // Otimizações Aplicadas
-        html += '<div class="card">' +
-            "<strong>Otimizações Aplicadas</strong>" +
-            '<table class="tabela-dados" style="margin-top:12px">' +
-            "<thead><tr><th>Ação</th><th>Status</th></tr></thead>" +
-            "<tbody>";
+        var cardOtim = createEl("div", "card");
+        var strOtim = document.createElement("strong");
+        strOtim.textContent = "Otimizações Aplicadas";
+        cardOtim.appendChild(strOtim);
 
+        var tabOtim = createEl("table", "tabela-dados");
+        tabOtim.style.marginTop = "12px";
+        var tHeadOtim = document.createElement("thead");
+        tHeadOtim.innerHTML = "<tr><th>Ação</th><th>Status</th></tr>";
+        tabOtim.appendChild(tHeadOtim);
+
+        var tBodyOtim = document.createElement("tbody");
         var resultados_otim = otim.resultados || {};
         var chaves_otim = Object.keys(resultados_otim);
+
         if (chaves_otim.length === 0) {
-            html += '<tr><td colspan="2" class="texto-secundario">Nenhuma otimização aplicada.</td></tr>';
+            var trVazioO = document.createElement("tr");
+            var tdVazioO = createEl("td", "texto-secundario", "Nenhuma otimização aplicada.");
+            tdVazioO.colSpan = 2;
+            trVazioO.appendChild(tdVazioO);
+            tBodyOtim.appendChild(trVazioO);
         } else {
             chaves_otim.forEach(function(k) {
                 var r = resultados_otim[k];
                 var status = r.ok ? "OK" : "FALHOU";
                 var cor = r.ok ? "sucesso" : "erro";
-                html += '<tr>' +
-                    '<td>' + k + '</td>' +
-                    '<td><span class="badge ' + cor + '">' + status + '</span></td>' +
-                    '</tr>';
+
+                var tr = document.createElement("tr");
+                tr.appendChild(createEl("td", "", k));
+                var tdStatus = document.createElement("td");
+                tdStatus.appendChild(createEl("span", "badge " + cor, status));
+                tr.appendChild(tdStatus);
+                tBodyOtim.appendChild(tr);
             });
         }
-        html += "</tbody></table></div>";
+        tabOtim.appendChild(tBodyOtim);
+        cardOtim.appendChild(tabOtim);
+        container.appendChild(cardOtim);
 
         // Estado do Sistema
-        html += '<div class="card">' +
-            "<strong>Estado do Sistema (Antes vs Depois)</strong>" +
-            '<p class="texto-secundario" style="margin: 8px 0;">Nota: Uso de CPU/RAM são métricas oscilantes e não refletem necessariamente o ganho de FPS.</p>' +
-            '<table class="tabela-dados" style="margin-top:12px">' +
-            "<thead><tr><th>Métrica</th><th>Antes</th><th>Depois</th><th>Variação</th></tr></thead>" +
-            "<tbody>" +
-            linhaComparativa(
-                "Uso de CPU",
-                antes.cpu.uso_percentual,
-                depois.cpu.uso_percentual,
-                "%",
-                true
-            ) +
-            linhaComparativa(
-                "Uso de RAM",
-                antes.memoria.percentual_uso,
-                depois.memoria.percentual_uso,
-                "%",
-                true
-            ) +
-            linhaComparativa(
-                "RAM disponível",
-                antes.memoria.disponivel_gb,
-                depois.memoria.disponivel_gb,
-                " GB",
-                false
-            );
+        var cardEstado = createEl("div", "card");
+        var strEstado = document.createElement("strong");
+        strEstado.textContent = "Estado do Sistema (Antes vs Depois)";
+        cardEstado.appendChild(strEstado);
+
+        var pNota = createEl("p", "texto-secundario", "Nota: Uso de CPU/RAM são métricas oscilantes e não refletem necessariamente o ganho de FPS.");
+        pNota.style.margin = "8px 0";
+        cardEstado.appendChild(pNota);
+
+        var tabEstado = createEl("table", "tabela-dados");
+        tabEstado.style.marginTop = "12px";
+        var tHeadEstado = document.createElement("thead");
+        tHeadEstado.innerHTML = "<tr><th>Métrica</th><th>Antes</th><th>Depois</th><th>Variação</th></tr>";
+        tabEstado.appendChild(tHeadEstado);
+
+        var tBodyEstado = document.createElement("tbody");
+
+        if (antes.cpu && depois.cpu) {
+            addLinhaComparativa(tBodyEstado, "Uso de CPU", antes.cpu.uso_percentual, depois.cpu.uso_percentual, "%", true);
+        }
+        if (antes.memoria && depois.memoria) {
+            addLinhaComparativa(tBodyEstado, "Uso de RAM", antes.memoria.percentual_uso, depois.memoria.percentual_uso, "%", true);
+            addLinhaComparativa(tBodyEstado, "RAM disponível", antes.memoria.disponivel_gb, depois.memoria.disponivel_gb, " GB", false);
+        }
 
         var discosAntes = {};
         if (antes.discos) antes.discos.forEach(function(d) { discosAntes[d.unidade] = d.livre_gb; });
@@ -183,20 +219,37 @@
 
         Object.keys(discosAntes).forEach(function(unidade) {
             if (discosDepois[unidade] !== undefined) {
-                html += linhaComparativa("Livre " + unidade, discosAntes[unidade], discosDepois[unidade], " GB", false);
+                addLinhaComparativa(tBodyEstado, "Livre " + unidade, discosAntes[unidade], discosDepois[unidade], " GB", false);
             }
         });
 
-        html += "</tbody></table></div>";
+        tabEstado.appendChild(tBodyEstado);
+        cardEstado.appendChild(tabEstado);
+        container.appendChild(cardEstado);
 
         // Exportações
-        html += '<div class="card">' +
-            '<strong>Relatórios Exportados</strong>' +
-            '<p class="texto-secundario" style="margin-top:8px"><strong>TXT:</strong> ' + (resultado.relatorio_txt || "Indisponível") + '</p>' +
-            '<p class="texto-secundario" style="margin-top:4px"><strong>HTML:</strong> ' + (resultado.relatorio_html || "Indisponível") + '</p>' +
-            "</div>";
+        var cardExp = createEl("div", "card");
+        var strExp = document.createElement("strong");
+        strExp.textContent = "Relatórios Exportados";
+        cardExp.appendChild(strExp);
 
-        container.innerHTML = html;
+        var pTxt = createEl("p", "texto-secundario", "");
+        pTxt.style.marginTop = "8px";
+        var sTxt = document.createElement("strong");
+        sTxt.textContent = "TXT: ";
+        pTxt.appendChild(sTxt);
+        pTxt.appendChild(document.createTextNode(resultado.relatorio_txt || "Indisponível"));
+        cardExp.appendChild(pTxt);
+
+        var pHtml = createEl("p", "texto-secundario", "");
+        pHtml.style.marginTop = "4px";
+        var sHtml = document.createElement("strong");
+        sHtml.textContent = "HTML: ";
+        pHtml.appendChild(sHtml);
+        pHtml.appendChild(document.createTextNode(resultado.relatorio_html || "Indisponível"));
+        cardExp.appendChild(pHtml);
+
+        container.appendChild(cardExp);
     };
 
 })(window.Phoenix);

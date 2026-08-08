@@ -233,3 +233,52 @@ def test_integration_routine_cancellation():
     assert st["resultado"]["codigo"] == "JOB_CANCELLED"
 
     jm.shutdown()
+
+def test_routine_service_relatorio_integration(tmp_path):
+    import modules.relatorio as real_relatorio
+    from modules.core.routine_service import RoutineService
+
+    f_diag = FakeDiagnostico()
+    f_limp = FakeLimpeza()
+    f_otim = FakeOtimizacao()
+
+    class FakeLogsForIntegration:
+        def __init__(self):
+            self.acoes = []
+            self.snapshots = {
+                "antes": {"cliente": "Teste", "dados": {"cpu": {"uso_percentual": 50}, "memoria": {"percentual_uso": 50, "disponivel_gb": 4}, "discos": [{"unidade": "C:", "livre_gb": 10}]}},
+                "depois": {"data_hora": "2026-08-08 12:00:00", "dados": {"cpu": {"uso_percentual": 40}, "memoria": {"percentual_uso": 40, "disponivel_gb": 6}, "discos": [{"unidade": "C:", "livre_gb": 20}]}}
+            }
+        def salvar_snapshot(self, id_atendimento, etapa, dados, nome_cliente):
+            if nome_cliente:
+                self.snapshots[etapa]["cliente"] = nome_cliente
+        def carregar_snapshot(self, id_atendimento, etapa):
+            return self.snapshots[etapa]
+        def registrar_acao(self, id_atendimento, acao, detalhe=None, nome_cliente=None):
+            self.acoes.append((id_atendimento, acao))
+        def obter_pasta_logs(self):
+            return tmp_path
+
+    f_logs = FakeLogsForIntegration()
+
+    service = RoutineService(
+        diagnostico_module=f_diag,
+        cleanup_service_module=f_limp,
+        otimizacao_module=f_otim,
+        logs_module=f_logs,
+        relatorio_module=real_relatorio
+    )
+
+    res = service.executar(id_atendimento="id_integ", nome_cliente="Integração", protection_state={"status": "restore_created"})
+
+    assert res["ok"] is True
+
+    caminho_txt = tmp_path / "id_integ_relatorio.txt"
+    caminho_html = tmp_path / "id_integ_relatorio.html"
+
+    assert caminho_txt.exists()
+    assert caminho_html.exists()
+
+    conteudo_txt = caminho_txt.read_text(encoding="utf-8")
+    assert "PHOENIX OPTIMIZER" in conteudo_txt
+    assert "Integração" in conteudo_txt

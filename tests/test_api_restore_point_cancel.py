@@ -10,22 +10,23 @@ def test_api_restore_point_cancellation():
     
     with patch("modules.otimizacao.run_windows_command") as mock_run:
         with patch("modules.otimizacao.is_admin", return_value=True):
-            from modules.core.windows_command import CommandResult
-            mock_run.return_value = CommandResult(
-                ok=False, code="COMMAND_CANCELLED", returncode=None, stdout="", stderr="",
-                timed_out=False, cancelled=True, duration_ms=10, termination_ok=True
-            )
-            
-            # Start restore point job
-            res = api.criar_ponto_restauracao()
-            job_id = res.get("job_id")
-            assert job_id is not None
-            
-            # Cancel job
-            api.cancelar_tarefa(job_id)
-            
-            # Wait a bit for threads
-            time.sleep(0.1)
-            
-            status = jm.consultar(job_id)
-            assert status["status"] == "cancelled"
+            with patch("modules.otimizacao.obter_ultimo_restore_point_sequence", return_value={"ok": True, "sequence": 0}):
+                from modules.core.windows_command import CommandResult
+                mock_run.return_value = CommandResult(
+                    ok=False, code="COMMAND_CANCELLED", returncode=None, stdout="", stderr="",
+                    timed_out=False, cancelled=True, duration_ms=10, termination_ok=True
+                )
+                
+                # Start restore point job
+                res = api.criar_ponto_restauracao()
+                job_id = res.get("job_id")
+                assert job_id is not None
+                
+                # Cancel job
+                api.cancelar_tarefa(job_id)
+                
+                # Wait a bit for threads
+                time.sleep(0.1)
+                
+                status = jm.consultar(job_id)
+                assert status["status"] == "cancelled"
