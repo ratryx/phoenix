@@ -30,16 +30,13 @@ function setupEnvironment() {
                     if (context.mockBridgeResult !== undefined) {
                         return context.mockBridgeResult;
                     }
-                    return { job_id: 'fake-job-id' };
+                    return { ok: true, atendimentos: [] };
                 }
             },
             jobs: {
                 awaitJob: async function (job_id) {
                     context.jobCalls.push(job_id);
-                    if (context.mockJobResult !== undefined) {
-                        return context.mockJobResult;
-                    }
-                    return { ok: true, atendimentos: [] };
+                    return { ok: true };
                 }
             },
             ui: {
@@ -81,7 +78,7 @@ async function runTests() {
     // Teste 2: Listagem de histórico vazio
     {
         const ctx = setupEnvironment();
-        ctx.mockJobResult = {
+        ctx.mockBridgeResult = {
             ok: true,
             atendimentos: []
         };
@@ -89,7 +86,7 @@ async function runTests() {
         
         assert.strictEqual(ctx.bridgeCalls.length, 1);
         assert.strictEqual(ctx.bridgeCalls[0].endpoint, "obter_historico");
-        assert.strictEqual(ctx.jobCalls.length, 1);
+        assert.strictEqual(ctx.jobCalls.length, 0);
         
         assert.ok(ctx.container.innerHTML.includes("Nenhum atendimento registrado ainda"), "Deve exibir mensagem de estado vazio");
         assert.strictEqual(ctx.overlaysHidden, 1, "Overlay deve ser escondido após consultar");
@@ -98,7 +95,7 @@ async function runTests() {
     // Teste 3: Listagem de histórico preenchido
     {
         const ctx = setupEnvironment();
-        ctx.mockJobResult = {
+        ctx.mockBridgeResult = {
             ok: true,
             atendimentos: [
                 { id_atendimento: "20260717", cliente: "João Silva", data_hora: "2026-07-17 14:00" },
@@ -116,7 +113,7 @@ async function runTests() {
     // Teste 4: Falha na listagem (Estado erro)
     {
         const ctx = setupEnvironment();
-        ctx.mockJobResult = { ok: false, erro: "Falha de disco" };
+        ctx.mockBridgeResult = { ok: false, erro: "Falha de disco" };
         await ctx.Phoenix.pages.historico.load();
         assert.ok(ctx.container.innerHTML.includes("Falha de disco"), "Deve exibir a badge de erro e a mensagem");
         assert.ok(ctx.container.innerHTML.includes("badge erro"));

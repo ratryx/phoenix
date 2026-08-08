@@ -19,15 +19,14 @@
         Phoenix.ui.feedback.mostrarOverlay("Consultando histórico...");
 
         try {
-            var jobRes = await Phoenix.bridge.call("obter_historico");
-            if (!jobRes || !jobRes.job_id) { 
-                Phoenix.ui.feedback.esconderOverlay(); 
-                return; 
-            }
-            var resultado = await Phoenix.jobs.awaitJob(jobRes.job_id);
+            var resultado = await Phoenix.bridge.call("obter_historico");
             Phoenix.ui.feedback.esconderOverlay();
 
-            if (!resultado || !resultado.ok) {
+            if (!resultado) { 
+                return; 
+            }
+
+            if (!resultado.ok) {
                 container.innerHTML =
                     '<div class="card"><span class="badge erro">Erro</span> ' +
                     ((resultado && resultado.erro) || "Erro desconhecido") +
