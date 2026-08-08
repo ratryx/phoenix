@@ -168,37 +168,55 @@
                 const container = document.getElementById('resultado-startup');
                 if (container) {
                     container.style.display = 'block';
-                    container.innerHTML = `
-                        <div class="card">
-                        <strong style="color:var(--cor-primaria)">
-                            ${res.entradas.length} programas encontrados no startup
-                        </strong>
-                        <table class="tabela-dados" style="margin-top:16px">
-                            <thead>
-                            <tr>
-                                <th>Programa</th>
-                                <th>Origem</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            ${res.entradas.map(e => `
-                                <tr>
-                                <td>${e.nome}</td>
-                                <td>
-                                    <span class="badge ${e.raiz === 'HKLM' ? 'alerta' : 'neutro'}">
-                                    ${e.raiz}
-                                    </span>
-                                </td>
-                                </tr>
-                            `).join('')}
-                            </tbody>
-                        </table>
-                        <p class="texto-secundario" style="margin-top:12px">
-                             Use o Gerenciador de Tarefas (Ctrl+Shift+Esc → 
-                            Inicializar) para desativar programas desnecessários.
-                        </p>
-                        </div>
-                    `;
+                    container.innerHTML = "";
+                    
+                    var card = document.createElement("div");
+                    card.className = "card";
+                    
+                    var strong = document.createElement("strong");
+                    strong.style.color = "var(--cor-primaria)";
+                    strong.textContent = res.entradas.length + " programas encontrados no startup";
+                    card.appendChild(strong);
+                    
+                    var table = document.createElement("table");
+                    table.className = "tabela-dados";
+                    table.style.marginTop = "16px";
+                    
+                    var thead = document.createElement("thead");
+                    var trHead = document.createElement("tr");
+                    var thProg = document.createElement("th");
+                    thProg.textContent = "Programa";
+                    var thOrig = document.createElement("th");
+                    thOrig.textContent = "Origem";
+                    trHead.appendChild(thProg);
+                    trHead.appendChild(thOrig);
+                    thead.appendChild(trHead);
+                    table.appendChild(thead);
+                    
+                    var tbody = document.createElement("tbody");
+                    res.entradas.forEach(function(e) {
+                        var tr = document.createElement("tr");
+                        var tdNome = document.createElement("td");
+                        tdNome.textContent = e.nome;
+                        var tdRaiz = document.createElement("td");
+                        var spanRaiz = document.createElement("span");
+                        spanRaiz.className = "badge " + (e.raiz === 'HKLM' ? 'alerta' : 'neutro');
+                        spanRaiz.textContent = e.raiz;
+                        tdRaiz.appendChild(spanRaiz);
+                        tr.appendChild(tdNome);
+                        tr.appendChild(tdRaiz);
+                        tbody.appendChild(tr);
+                    });
+                    table.appendChild(tbody);
+                    card.appendChild(table);
+                    
+                    var pHelp = document.createElement("p");
+                    pHelp.className = "texto-secundario";
+                    pHelp.style.marginTop = "12px";
+                    pHelp.textContent = "Use o Gerenciador de Tarefas (Ctrl+Shift+Esc → Inicializar) para desativar programas desnecessários.";
+                    card.appendChild(pHelp);
+                    
+                    container.appendChild(card);
                 }
             }
         } catch(e) { 

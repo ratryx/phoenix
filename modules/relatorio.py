@@ -156,10 +156,11 @@ def exportar_relatorio_html(snapshot_antes: dict, snapshot_depois: dict, espaco_
     para abrir no navegador e imprimir como PDF (Ctrl+P → Salvar como PDF).
     Visual premium com a identidade visual do Phoenix Optimizer.
     """
+    import html
     dados_antes = snapshot_antes["dados"]
     dados_depois = snapshot_depois["dados"]
-    cliente = snapshot_antes.get("cliente", "não informado")
-    data = snapshot_depois.get("data_hora", "")
+    cliente = html.escape(snapshot_antes.get("cliente", "não informado"))
+    data = html.escape(snapshot_depois.get("data_hora", ""))
 
     def _seta_html(antes: float, depois: float, menor_melhor: bool = True) -> str:
         diff = depois - antes

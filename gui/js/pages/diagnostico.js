@@ -29,10 +29,15 @@
         if (!container) return;
 
         if (!resultado || !resultado.ok) {
-            container.innerHTML =
-                '<div class="card"><span class="badge erro">Erro</span> ' +
-                ((resultado && resultado.erro) || "Erro desconhecido") +
-                "</div>";
+            container.innerHTML = "";
+            var errCard = document.createElement("div");
+            errCard.className = "card";
+            var errBadge = document.createElement("span");
+            errBadge.className = "badge erro";
+            errBadge.textContent = "Erro";
+            errCard.appendChild(errBadge);
+            errCard.appendChild(document.createTextNode(" " + ((resultado && resultado.erro) || "Erro desconhecido")));
+            container.appendChild(errCard);
             return;
         }
 
@@ -151,24 +156,59 @@
             </div>`;
 
         var processosHtml = '';
+        var processosFragment = null;
         if (cpuPct > 70 || ramPct > 70) {
-            var topProcessos = (d.processos || []).slice(0, 5).map(function(p) {
+            var topProcessos = (d.processos || []).slice(0, 5);
+            
+            var cardProc = document.createElement("div");
+            cardProc.className = "card";
+            cardProc.id = "secao-processos";
+            
+            var strong = document.createElement("strong");
+            strong.textContent = "Processos com maior consumo";
+            cardProc.appendChild(strong);
+            
+            var table = document.createElement("table");
+            table.className = "tabela-dados";
+            table.style.marginTop = "12px";
+            
+            var thead = document.createElement("thead");
+            thead.innerHTML = "<tr><th>Processo</th><th>CPU</th><th>RAM</th></tr>";
+            table.appendChild(thead);
+            
+            var tbody = document.createElement("tbody");
+            topProcessos.forEach(function(p) {
                 var cpuP = p.cpu_percent || 0;
                 var ramP = p.memory_percent || 0;
                 var badgeProc = (cpuP > 20 || ramP > 10) ? 'erro' : (cpuP > 10 || ramP > 5) ? 'alerta' : 'sucesso';
                 var textProc = (cpuP > 20 || ramP > 10) ? 'Alto impacto' : (cpuP > 10 || ramP > 5) ? 'Médio impacto' : 'Baixo impacto';
-                return '<tr><td>' + (p.name || "desconhecido") + ' <span class="badge ' + badgeProc + '" style="margin-left:8px;font-size:9px">' + textProc + '</span></td>' +
-                             '<td>' + cpuP.toFixed(1) + '%</td><td>' + ramP.toFixed(1) + '%</td></tr>';
-            }).join('');
+                
+                var tr = document.createElement("tr");
+                
+                var tdName = document.createElement("td");
+                tdName.textContent = (p.name || "desconhecido") + " ";
+                var spanBadge = document.createElement("span");
+                spanBadge.className = "badge " + badgeProc;
+                spanBadge.style.marginLeft = "8px";
+                spanBadge.style.fontSize = "9px";
+                spanBadge.textContent = textProc;
+                tdName.appendChild(spanBadge);
+                
+                var tdCpu = document.createElement("td");
+                tdCpu.textContent = cpuP.toFixed(1) + "%";
+                
+                var tdRam = document.createElement("td");
+                tdRam.textContent = ramP.toFixed(1) + "%";
+                
+                tr.appendChild(tdName);
+                tr.appendChild(tdCpu);
+                tr.appendChild(tdRam);
+                tbody.appendChild(tr);
+            });
+            table.appendChild(tbody);
+            cardProc.appendChild(table);
             
-            processosHtml = `
-                <div class="card" id="secao-processos">
-                    <strong>Processos com maior consumo</strong>
-                    <table class="tabela-dados" style="margin-top:12px">
-                        <thead><tr><th>Processo</th><th>CPU</th><th>RAM</th></tr></thead>
-                        <tbody>${topProcessos}</tbody>
-                    </table>
-                </div>`;
+            processosFragment = cardProc;
         }
 
         var acoesHtml = '';
@@ -214,7 +254,10 @@
                 ${acoesHtml}
             </div>`;
 
-        container.innerHTML = bannerHtml + cardsHtml + processosHtml + recomendacoesContainer;
+        container.innerHTML = bannerHtml + cardsHtml + recomendacoesContainer;
+        if (processosFragment) {
+            container.insertBefore(processosFragment, container.lastElementChild);
+        }
     }
 
     Phoenix.pages = Phoenix.pages || {};
