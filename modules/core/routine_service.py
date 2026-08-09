@@ -100,9 +100,11 @@ class RoutineService:
                 )
                 espaco_liberado_mb = limpeza_resultado.get("espaco_liberado_mb", 0.0)
                 self._logs.registrar_acao(id_atendimento, "Limpeza executada", f"{espaco_liberado_mb} MB liberados", nome_cliente=nome_cliente)
+            except JobCancelledError:
+                raise
             except Exception as e:
                 logger.exception("Falha não-bloqueante na limpeza.")
-                limpeza_resultado = {"espaco_liberado_mb": 0.0, "categorias": [], "erro": str(e)}
+                limpeza_resultado = {"espaco_liberado_mb": 0.0, "categorias": [], "codigo": "CLEANUP_FAILED", "erro": "A limpeza não pôde ser concluída."}
 
             # 4. Otimizações Gerais (Non-blocking)
             check_cancel()
@@ -118,7 +120,7 @@ class RoutineService:
                 raise
             except Exception as e:
                 logger.exception("Falha não-bloqueante na otimização.")
-                optimization_result = {"sucessos": 0, "total": 0, "resultados": {}, "ok": False, "erro": str(e)}
+                optimization_result = {"sucessos": 0, "total": 0, "resultados": {}, "ok": False, "codigo": "OPTIMIZATION_FAILED", "erro": "Falha ao aplicar otimizações."}
 
             # 5. Startup Analysis (Non-blocking)
             check_cancel()
@@ -132,20 +134,32 @@ class RoutineService:
                 high_impact = sum(1 for e in entradas if any(k in str(e.get("comando", "")).lower() for k in heavy_keywords))
                 startup_result["alto_impacto"] = high_impact
                 startup_result["ok"] = True
+            except JobCancelledError:
+                raise
             except Exception as e:
                 logger.exception("Falha não-bloqueante na análise de inicialização.")
-                startup_result["erro"] = str(e)
+                startup_result["codigo"] = "STARTUP_ANALYSIS_FAILED"
+                startup_result["erro"] = "Não foi possível analisar os itens de inicialização."
 
             # 6. Disk Health SMART (Non-blocking)
             check_cancel()
             if job_context: job_context.update_progress(65, "Verificando saúde dos discos (SMART)...")
             smart_result = {"discos": [], "ok": False}
             try:
-                smart_result["discos"] = self._smart.coletar_saude_discos()
-                smart_result["ok"] = True
+                discos = self._smart.coletar_saude_discos()
+                smart_result["discos"] = discos
+                if not discos:
+                    smart_result["ok"] = False
+                    smart_result["codigo"] = "SMART_UNAVAILABLE"
+                    smart_result["erro"] = "Não foi possível consultar a saúde dos discos."
+                else:
+                    smart_result["ok"] = True
+            except JobCancelledError:
+                raise
             except Exception as e:
                 logger.exception("Falha não-bloqueante no SMART.")
-                smart_result["erro"] = str(e)
+                smart_result["codigo"] = "SMART_UNAVAILABLE"
+                smart_result["erro"] = "Não foi possível consultar a saúde dos discos."
 
             # 7. Driver Analysis (Non-blocking)
             check_cancel()
@@ -161,24 +175,39 @@ class RoutineService:
                 raise
             except Exception as e:
                 logger.exception("Falha não-bloqueante nos drivers.")
-                driver_result["erro"] = str(e)
+                driver_result["codigo"] = "DRIVERS_UNAVAILABLE"
+                driver_result["erro"] = "Falha ao verificar atualizações de driver."
 
-            # 8. Conditional Disk Optimization (Non-blocking)
+            # 8. Disk Optimization (Normal Optimization Phase)
             check_cancel()
             if job_context: job_context.update_progress(85, "Otimizando armazenamento (SSD/HDD)...")
-            disk_opt = {"executado": False, "motivo_skip": "", "ok": False}
             try:
                 res_disco = self._otimizacao.otimizar_disco_principal(cancel_event=job_context.cancel_event if job_context else None)
                 if res_disco.get("codigo") == "COMMAND_CANCELLED":
                     raise JobCancelledError()
-                disk_opt["executado"] = True
-                disk_opt["ok"] = res_disco.get("ok", False)
-                disk_opt["saida"] = res_disco.get("saida", res_disco.get("erro", ""))
+                
+                # Append to optimization_result
+                if optimization_result.get("resultados") is not None:
+                    optimization_result["resultados"]["otimizacao_disco"] = {
+                        "ok": res_disco.get("ok", False),
+                        "descricao": "Otimização de Armazenamento",
+                        "detalhe": res_disco.get("saida", res_disco.get("erro", ""))
+                    }
+                    if res_disco.get("ok"):
+                        optimization_result["sucessos"] = optimization_result.get("sucessos", 0) + 1
+                    optimization_result["total"] = optimization_result.get("total", 0) + 1
             except JobCancelledError:
                 raise
             except Exception as e:
                 logger.exception("Falha não-bloqueante na otimização de disco.")
-                disk_opt["motivo_skip"] = str(e)
+                if optimization_result.get("resultados") is not None:
+                    optimization_result["resultados"]["otimizacao_disco"] = {
+                        "ok": False,
+                        "descricao": "Otimização de Armazenamento",
+                        "detalhe": "Falha ao otimizar o armazenamento.",
+                        "codigo": "DISK_OPT_FAILED"
+                    }
+                    optimization_result["total"] = optimization_result.get("total", 0) + 1
 
             # 9. Diagnóstico Final (Blocking)
             check_cancel()
@@ -213,9 +242,7 @@ class RoutineService:
                     "smart": smart_result,
                     "drivers": driver_result
                 },
-                "acoes_condicionais": {
-                    "otimizacao_disco": disk_opt
-                },
+                "acoes_condicionais": {},
                 "protecao": protection_state or {"status": "unknown", "mensagem": "Não tentado"}
             }
 
@@ -288,10 +315,10 @@ class RoutineService:
         drivers = payload.get("analises", {}).get("drivers", {})
         if drivers.get("ok") and any(d.get("classificacao") in ["Desatualizado", "Aviso"] for d in drivers.get("resultados", [])):
             recs.append({
-                "codigo": "DRIVER_UPDATE_AVAILABLE",
+                "codigo": "DRIVER_REVIEW_RECOMMENDED",
                 "nivel": "aviso",
-                "titulo": "Atualização de Drivers",
-                "descricao": "Atualização de drivers de vídeo ou sistema recomendada para garantir melhor compatibilidade e desempenho."
+                "titulo": "Revisão de Drivers",
+                "descricao": "Atualização de drivers de vídeo ou sistema pode ser necessária. Recomenda-se verificar o site do fabricante."
             })
 
         # 5. Restart

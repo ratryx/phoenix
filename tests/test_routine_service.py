@@ -6,6 +6,16 @@ import threading
 import time
 from modules.gui.jobs import JobManager
 
+
+class FakeSmart:
+    def coletar_saude_discos(self):
+        return [{"device_id": "0", "nome": "Test Disk", "tipo_midia": "SSD", "tamanho_gb": 500, "health_status": "Healthy", "classificacao": "Saudável", "cor": "green", "alertas": []}]
+
+
+class FakeDriverCheck:
+    def executar_verificacao_drivers(self, cancel_event=None):
+        return {"ok": True, "codigo": "OK", "itens": [{"nome": "GPU", "classificacao": "Atualizado", "cor": "green"}]}
+
 class FakeDiagnostico:
     def __init__(self, fail_on=None):
         self.fail_on = fail_on
@@ -39,6 +49,12 @@ class FakeOtimizacao:
         if self.fail_on == "optimization":
             raise RuntimeError("Sensitive failure optimization C:\MockUsers\Client\\secret.txt")
         return {"ok": True, "codigo": "COMMAND_OK"}
+
+    def analisar_startup(self):
+        return [{"comando": "Discord"}]
+    def otimizar_disco_principal(self, cancel_event=None):
+        return {"ok": True, "saida": "Otimizado"}
+
 
 class FakeLogs:
     def __init__(self, fail_on=None):
@@ -90,7 +106,9 @@ def test_routine_service_sucesso():
         cleanup_service_module=f_limp,
         otimizacao_module=f_otim,
         logs_module=f_logs,
-        relatorio_module=f_rel
+        relatorio_module=f_rel,
+        smart_module=FakeSmart(),
+        driver_module=FakeDriverCheck()
     )
 
     res = service.executar(id_atendimento="123", nome_cliente="TestClient")
@@ -109,7 +127,7 @@ def test_routine_service_sucesso():
 
 
 def test_routine_service_validacao_id():
-    service = RoutineService(FakeDiagnostico(), FakeLimpeza(), FakeOtimizacao(), FakeLogs(), FakeRelatorio())
+    service = RoutineService(FakeDiagnostico(), FakeLimpeza(), FakeOtimizacao(), FakeLogs(), FakeRelatorio(), FakeSmart(), FakeDriverCheck())
     with pytest.raises(ValueError, match="obrigatório"):
         service.executar(id_atendimento=None)
     with pytest.raises(ValueError, match="obrigatório"):
@@ -128,7 +146,7 @@ def test_routine_service_falha_sanitizada(phase):
     f_otim = FakeOtimizacao(fail_on=phase)
     f_logs = FakeLogs(fail_on=phase)
     f_rel = FakeRelatorio(fail_on=phase)
-    service = RoutineService(f_diag, f_limp, f_otim, f_logs, f_rel)
+    service = RoutineService(f_diag, f_limp, f_otim, f_logs, f_rel, FakeSmart(), FakeDriverCheck())
 
     res = service.executar("123")
     assert res["ok"] is False
@@ -170,7 +188,7 @@ def test_routine_service_cancellation_checkpoints(cp):
     f_otim = FakeOtimizacao()
     f_logs = FakeLogs()
     f_rel = FakeRelatorio()
-    service = RoutineService(f_diag, f_limp, f_otim, f_logs, f_rel)
+    service = RoutineService(f_diag, f_limp, f_otim, f_logs, f_rel, FakeSmart(), FakeDriverCheck())
 
     with pytest.raises(JobCancelledError):
         service.executar("123", job_context=FakeJobContext(cancel_after_phase=cp))
@@ -190,7 +208,7 @@ def test_integration_routine_cancellation():
     f_otim = FakeOtimizacao()
     f_logs = FakeLogs()
     f_rel = FakeRelatorio()
-    service = RoutineService(f_diag, f_limp, f_otim, f_logs, f_rel)
+    service = RoutineService(f_diag, f_limp, f_otim, f_logs, f_rel, FakeSmart(), FakeDriverCheck())
 
     ev_wait = threading.Event()
 
@@ -243,8 +261,8 @@ def test_routine_service_relatorio_integration(tmp_path):
         def __init__(self):
             self.acoes = []
             self.snapshots = {
-                "antes": {"cliente": "Teste", "dados": {"cpu": {"uso_percentual": 50}, "memoria": {"percentual_uso": 50, "disponivel_gb": 4}, "discos": [{"unidade": "C:", "livre_gb": 10}]}},
-                "depois": {"data_hora": "2026-08-08 12:00:00", "dados": {"cpu": {"uso_percentual": 40}, "memoria": {"percentual_uso": 40, "disponivel_gb": 6}, "discos": [{"unidade": "C:", "livre_gb": 20}]}}
+                "antes": {"cliente": "Teste", "cpu": {"uso_percentual": 50}, "memoria": {"percentual_uso": 50, "disponivel_gb": 4}, "discos": [{"unidade": "C:", "livre_gb": 10}]},
+                "depois": {"data_hora": "2026-08-08 12:00:00", "cpu": {"uso_percentual": 40}, "memoria": {"percentual_uso": 40, "disponivel_gb": 6}, "discos": [{"unidade": "C:", "livre_gb": 20}]}
             }
         def salvar_snapshot(self, id_atendimento, etapa, dados, nome_cliente):
             if nome_cliente:
@@ -263,7 +281,9 @@ def test_routine_service_relatorio_integration(tmp_path):
         cleanup_service_module=f_limp,
         otimizacao_module=f_otim,
         logs_module=f_logs,
-        relatorio_module=real_relatorio
+        relatorio_module=real_relatorio,
+        smart_module=FakeSmart(),
+        driver_module=FakeDriverCheck()
     )
 
     res = service.executar(id_atendimento="id_integ", nome_cliente="Integração", protection_state={"status": "restore_created"})

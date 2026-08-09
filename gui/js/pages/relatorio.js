@@ -45,17 +45,17 @@
     
     function formatarStatusLimpeza(status, ignorados) {
         var s = String(status).toLowerCase();
-        if (s === "concluido") {
-            return ignorados > 0 ? "CONCLUÍDO COM EXCEÇÕES" : "CONCLUÍDO";
-        }
-        if (s === "erro") return "FALHOU";
+        if (s === "parcial" || ignorados > 0) return "CONCLUÍDO COM EXCEÇÕES";
+        if (s === "concluido" || s === "concluído") return "CONCLUÍDO";
+        if (s === "erro" || s === "falhou") return "FALHOU";
+        if (s === "unsupported" || s === "não aplicável" || s === "nao aplicavel") return "NÃO APLICÁVEL";
         return s.toUpperCase();
     }
     
     function statusLimpezaClass(status) {
         var s = String(status).toLowerCase();
-        if (s.includes("exceções")) return "aviso";
-        if (s === "concluído") return "sucesso";
+        if (s.includes("exceções") || s.includes("excecoes")) return "aviso";
+        if (s === "concluído" || s === "concluido") return "sucesso";
         if (s === "falhou") return "erro";
         return "neutro";
     }
@@ -76,8 +76,8 @@
         }
 
         var payload = resultado.payload || resultado;
-        var antes = payload.snapshot_antes ? payload.snapshot_antes.dados : {};
-        var depois = payload.snapshot_depois ? payload.snapshot_depois.dados : {};
+        var antes = payload.antes || {};
+        var depois = payload.depois || {};
         var resumo = payload.resumo || {};
         var limpeza = payload.limpeza || {};
         var otim = payload.otimizacoes || {};

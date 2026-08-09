@@ -24,7 +24,9 @@
                         return;
                     }
                     
-                    var resultado = await jobs.awaitJob(jobRes.job_id);
+                    var resultado = await jobs.awaitJob(jobRes.job_id, function(progresso, mensagem, detalhes) {
+                        feedback.atualizarOverlay(mensagem || "Processando...", progresso, detalhes);
+                    });
 
                     if (!resultado || !resultado.ok) {
                         await feedback.confirmarModal(

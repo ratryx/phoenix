@@ -32,7 +32,7 @@ LINKS_DOWNLOAD = {
 }
 
 
-def _consultar_versao_driver_nvidia() -> str | None:
+def _consultar_versao_driver_nvidia(cancel_event=None) -> str | None:
     """
     Consulta a versão do driver NVIDIA instalado via nvidia-smi.
     Retorna a versão no formato 'xxx.xx' (ex: '560.94').
@@ -40,7 +40,8 @@ def _consultar_versao_driver_nvidia() -> str | None:
     resultado = run_windows_command(
         ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader,nounits"],
         operation_name="Consultar driver NVIDIA",
-        timeout_seconds=10.0
+        timeout_seconds=10.0,
+        cancel_event=cancel_event
     )
     if resultado.ok:
         versao = resultado.stdout.strip().split("\n")[0].strip()
@@ -49,7 +50,7 @@ def _consultar_versao_driver_nvidia() -> str | None:
     return None
 
 
-def _consultar_drivers_wmi() -> list:
+def _consultar_drivers_wmi(cancel_event=None) -> list:
     """
     Consulta informações de driver de GPU via WMI (funciona para qualquer
     fabricante: NVIDIA, AMD, Intel).
@@ -62,7 +63,8 @@ def _consultar_drivers_wmi() -> list:
     resultado = run_windows_command(
         ["powershell", "-NoProfile", "-Command", comando_ps],
         operation_name="Consultar WMI",
-        timeout_seconds=15.0
+        timeout_seconds=15.0,
+        cancel_event=cancel_event
     )
     if resultado.ok:
         saida = resultado.stdout.strip()
@@ -167,13 +169,13 @@ def _classificar_driver(idade_dias: int | None) -> tuple:
         return "Desatualizado", "red", f"Driver com {meses} meses de idade! Recomendamos atualizar."
 
 
-def verificar_drivers_gpu() -> list:
+def verificar_drivers_gpu(cancel_event=None) -> list:
     """
     Verifica o status de atualização de todos os drivers de GPU instalados.
     Retorna uma lista de dicts com os dados de cada GPU.
     """
-    gpus_wmi = _consultar_drivers_wmi()
-    versao_nvidia = _consultar_versao_driver_nvidia()
+    gpus_wmi = _consultar_drivers_wmi(cancel_event=cancel_event)
+    versao_nvidia = _consultar_versao_driver_nvidia(cancel_event=cancel_event)
     resultados = []
 
     for gpu in gpus_wmi:
@@ -213,21 +215,21 @@ def verificar_drivers_gpu() -> list:
     return resultados
 
 
-def executar_verificacao_drivers(id_atendimento: str = None) -> list:
+def executar_verificacao_drivers(id_atendimento: str = None, cancel_event=None) -> dict:
     """Executa a verificação de drivers e exibe o resultado formatado no terminal."""
     console.print(Panel(
         "[bold yellow]Verificando drivers de GPU...[/bold yellow]",
         border_style="orange3"
     ))
 
-    resultados = verificar_drivers_gpu()
+    resultados = verificar_drivers_gpu(cancel_event=cancel_event)
 
     if not resultados:
         console.print(Panel(
             "[yellow]Nenhuma GPU detectada para verificação de driver.[/yellow]",
             border_style="yellow"
         ))
-        return []
+        return {"ok": True, "itens": []}
 
     for gpu in resultados:
         tabela = Table(
@@ -283,7 +285,7 @@ def executar_verificacao_drivers(id_atendimento: str = None) -> list:
         )
         logs.registrar_acao(id_atendimento, "Verificação de drivers GPU", resumo)
 
-    return resultados
+    return {"ok": True, "itens": resultados}
 
 
 if __name__ == "__main__":

@@ -35,8 +35,8 @@ def gerar_relatorio_comparativo(snapshot_antes: dict, snapshot_depois: dict, esp
     Gera e exibe no terminal um relatório comparativo entre dois snapshots
     de diagnóstico (antes e depois da limpeza/otimização).
     """
-    dados_antes = snapshot_antes["dados"]
-    dados_depois = snapshot_depois["dados"]
+    dados_antes = snapshot_antes
+    dados_depois = snapshot_depois
 
     cliente = snapshot_antes.get("cliente", "não informado")
 
@@ -114,17 +114,20 @@ def gerar_relatorio_comparativo(snapshot_antes: dict, snapshot_depois: dict, esp
 
 def _formatar_status_limpeza(status: str, ignorados: int) -> str:
     status = status.lower()
-    if status == "concluido":
-        return "CONCLUÍDO COM EXCEÇÕES" if ignorados > 0 else "CONCLUÍDO"
-    elif status == "erro":
+    if status == "parcial" or ignorados > 0:
+        return "CONCLUÍDO COM EXCEÇÕES"
+    elif status in ("concluido", "concluído"):
+        return "CONCLUÍDO"
+    elif status in ("erro", "falhou"):
         return "FALHOU"
-    else:
+    elif status in ("unsupported", "não aplicável", "nao aplicavel"):
         return "NÃO APLICÁVEL"
+    return status.upper()
 
 def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois: dict, caminho_saida) -> None:
     """Exporta o relatório técnico V3 em txt."""
-    dados_antes = snapshot_antes.get("dados", {})
-    dados_depois = snapshot_depois.get("dados", {})
+    dados_antes = snapshot_antes
+    dados_depois = snapshot_depois
     cliente = snapshot_antes.get("cliente", "não informado")
     
     resumo = payload.get("resumo", {})
@@ -250,8 +253,8 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
         if val is None: return ""
         return html_module.escape(str(val), quote=True)
 
-    dados_antes = snapshot_antes.get("dados", {})
-    dados_depois = snapshot_depois.get("dados", {})
+    dados_antes = snapshot_antes
+    dados_depois = snapshot_depois
     cliente = escape_safe(snapshot_antes.get("cliente", "não informado"))
     
     resumo = payload.get("resumo", {})
