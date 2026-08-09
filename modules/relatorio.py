@@ -112,55 +112,82 @@ def gerar_relatorio_comparativo(snapshot_antes: dict, snapshot_depois: dict, esp
     console.print(Panel(resumo, title="[bold yellow]Resumo do Atendimento[/bold yellow]", border_style="green"))
 
 
-def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois: dict, caminho_saida) -> None:
-    """Exporta o relatório comparativo em formato .txt simples, pra entregar/mostrar ao cliente."""
-    dados_antes = snapshot_antes["dados"]
-    dados_depois = snapshot_depois["dados"]
-    cliente = snapshot_antes.get("cliente", "não informado")
-    limpeza = payload.get("limpeza", {})
-    otim = payload.get("otimizacao", {})
-    prot = payload.get("protecao", {})
+def _formatar_status_limpeza(status: str, ignorados: int) -> str:
+    status = status.lower()
+    if status == "concluido":
+        return "CONCLUÍDO COM EXCEÇÕES" if ignorados > 0 else "CONCLUÍDO"
+    elif status == "erro":
+        return "FALHOU"
+    else:
+        return "NÃO APLICÁVEL"
 
+def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois: dict, caminho_saida) -> None:
+    """Exporta o relatório técnico V3 em txt."""
+    dados_antes = snapshot_antes.get("dados", {})
+    dados_depois = snapshot_depois.get("dados", {})
+    cliente = snapshot_antes.get("cliente", "não informado")
+    
+    resumo = payload.get("resumo", {})
+    limpeza = payload.get("limpeza", {})
+    otim = payload.get("otimizacoes", {})
+    prot = payload.get("protecao", {})
+    analises = payload.get("analises", {})
+    recs = payload.get("recomendacoes", [])
+    
     protecao_status = prot.get("status", "N/D")
     if protecao_status == "restore_created":
         protecao_text = "Ponto de restauração criado e verificado"
     elif protecao_status == "risk_accepted":
         protecao_text = "Executado sem ponto de restauração — risco aceito pelo operador"
     else:
-        protecao_text = "Não tentado"
+        protecao_text = prot.get("mensagem", "Não tentado")
 
     linhas = [
         "=" * 50,
-        "PHOENIX OPTIMIZER - RELATÓRIO TÉCNICO V2",
+        "PHOENIX OPTIMIZER - RELATÓRIO TÉCNICO V3",
         "=" * 50,
         f"Cliente: {cliente}",
         f"Data: {snapshot_depois.get('data_hora', '')}",
         f"Duração: {payload.get('duracao_segundos', 0)}s",
         "",
-        "--- RESUMO ---",
-        f"Espaço liberado: {limpeza.get('espaco_liberado_mb', 0):.2f} MB",
-        f"Otimizações aplicadas: {otim.get('sucessos', 0)} de {otim.get('total', 0)}",
+        "--- A. RESULTADO DO ATENDIMENTO ---",
+        f"Espaço liberado: {resumo.get('espaco_liberado_mb', 0):.2f} MB",
+        f"Itens removidos: {resumo.get('itens_removidos', 0)}",
+        f"Otimizações aplicadas: {resumo.get('otimizacoes_aplicadas', 0)} de {resumo.get('otimizacoes_total', 0)}",
         f"Status de proteção: {protecao_text}",
+        f"Recomendações encontradas: {len(recs)}",
         "",
-        "--- ESTADO OBSERVADO DO SISTEMA (Antes -> Depois) ---",
-        f"Uso de CPU:      {dados_antes['cpu']['uso_percentual']}%  ->  {dados_depois['cpu']['uso_percentual']}%",
-        f"Uso de RAM:      {dados_antes['memoria']['percentual_uso']}%  ->  {dados_depois['memoria']['percentual_uso']}%",
-        f"RAM disponível:  {dados_antes['memoria']['disponivel_gb']} GB  ->  {dados_depois['memoria']['disponivel_gb']} GB",
-        "",
-        "--- ARMAZENAMENTO ---",
+        "--- B. ACHADOS DO SISTEMA ---",
     ]
+    
+    # Startup findings
+    startup = analises.get("startup", {})
+    if startup.get("ok"):
+        linhas.append(f"Entradas de inicialização: {startup.get('total', 0)} (Alto impacto: {startup.get('alto_impacto', 0)})")
+        
+    # Disk Health findings
+    smart = analises.get("smart", {})
+    if smart.get("ok"):
+        discos = smart.get("discos", [])
+        for d in discos:
+            linhas.append(f"Disco {d.get('device_id')} ({d.get('tipo_midia')}): {d.get('classificacao')}")
+            
+    linhas.append("")
+    linhas.append("--- C. TRABALHO REALIZADO (Otimizações) ---")
+    resultados_otim = otim.get("resultados", {})
+    if not resultados_otim:
+        linhas.append("Nenhuma otimização aplicada.")
+    else:
+        for k, v in resultados_otim.items():
+            status = "APLICADO" if v.get("ok") else "FALHOU"
+            linhas.append(f"- {v.get('descricao', k)} -> {status}")
 
-    discos_antes = {d["unidade"]: d for d in dados_antes["discos"]}
-    discos_depois = {d["unidade"]: d for d in dados_depois["discos"]}
-    for unidade, info_antes in discos_antes.items():
-        info_depois = discos_depois.get(unidade)
-        if info_depois:
-            linhas.append(
-                f"{unidade}  Livre: {info_antes['livre_gb']} GB  ->  {info_depois['livre_gb']} GB"
-            )
+    cond = payload.get("acoes_condicionais", {})
+    if cond.get("otimizacao_disco", {}).get("executado"):
+        linhas.append(f"- Otimização de Armazenamento: {cond['otimizacao_disco'].get('saida')}")
 
     linhas.append("")
-    linhas.append("--- DETALHES DA LIMPEZA ---")
+    linhas.append("--- D. DETALHES DA LIMPEZA ---")
     categorias = limpeza.get("categorias", [])
     if not categorias:
         linhas.append("Nenhuma categoria processada.")
@@ -170,22 +197,45 @@ def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois:
             removidos = cat.get("arquivos_removidos", 0)
             ignorados = cat.get("arquivos_ignorados", 0)
             mb = cat.get("espaco_liberado_bytes", 0) / (1024*1024)
-            status = str(cat.get("status", "desconhecido")).upper()
-            linhas.append(f"- {nome}: {removidos} removidos, {ignorados} ignorados, {mb:.2f} MB recuperados [{status}]")
+            status = _formatar_status_limpeza(cat.get("status", ""), ignorados)
+            linhas.append(f"- {nome}: {removidos} removidos, {ignorados} preservados, {mb:.2f} MB recuperados [{status}]")
 
     linhas.append("")
-    linhas.append("--- OTIMIZAÇÕES APLICADAS ---")
-    resultados_otim = otim.get("resultados", {})
-    if not resultados_otim:
-        linhas.append("Nenhuma otimização aplicada.")
+    linhas.append("--- E. SAÚDE DO SISTEMA ---")
+    drivers = analises.get("drivers", {})
+    if drivers.get("ok"):
+        linhas.append("Drivers:")
+        for dr in drivers.get("resultados", []):
+            linhas.append(f"  - {dr.get('nome')}: {dr.get('classificacao')}")
     else:
-        for k, v in resultados_otim.items():
-            status = "OK" if v.get("ok") else "FALHOU"
-            nome = v.get("descricao", k)
-            linhas.append(f"- {nome}: [{status}]")
+        linhas.append("Drivers: Análise indisponível.")
 
     linhas.append("")
-    linhas.append(f"Espaço total liberado: {limpeza.get('espaco_liberado_mb', 0):.2f} MB")
+    linhas.append("--- F. ESTADO OBSERVADO (Antes -> Depois) ---")
+    try:
+        linhas.append(f"Uso de CPU:      {dados_antes['cpu']['uso_percentual']}%  ->  {dados_depois['cpu']['uso_percentual']}%")
+        linhas.append(f"Uso de RAM:      {dados_antes['memoria']['percentual_uso']}%  ->  {dados_depois['memoria']['percentual_uso']}%")
+        linhas.append(f"RAM disponível:  {dados_antes['memoria']['disponivel_gb']} GB  ->  {dados_depois['memoria']['disponivel_gb']} GB")
+        linhas.append("")
+        linhas.append("ARMAZENAMENTO:")
+        discos_antes = {d["unidade"]: d for d in dados_antes["discos"]}
+        discos_depois = {d["unidade"]: d for d in dados_depois["discos"]}
+        for unidade, info_antes in discos_antes.items():
+            info_depois = discos_depois.get(unidade)
+            if info_depois:
+                linhas.append(f"{unidade} Livre: {info_antes['livre_gb']} GB  ->  {info_depois['livre_gb']} GB")
+    except Exception:
+        pass
+        
+    linhas.append("")
+    linhas.append("--- G. RECOMENDAÇÕES ---")
+    if not recs:
+        linhas.append("Nenhuma recomendação disponível.")
+    else:
+        for r in recs:
+            linhas.append(f"- {r.get('titulo')}: {r.get('descricao')}")
+
+    linhas.append("")
     linhas.append("=" * 50)
 
     with open(caminho_saida, "w", encoding="utf-8") as f:
@@ -193,327 +243,191 @@ def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois:
 
 
 def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois: dict, caminho_saida) -> None:
-    """
-    Exporta o relatório comparativo em formato HTML estilizado, pronto
-    para abrir no navegador e imprimir como PDF (Ctrl+P → Salvar como PDF).
-    Visual premium com a identidade visual do Phoenix Optimizer.
-    """
-    import html
-    dados_antes = snapshot_antes["dados"]
-    dados_depois = snapshot_depois["dados"]
-    cliente = html.escape(snapshot_antes.get("cliente", "não informado"), quote=True)
-    data = html.escape(snapshot_depois.get("data_hora", ""), quote=True)
+    """Exporta o relatório técnico V3 em html."""
+    import html as html_module
+
+    def escape_safe(val):
+        if val is None: return ""
+        return html_module.escape(str(val), quote=True)
+
+    dados_antes = snapshot_antes.get("dados", {})
+    dados_depois = snapshot_depois.get("dados", {})
+    cliente = escape_safe(snapshot_antes.get("cliente", "não informado"))
+    
+    resumo = payload.get("resumo", {})
     limpeza = payload.get("limpeza", {})
-    otim = payload.get("otimizacao", {})
+    otim = payload.get("otimizacoes", {})
     prot = payload.get("protecao", {})
-
-    def _seta_html(antes: float, depois: float, menor_melhor: bool = True, neutra: bool = False) -> str:
-        diff = depois - antes
-        if abs(diff) < 0.01:
-            return '<span style="color:#888">= sem alteração</span>'
-        if neutra:
-            cor = "#888"
-            seta = "▼" if diff < 0 else "▲"
-            return f'<span style="color:{cor};font-weight:bold">{seta} {abs(diff):.2f}</span>'
-        melhorou = (diff < 0) if menor_melhor else (diff > 0)
-        cor = "#4CAF50" if melhorou else "#F44336"
-        seta = "▼" if diff < 0 else "▲"
-        return f'<span style="color:{cor};font-weight:bold">{seta} {abs(diff):.2f}</span>'
-
-    # Disco rows
-    discos_antes = {d["unidade"]: d for d in dados_antes["discos"]}
-    discos_depois = {d["unidade"]: d for d in dados_depois["discos"]}
-    disco_rows = ""
-    for unidade, info_antes in discos_antes.items():
-        info_depois = discos_depois.get(unidade)
-        if info_depois:
-            unidade_esc = html.escape(unidade, quote=True)
-            variacao = _seta_html(info_antes["livre_gb"], info_depois["livre_gb"], menor_melhor=False)
-            disco_rows += f"""
-            <tr>
-                <td>{unidade_esc}</td>
-                <td>{info_antes['livre_gb']} GB</td>
-                <td>{info_depois['livre_gb']} GB</td>
-                <td>{variacao}</td>
-            </tr>"""
-
-    cpu_antes = dados_antes["cpu"]["uso_percentual"]
-    cpu_depois = dados_depois["cpu"]["uso_percentual"]
-    ram_antes = dados_antes["memoria"]["percentual_uso"]
-    ram_depois = dados_depois["memoria"]["percentual_uso"]
-    ram_disp_antes = dados_antes["memoria"]["disponivel_gb"]
-    ram_disp_depois = dados_depois["memoria"]["disponivel_gb"]
-
-    resumo_items = f'<li>Espaço liberado: <strong>{limpeza.get("espaco_liberado_mb", 0):.2f} MB</strong></li>'
-    resumo_items += f'<li>Otimizações aplicadas: <strong>{otim.get("sucessos", 0)}/{otim.get("total", 0)}</strong></li>'
-
+    analises = payload.get("analises", {})
+    recs = payload.get("recomendacoes", [])
+    
     protecao_status = prot.get("status", "N/D")
     if protecao_status == "restore_created":
         protecao_text = "Ponto de restauração criado e verificado"
     elif protecao_status == "risk_accepted":
         protecao_text = "Executado sem ponto de restauração — risco aceito pelo operador"
     else:
-        protecao_text = "Não tentado"
-    resumo_items += f'<li>Status de proteção: <strong>{protecao_text}</strong></li>'
-    resumo_items += f'<li>Duração: <strong>{payload.get("duracao_segundos", 0)}s</strong></li>'
+        protecao_text = prot.get("mensagem", "Não tentado")
 
-    # Detalhes da Limpeza
-    limpeza_rows = ""
-    categorias = limpeza.get("categorias", [])
-    if not categorias:
-        limpeza_rows = "<tr><td colspan='5' style='text-align:center'>Nenhuma categoria processada.</td></tr>"
-    else:
-        for cat in categorias:
-            nome = html.escape(cat.get("nome", "Desconhecido"), quote=True)
-            removidos = cat.get("arquivos_removidos", 0)
-            ignorados = cat.get("arquivos_ignorados", 0)
-            mb = cat.get("espaco_liberado_bytes", 0) / (1024*1024)
-            status = cat.get("status", "desconhecido")
-            cor_status = "#4CAF50" if status == "concluido" else ("#F44336" if status == "falhou" else "#FFC107")
-            limpeza_rows += f"<tr><td>{nome}</td><td>{removidos}</td><td>{ignorados}</td><td>{mb:.2f} MB</td><td><span style='color:{cor_status};font-weight:bold'>{status.upper()}</span></td></tr>"
+    recs_html = ""
+    for r in recs:
+        nivel = r.get("nivel", "info")
+        color = "#00e676" if nivel == "sucesso" else "#ffb300" if nivel == "aviso" else "#ff1744" if nivel == "erro" else "#00b0ff"
+        recs_html += f"<li style='margin-bottom: 10px; border-left: 4px solid {color}; padding-left: 10px;'><strong>{escape_safe(r.get('titulo'))}</strong><br/>{escape_safe(r.get('descricao'))}</li>"
 
-    # Otimizações
-    otim_rows = ""
-    resultados_otim = otim.get("resultados", {})
-    if not resultados_otim:
-        otim_rows = "<tr><td colspan='2' style='text-align:center'>Nenhuma otimização aplicada.</td></tr>"
-    else:
-        for k, v in resultados_otim.items():
-            nome_otim = v.get("descricao", k)
-            k_esc = html.escape(nome_otim, quote=True)
-            status_text = "OK" if v.get("ok") else "FALHOU"
-            cor_status = "#4CAF50" if v.get("ok") else "#F44336"
-            otim_rows += f"<tr><td>{k_esc}</td><td><span style='color:{cor_status};font-weight:bold'>{status_text}</span></td></tr>"
+    clean_html = ""
+    for cat in limpeza.get("categorias", []):
+        nome = escape_safe(cat.get("nome", "Desconhecido"))
+        rem = cat.get("arquivos_removidos", 0)
+        ign = cat.get("arquivos_ignorados", 0)
+        mb = cat.get("espaco_liberado_bytes", 0) / (1024*1024)
+        status = _formatar_status_limpeza(cat.get("status", ""), ign)
+        badge = "#00e676" if status == "CONCLUÍDO" else "#ffb300" if status == "CONCLUÍDO COM EXCEÇÕES" else "#ff1744" if status == "FALHOU" else "#9e9e9e"
+        clean_html += f"<tr><td>{nome}</td><td>{rem}</td><td>{ign}</td><td>{mb:.2f} MB</td><td><span style='background: {badge}; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold;'>{status}</span></td></tr>"
+
+    otim_html = ""
+    for k, v in otim.get("resultados", {}).items():
+        desc = escape_safe(v.get("descricao", k))
+        status = "APLICADO" if v.get("ok") else "FALHOU"
+        otim_html += f"<li>{desc}: <strong>{status}</strong></li>"
+
+    smart_html = ""
+    if analises.get("smart", {}).get("ok"):
+        for d in analises.get("smart", {}).get("discos", []):
+            smart_html += f"<li>Disco {escape_safe(d.get('device_id'))} ({escape_safe(d.get('tipo_midia'))}): {escape_safe(d.get('classificacao'))}</li>"
+
+    drivers_html = ""
+    if analises.get("drivers", {}).get("ok"):
+        for dr in analises.get("drivers", {}).get("resultados", []):
+            drivers_html += f"<li>{escape_safe(dr.get('nome'))}: {escape_safe(dr.get('classificacao'))}</li>"
+
+    try:
+        cpu_antes = f"{dados_antes['cpu']['uso_percentual']}%"
+        cpu_depois = f"{dados_depois['cpu']['uso_percentual']}%"
+        ram_antes = f"{dados_antes['memoria']['percentual_uso']}%"
+        ram_depois = f"{dados_depois['memoria']['percentual_uso']}%"
+        ram_disp_antes = f"{dados_antes['memoria']['disponivel_gb']} GB"
+        ram_disp_depois = f"{dados_depois['memoria']['disponivel_gb']} GB"
+    except Exception:
+        cpu_antes = cpu_depois = ram_antes = ram_depois = ram_disp_antes = ram_disp_depois = "N/D"
+
+    discos_html = ""
+    try:
+        discos_antes = {d["unidade"]: d for d in dados_antes["discos"]}
+        discos_depois = {d["unidade"]: d for d in dados_depois["discos"]}
+        for unidade, info_antes in discos_antes.items():
+            unidade_segura = escape_safe(unidade)
+            info_depois = discos_depois.get(unidade)
+            if info_depois:
+                discos_html += f"<tr><td>{unidade_segura}</td><td>{info_antes['livre_gb']} GB</td><td>{info_depois['livre_gb']} GB</td></tr>"
+    except Exception:
+        pass
 
     html_content = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phoenix Optimizer - Relatório de Atendimento</title>
+    <title>Relatório Phoenix V3 - {cliente}</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
-
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-
-        body {{
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: #1a1a2e;
-            color: #e0e0e0;
-            padding: 40px;
-            line-height: 1.6;
-        }}
-
-        .container {{
-            max-width: 800px;
-            margin: 0 auto;
-            background: #16213e;
-            border-radius: 16px;
-            padding: 40px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            border: 1px solid rgba(216, 155, 74, 0.2);
-        }}
-
-        .header {{
-            text-align: center;
-            margin-bottom: 32px;
-            padding-bottom: 24px;
-            border-bottom: 2px solid rgba(216, 155, 74, 0.3);
-        }}
-
-        .header h1 {{
-            font-size: 28px;
-            font-weight: 700;
-            color: #D89B4A;
-            letter-spacing: 2px;
-            margin-bottom: 4px;
-        }}
-
-        .header .subtitle {{
-            font-size: 14px;
-            color: #8C8C8C;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }}
-
-        .info-bar {{
-            display: flex;
-            justify-content: space-between;
-            background: rgba(216, 155, 74, 0.08);
-            border-radius: 8px;
-            padding: 12px 20px;
-            margin-bottom: 28px;
-            font-size: 14px;
-        }}
-
-        .info-bar span {{ color: #ccc; }}
-        .info-bar strong {{ color: #E8B96A; }}
-
-        h2 {{
-            font-size: 16px;
-            font-weight: 600;
-            color: #D89B4A;
-            margin: 24px 0 12px 0;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }}
-
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
-        }}
-
-        th {{
-            background: rgba(216, 155, 74, 0.15);
-            color: #E8B96A;
-            font-weight: 600;
-            font-size: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            padding: 10px 14px;
-            text-align: left;
-            border-bottom: 1px solid rgba(216, 155, 74, 0.2);
-        }}
-
-        td {{
-            padding: 10px 14px;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-            font-size: 14px;
-        }}
-
-        tr:hover td {{
-            background: rgba(255,255,255,0.02);
-        }}
-
-        .resumo {{
-            background: linear-gradient(135deg, rgba(111, 174, 124, 0.1), rgba(216, 155, 74, 0.1));
-            border: 1px solid rgba(111, 174, 124, 0.3);
-            border-radius: 12px;
-            padding: 20px 24px;
-            margin-top: 28px;
-        }}
-
-        .resumo h2 {{
-            color: #6FAE7C;
-            margin-top: 0;
-        }}
-
-        .resumo ul {{
-            list-style: none;
-            padding: 0;
-        }}
-
-        .resumo li {{
-            padding: 4px 0;
-            font-size: 15px;
-        }}
-
-        .resumo li::before {{
-            content: "• ";
-            color: #6FAE7C;
-            font-weight: bold;
-        }}
-
-        .footer {{
-            text-align: center;
-            margin-top: 32px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255,255,255,0.05);
-            font-size: 12px;
-            color: #666;
-        }}
-
+        body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0d1117; color: #c9d1d9; margin: 0; padding: 20px; }}
+        .container {{ max-width: 900px; margin: auto; background: #161b22; padding: 30px; border-radius: 8px; border: 1px solid #30363d; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }}
+        h1, h2, h3 {{ color: #ff8c00; margin-top: 0; }}
+        h1 {{ text-align: center; border-bottom: 1px solid #30363d; padding-bottom: 15px; margin-bottom: 30px; }}
+        .grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 30px; }}
+        .card {{ background: #21262d; padding: 15px; border-radius: 6px; border: 1px solid #30363d; text-align: center; }}
+        .card .title {{ font-size: 12px; color: #8b949e; text-transform: uppercase; margin-bottom: 5px; }}
+        .card .value {{ font-size: 24px; font-weight: bold; color: #58a6ff; }}
+        table {{ width: 100%; border-collapse: collapse; margin-bottom: 30px; background: #0d1117; }}
+        th, td {{ padding: 10px; border: 1px solid #30363d; text-align: left; }}
+        th {{ background: #21262d; color: #c9d1d9; }}
+        .section {{ margin-bottom: 40px; padding: 20px; background: #21262d; border-radius: 6px; border: 1px solid #30363d; }}
+        ul {{ padding-left: 20px; margin: 0; }}
         @media print {{
-            body {{ background: white; color: #333; padding: 20px; }}
-            .container {{ box-shadow: none; border: 1px solid #ddd; background: white; }}
-            .header h1 {{ color: #B8860B; }}
-            h2 {{ color: #B8860B; }}
-            th {{ background: #f5f0e0; color: #B8860B; }}
-            td {{ border-bottom-color: #eee; }}
-            .info-bar {{ background: #f9f6f0; }}
-            .resumo {{ background: #f0f8f0; border-color: #c8e6c9; }}
+            body {{ background: #fff; color: #000; }}
+            .container {{ border: none; box-shadow: none; padding: 0; }}
+            h1, h2, h3 {{ color: #000; }}
+            .card {{ border: 1px solid #ccc; background: #f0f0f0; }}
+            .card .value {{ color: #000; }}
+            .section {{ background: transparent; border: none; padding: 0; margin-bottom: 20px; }}
+            table, th, td {{ border: 1px solid #000; background: transparent; color: #000; }}
+            th {{ background: #eee; }}
         }}
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1> PHOENIX OPTIMIZER</h1>
-            <div class="subtitle">Relatório de Atendimento</div>
+        <h1>Phoenix Optimizer<br><small style="color:#8b949e; font-size:16px;">Relatório Técnico V3</small></h1>
+        <p><strong>Cliente:</strong> {cliente}<br><strong>Data:</strong> {escape_safe(snapshot_depois.get('data_hora', ''))}<br><strong>Duração:</strong> {payload.get('duracao_segundos', 0)}s</p>
+
+        <div class="section">
+            <h2>A. RESULTADO DO ATENDIMENTO</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="title">Espaço Recuperado</div>
+                    <div class="value">{{resumo.get('espaco_liberado_mb', 0):.2f}} MB</div>
+                </div>
+                <div class="card">
+                    <div class="title">Itens Removidos</div>
+                    <div class="value">{{resumo.get('itens_removidos', 0)}}</div>
+                </div>
+                <div class="card">
+                    <div class="title">Otimizações</div>
+                    <div class="value">{{resumo.get('otimizacoes_aplicadas', 0)}} / {{resumo.get('otimizacoes_total', 0)}}</div>
+                </div>
+                <div class="card">
+                    <div class="title">Proteção</div>
+                    <div class="value" style="font-size: 14px;">{escape_safe(protecao_text)}</div>
+                </div>
+            </div>
         </div>
 
-        <div class="info-bar">
-            <span>Cliente: <strong>{cliente}</strong></span>
-            <span>Data: <strong>{data}</strong></span>
-        </div>
-
-        <h2>CPU &amp; Memória — Antes vs Depois</h2>
-        <table>
-            <thead>
-                <tr><th>Métrica</th><th>Antes</th><th>Depois</th><th>Variação</th></tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td>Uso de CPU</td>
-                    <td>{cpu_antes}%</td>
-                    <td>{cpu_depois}%</td>
-                    <td>{_seta_html(cpu_antes, cpu_depois, menor_melhor=True, neutra=True)}</td>
-                </tr>
-                <tr>
-                    <td>Uso de RAM</td>
-                    <td>{ram_antes}%</td>
-                    <td>{ram_depois}%</td>
-                    <td>{_seta_html(ram_antes, ram_depois, menor_melhor=True, neutra=True)}</td>
-                </tr>
-                <tr>
-                    <td>RAM disponível</td>
-                    <td>{ram_disp_antes} GB</td>
-                    <td>{ram_disp_depois} GB</td>
-                    <td>{_seta_html(ram_disp_antes, ram_disp_depois, menor_melhor=False, neutra=True)}</td>
-                </tr>
-            </tbody>
-        </table>
-
-        <h2>Armazenamento — Antes vs Depois</h2>
-        <table>
-            <thead>
-                <tr><th>Unidade</th><th>Livre Antes</th><th>Livre Depois</th><th>Variação</th></tr>
-            </thead>
-            <tbody>
-                {disco_rows}
-            </tbody>
-        </table>
-
-        <h2>Detalhes da Limpeza</h2>
-        <table>
-            <thead>
-                <tr><th>Categoria</th><th>Itens removidos</th><th>Itens ignorados</th><th>Espaço recuperado</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-                {limpeza_rows}
-            </tbody>
-        </table>
-
-        <h2>Otimizações Aplicadas</h2>
-        <table>
-            <thead>
-                <tr><th>Ação</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-                {otim_rows}
-            </tbody>
-        </table>
-
-        <div class="resumo">
-            <h2>Resumo do Atendimento</h2>
-            <ul>
-                {resumo_items}
+        <div class="section">
+            <h2>B. RECOMENDAÇÕES E ESTADO DO SISTEMA</h2>
+            <ul style="list-style: none; padding-left: 0;">
+                {recs_html if recs_html else "<li>Nenhuma recomendação disponível.</li>"}
             </ul>
+            <br>
+            <div class="grid">
+                <div>
+                    <h3>Discos (SMART)</h3>
+                    <ul>{smart_html if smart_html else "<li>Não avaliado</li>"}</ul>
+                </div>
+                <div>
+                    <h3>Drivers</h3>
+                    <ul>{drivers_html if drivers_html else "<li>Não avaliado</li>"}</ul>
+                </div>
+            </div>
         </div>
 
-        <div class="footer">
-            Phoenix Optimizer v2.0 — Diagnóstico e Otimização de Performance para Windows
+        <div class="section">
+            <h2>C. DETALHES DA LIMPEZA E OTIMIZAÇÃO</h2>
+            <h3>Otimizações Aplicadas</h3>
+            <ul>{otim_html if otim_html else "<li>Nenhuma otimização aplicada.</li>"}</ul>
+            <br>
+            <h3>Limpeza de Arquivos</h3>
+            <table>
+                <thead>
+                    <tr><th>Categoria</th><th>Removidos</th><th>Preservados</th><th>Liberado</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    {clean_html}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>D. OBSERVAÇÃO DO ESTADO (Antes -> Depois)</h2>
+            <table>
+                <thead>
+                    <tr><th>Métrica</th><th>Antes</th><th>Depois</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td>Uso de CPU</td><td>{cpu_antes}</td><td>{cpu_depois}</td></tr>
+                    <tr><td>Uso de RAM</td><td>{ram_antes}</td><td>{ram_depois}</td></tr>
+                    <tr><td>RAM Disponível</td><td>{ram_disp_antes}</td><td>{ram_disp_depois}</td></tr>
+                    {discos_html}
+                </tbody>
+            </table>
         </div>
     </div>
 </body>

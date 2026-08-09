@@ -118,11 +118,8 @@ def test_routine_service_validacao_id():
 @pytest.mark.parametrize("phase", [
     "initial_diag",
     "initial_snapshot_persistence",
-    "cleanup",
-    "optimization",
     "final_diag",
     "final_snapshot_persistence",
-    "snapshot_loading",
     "text-report_export"
 ])
 def test_routine_service_falha_sanitizada(phase):

@@ -1,5 +1,5 @@
 /* ============================================================
-   Phoenix Optimizer — Relatório (v2)
+   Phoenix Optimizer — Relatório (v3)
    ============================================================ */
 
 (function (Phoenix) {
@@ -17,8 +17,6 @@
     }
 
     page.load = async function () {
-        // O Relatório não busca dados na inicialização.
-        // O conteúdo é gerado sob demanda pela Rotina Completa.
         var container = document.getElementById("conteudo-relatorio");
         if (container && container.innerHTML.trim() === "") {
             container.innerHTML = '<p class="texto-secundario">Nenhum relatório disponível. Execute a rotina completa primeiro.</p>';
@@ -32,10 +30,10 @@
         return m > 0 ? m + "m " + sec + "s" : sec + "s";
     }
 
-    function formatarProtecao(status) {
+    function formatarProtecao(status, msg) {
         if (status === "restore_created") return "Ponto de restauração verificado";
         if (status === "risk_accepted") return "Risco aceito (sem restauração)";
-        return "Não tentado";
+        return msg || "Não tentado";
     }
 
     function createEl(tag, className, text) {
@@ -44,6 +42,23 @@
         if (text !== undefined && text !== null) el.textContent = text;
         return el;
     }
+    
+    function formatarStatusLimpeza(status, ignorados) {
+        var s = String(status).toLowerCase();
+        if (s === "concluido") {
+            return ignorados > 0 ? "CONCLUÍDO COM EXCEÇÕES" : "CONCLUÍDO";
+        }
+        if (s === "erro") return "FALHOU";
+        return s.toUpperCase();
+    }
+    
+    function statusLimpezaClass(status) {
+        var s = String(status).toLowerCase();
+        if (s.includes("exceções")) return "aviso";
+        if (s === "concluído") return "sucesso";
+        if (s === "falhou") return "erro";
+        return "neutro";
+    }
 
     page.showResult = function (resultado) {
         var container = document.getElementById("conteudo-relatorio");
@@ -51,36 +66,31 @@
 
         container.innerHTML = "";
 
-        if (!resultado || !resultado.antes || !resultado.depois) {
+        if (!resultado) {
             var errDiv = createEl("div", "card");
             var badge = createEl("span", "badge erro", "Erro");
             errDiv.appendChild(badge);
-            errDiv.appendChild(document.createTextNode(" Falha ao processar relatório (dados ausentes)"));
+            errDiv.appendChild(document.createTextNode(" Falha ao carregar relatório."));
             container.appendChild(errDiv);
             return;
         }
 
-        var antes = resultado.antes;
-        var depois = resultado.depois;
-        var limpeza = resultado.limpeza || {};
-        var otim = resultado.otimizacao || {};
-        var protecao = resultado.protecao || {};
+        var payload = resultado.payload || resultado;
+        var antes = payload.snapshot_antes ? payload.snapshot_antes.dados : {};
+        var depois = payload.snapshot_depois ? payload.snapshot_depois.dados : {};
+        var resumo = payload.resumo || {};
+        var limpeza = payload.limpeza || {};
+        var otim = payload.otimizacoes || {};
+        var protecao = payload.protecao || {};
+        var analises = payload.analises || {};
+        var recs = payload.recomendacoes || [];
+        var cond = payload.acoes_condicionais || {};
 
-        function addLinhaComparativa(tbody, rotulo, valorAntes, valorDepois, sufixo, menorEMelhor, neutra) {
-            var diferenca = valorDepois - valorAntes;
-            var melhorou = menorEMelhor ? diferenca < 0 : diferenca > 0;
-            var corDif = (Math.abs(diferenca) < 0.01 || neutra) ? "neutro" : (melhorou ? "sucesso" : "erro");
-            var seta = Math.abs(diferenca) < 0.01 ? "=" : (diferenca < 0 ? "\u25BC" : "\u25B2");
-
+        function addLinhaComparativa(tbody, rotulo, valorAntes, valorDepois, sufixo) {
             var tr = document.createElement("tr");
             tr.appendChild(createEl("td", "", rotulo));
             tr.appendChild(createEl("td", "", valorAntes + sufixo));
             tr.appendChild(createEl("td", "", valorDepois + sufixo));
-
-            var tdRes = document.createElement("td");
-            var spanRes = createEl("span", "badge " + corDif, seta + " " + Math.abs(diferenca).toFixed(1) + sufixo);
-            tdRes.appendChild(spanRes);
-            tr.appendChild(tdRes);
             tbody.appendChild(tr);
         }
 
@@ -89,10 +99,10 @@
         gradeCards.style.marginBottom = "20px";
 
         var metricas = [
-            { r: "Duração", v: formatarSegundos(resultado.duracao_segundos) },
-            { r: "Espaço Liberado", v: formatarBytes(limpeza.espaco_liberado_mb) },
-            { r: "Otimizações", v: (otim.sucessos || 0) + "/" + (otim.total || 0) },
-            { r: "Proteção", v: formatarProtecao(protecao.status), style: "font-size: 14px; margin-top: 8px;" }
+            { r: "Espaço Recuperado", v: formatarBytes(resumo.espaco_liberado_mb) },
+            { r: "Itens Removidos", v: String(resumo.itens_removidos || 0) },
+            { r: "Otimizações", v: (resumo.otimizacoes_aplicadas || 0) + " / " + (resumo.otimizacoes_total || 0) },
+            { r: "Proteção", v: formatarProtecao(protecao.status, protecao.mensagem), style: "font-size: 14px; margin-top: 8px;" }
         ];
 
         metricas.forEach(function(m) {
@@ -104,6 +114,90 @@
             gradeCards.appendChild(card);
         });
         container.appendChild(gradeCards);
+        
+        // Recomendações
+        if (recs.length > 0) {
+            var cardRecs = createEl("div", "card");
+            var strRecs = document.createElement("strong");
+            strRecs.textContent = "Recomendações e Achados";
+            cardRecs.appendChild(strRecs);
+            
+            var ulRecs = createEl("ul", "lista-simples");
+            ulRecs.style.marginTop = "12px";
+            recs.forEach(function(r) {
+                var li = document.createElement("li");
+                li.style.marginBottom = "8px";
+                var cor = r.nivel === "sucesso" ? "#10b981" : (r.nivel === "aviso" ? "#f59e0b" : (r.nivel === "erro" ? "#ef4444" : "#3b82f6"));
+                li.style.borderLeft = "4px solid " + cor;
+                li.style.paddingLeft = "8px";
+                
+                var title = createEl("div", "", "");
+                var b = document.createElement("strong");
+                b.textContent = r.titulo;
+                title.appendChild(b);
+                li.appendChild(title);
+                
+                var desc = createEl("div", "texto-secundario", r.descricao);
+                li.appendChild(desc);
+                
+                ulRecs.appendChild(li);
+            });
+            cardRecs.appendChild(ulRecs);
+            container.appendChild(cardRecs);
+        }
+
+        // Análises (SMART e Drivers)
+        var hasSmart = analises.smart && analises.smart.ok;
+        var hasDrivers = analises.drivers && analises.drivers.ok;
+        
+        if (hasSmart || hasDrivers) {
+            var cardAnalises = createEl("div", "card");
+            var strAnalises = document.createElement("strong");
+            strAnalises.textContent = "Saúde do Sistema";
+            cardAnalises.appendChild(strAnalises);
+            
+            var flex = createEl("div", "");
+            flex.style.display = "flex";
+            flex.style.gap = "20px";
+            flex.style.marginTop = "12px";
+            
+            if (hasSmart) {
+                var divSmart = createEl("div", "");
+                divSmart.style.flex = "1";
+                divSmart.appendChild(createEl("strong", "texto-secundario", "Discos (SMART)"));
+                var ulSmart = createEl("ul", "lista-simples");
+                var discos = analises.smart.discos || [];
+                discos.forEach(function(d) {
+                    var text = "Disco " + d.device_id + " (" + d.tipo_midia + "): " + d.classificacao;
+                    var li = createEl("li", "", text);
+                    ulSmart.appendChild(li);
+                });
+                divSmart.appendChild(ulSmart);
+                flex.appendChild(divSmart);
+            }
+            
+            if (hasDrivers) {
+                var divDrivers = createEl("div", "");
+                divDrivers.style.flex = "1";
+                divDrivers.appendChild(createEl("strong", "texto-secundario", "Drivers"));
+                var ulDrivers = createEl("ul", "lista-simples");
+                var resultDrivers = analises.drivers.resultados || [];
+                if (resultDrivers.length === 0) {
+                     ulDrivers.appendChild(createEl("li", "", "OK"));
+                } else {
+                     resultDrivers.forEach(function(d) {
+                         var text = d.nome + ": " + d.classificacao;
+                         var li = createEl("li", "", text);
+                         ulDrivers.appendChild(li);
+                     });
+                }
+                divDrivers.appendChild(ulDrivers);
+                flex.appendChild(divDrivers);
+            }
+            
+            cardAnalises.appendChild(flex);
+            container.appendChild(cardAnalises);
+        }
 
         // Detalhes da Limpeza
         var cardLimpeza = createEl("div", "card");
@@ -114,7 +208,7 @@
         var tabLimpeza = createEl("table", "tabela-dados");
         tabLimpeza.style.marginTop = "12px";
         var tHeadLimpeza = document.createElement("thead");
-        tHeadLimpeza.innerHTML = "<tr><th>Categoria</th><th>Itens removidos</th><th>Itens ignorados</th><th>Espaço recuperado</th><th>Status</th></tr>";
+        tHeadLimpeza.innerHTML = "<tr><th>Categoria</th><th>Removidos</th><th>Preservados</th><th>Recuperado</th><th>Status</th></tr>";
         tabLimpeza.appendChild(tHeadLimpeza);
 
         var tBodyLimpeza = document.createElement("tbody");
@@ -122,7 +216,7 @@
         if (categorias.length === 0) {
             var trVazioL = document.createElement("tr");
             var tdVazioL = createEl("td", "texto-secundario", "Nenhuma categoria processada.");
-            tdVazioL.colSpan = 4;
+            tdVazioL.colSpan = 5;
             trVazioL.appendChild(tdVazioL);
             tBodyLimpeza.appendChild(trVazioL);
         } else {
@@ -138,8 +232,9 @@
                 tr.appendChild(createEl("td", "", formatarBytes(mb)));
 
                 var tdStatus = document.createElement("td");
-                var badgeClass = cat.status === "concluido" ? "sucesso" : (cat.status === "falhou" ? "erro" : "aviso");
-                tdStatus.appendChild(createEl("span", "badge " + badgeClass, (cat.status || "desconhecido").toUpperCase()));
+                var stFormatado = formatarStatusLimpeza(cat.status || "desconhecido", ignorados);
+                var badgeClass = statusLimpezaClass(stFormatado);
+                tdStatus.appendChild(createEl("span", "badge " + badgeClass, stFormatado));
                 tr.appendChild(tdStatus);
                 tBodyLimpeza.appendChild(tr);
             });
@@ -173,7 +268,7 @@
         } else {
             chaves_otim.forEach(function(k) {
                 var r = resultados_otim[k];
-                var status = r.ok ? "OK" : "FALHOU";
+                var status = r.ok ? "APLICADO" : "FALHOU";
                 var cor = r.ok ? "sucesso" : "erro";
                 var nome = r.descricao || k;
 
@@ -184,75 +279,61 @@
                 tr.appendChild(tdStatus);
                 tBodyOtim.appendChild(tr);
             });
+            
+            // Condicionais
+            if (cond && cond.otimizacao_disco && cond.otimizacao_disco.executado) {
+                var tr = document.createElement("tr");
+                tr.appendChild(createEl("td", "", "Otimização de Armazenamento (" + cond.otimizacao_disco.saida + ")"));
+                var tdStatus = document.createElement("td");
+                tdStatus.appendChild(createEl("span", "badge sucesso", "APLICADO"));
+                tr.appendChild(tdStatus);
+                tBodyOtim.appendChild(tr);
+            }
         }
         tabOtim.appendChild(tBodyOtim);
         cardOtim.appendChild(tabOtim);
         container.appendChild(cardOtim);
 
         // Estado do Sistema
-        var cardEstado = createEl("div", "card");
-        var strEstado = document.createElement("strong");
-        strEstado.textContent = "Estado do Sistema (Antes vs Depois)";
-        cardEstado.appendChild(strEstado);
-
-        var pNota = createEl("p", "texto-secundario", "Nota: Uso de CPU/RAM são métricas oscilantes e não refletem necessariamente o ganho de FPS.");
-        pNota.style.margin = "8px 0";
-        cardEstado.appendChild(pNota);
-
-        var tabEstado = createEl("table", "tabela-dados");
-        tabEstado.style.marginTop = "12px";
-        var tHeadEstado = document.createElement("thead");
-        tHeadEstado.innerHTML = "<tr><th>Métrica</th><th>Antes</th><th>Depois</th><th>Variação</th></tr>";
-        tabEstado.appendChild(tHeadEstado);
-
-        var tBodyEstado = document.createElement("tbody");
-
         if (antes.cpu && depois.cpu) {
-            addLinhaComparativa(tBodyEstado, "Uso de CPU", antes.cpu.uso_percentual, depois.cpu.uso_percentual, "%", true, true);
-        }
-        if (antes.memoria && depois.memoria) {
-            addLinhaComparativa(tBodyEstado, "Uso de RAM", antes.memoria.percentual_uso, depois.memoria.percentual_uso, "%", true, true);
-            addLinhaComparativa(tBodyEstado, "RAM disponível", antes.memoria.disponivel_gb, depois.memoria.disponivel_gb, " GB", false, true);
-        }
-
-        var discosAntes = {};
-        if (antes.discos) antes.discos.forEach(function(d) { discosAntes[d.unidade] = d.livre_gb; });
-        var discosDepois = {};
-        if (depois.discos) depois.discos.forEach(function(d) { discosDepois[d.unidade] = d.livre_gb; });
-
-        Object.keys(discosAntes).forEach(function(unidade) {
-            if (discosDepois[unidade] !== undefined) {
-                addLinhaComparativa(tBodyEstado, "Livre " + unidade, discosAntes[unidade], discosDepois[unidade], " GB", false, false);
+            var cardEstado = createEl("div", "card");
+            var strEstado = document.createElement("strong");
+            strEstado.textContent = "Estado do Sistema (Antes vs Depois)";
+            cardEstado.appendChild(strEstado);
+    
+            var pNota = createEl("p", "texto-secundario", "Nota: Uso de CPU/RAM são métricas oscilantes e não refletem necessariamente o ganho de desempenho em jogos.");
+            pNota.style.margin = "8px 0";
+            cardEstado.appendChild(pNota);
+    
+            var tabEstado = createEl("table", "tabela-dados");
+            var tHeadEstado = document.createElement("thead");
+            tHeadEstado.innerHTML = "<tr><th>Métrica</th><th>Antes</th><th>Depois</th></tr>";
+            tabEstado.appendChild(tHeadEstado);
+    
+            var tBodyEstado = document.createElement("tbody");
+    
+            addLinhaComparativa(tBodyEstado, "Uso de CPU", antes.cpu.uso_percentual, depois.cpu.uso_percentual, "%");
+            addLinhaComparativa(tBodyEstado, "Uso de RAM", antes.memoria.percentual_uso, depois.memoria.percentual_uso, "%");
+            addLinhaComparativa(tBodyEstado, "RAM Disponível", antes.memoria.disponivel_gb, depois.memoria.disponivel_gb, " GB");
+    
+            // Discos
+            if (antes.discos && depois.discos) {
+                var dAntes = {};
+                antes.discos.forEach(function(d) { dAntes[d.unidade] = d.livre_gb; });
+                var dDepois = {};
+                depois.discos.forEach(function(d) { dDepois[d.unidade] = d.livre_gb; });
+    
+                Object.keys(dAntes).forEach(function(u) {
+                    if (dDepois[u] !== undefined) {
+                        addLinhaComparativa(tBodyEstado, "Armazenamento Livre (" + u + ")", dAntes[u], dDepois[u], " GB");
+                    }
+                });
             }
-        });
-
-        tabEstado.appendChild(tBodyEstado);
-        cardEstado.appendChild(tabEstado);
-        container.appendChild(cardEstado);
-
-        // Exportações
-        var cardExp = createEl("div", "card");
-        var strExp = document.createElement("strong");
-        strExp.textContent = "Relatórios Exportados";
-        cardExp.appendChild(strExp);
-
-        var pTxt = createEl("p", "texto-secundario", "");
-        pTxt.style.marginTop = "8px";
-        var sTxt = document.createElement("strong");
-        sTxt.textContent = "TXT: ";
-        pTxt.appendChild(sTxt);
-        pTxt.appendChild(document.createTextNode(resultado.relatorio_txt || "Indisponível"));
-        cardExp.appendChild(pTxt);
-
-        var pHtml = createEl("p", "texto-secundario", "");
-        pHtml.style.marginTop = "4px";
-        var sHtml = document.createElement("strong");
-        sHtml.textContent = "HTML: ";
-        pHtml.appendChild(sHtml);
-        pHtml.appendChild(document.createTextNode(resultado.relatorio_html || "Indisponível"));
-        cardExp.appendChild(pHtml);
-
-        container.appendChild(cardExp);
+    
+            tabEstado.appendChild(tBodyEstado);
+            cardEstado.appendChild(tabEstado);
+            container.appendChild(cardEstado);
+        }
     };
 
-})(window.Phoenix);
+})(window.Phoenix = window.Phoenix || {});

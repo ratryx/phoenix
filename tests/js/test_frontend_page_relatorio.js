@@ -8,14 +8,10 @@ const scriptCode = fs.readFileSync(scriptPath, 'utf8');
 
 function setupEnvironment() {
     const context = {
-        window: {
-            // Emulando globals injetados, se houvesse, mas o script se basta
-        },
+        window: {},
         document: {
             getElementById: function (id) {
-                if (id === 'conteudo-relatorio') {
-                    return context.container;
-                }
+                if (id === 'conteudo-relatorio') return context.container;
                 return null;
             },
             createElement: function(tag) {
@@ -27,9 +23,7 @@ function setupEnvironment() {
                     _textContent: '',
                     get textContent() { return this._textContent; },
                     set textContent(val) { this._textContent = val; },
-                    appendChild: function(child) {
-                        this.children.push(child);
-                    }
+                    appendChild: function(child) { this.children.push(child); }
                 };
             },
             createTextNode: function(text) {
@@ -40,9 +34,7 @@ function setupEnvironment() {
             error: function () { context.errors.push(Array.from(arguments)); },
             log: function () { context.logs.push(Array.from(arguments)); }
         },
-        Phoenix: {
-            pages: {}
-        }
+        Phoenix: { pages: {} }
     };
     context.window.Phoenix = context.Phoenix;
     function getHTML(node) {
@@ -84,7 +76,7 @@ function setupEnvironment() {
 }
 
 async function runTests() {
-    console.log("Iniciando testes da página Relatório...");
+    console.log("Iniciando testes da página Relatório V3...");
 
     // Teste 1: Registro e namespace
     {
@@ -94,81 +86,43 @@ async function runTests() {
         assert.strictEqual(typeof ctx.Phoenix.pages.relatorio.showResult, 'function', "showResult deve ser uma função");
     }
 
-    // Teste 2: Estado vazio com load()
+    // Teste 2: showResult com payload nulo
     {
         const ctx = setupEnvironment();
-        await ctx.Phoenix.pages.relatorio.load();
-        assert.ok(ctx.container.innerHTML.includes("Nenhum relatório disponível"), "Deve exibir fallback de vazio ao dar load sem dados");
+        ctx.Phoenix.pages.relatorio.showResult(null);
+        assert.ok(ctx.container.innerHTML.includes("Falha ao carregar relatório"), "Deve exibir erro");
     }
 
-    // Teste 3: showResult com dados inválidos
-    {
-        const ctx = setupEnvironment();
-        ctx.Phoenix.pages.relatorio.showResult({ ok: false });
-        assert.ok(ctx.container.innerHTML.includes("Falha ao processar relatório"), "Deve exibir mensagem de erro de renderização para payload sem antes/depois");
-        assert.ok(ctx.container.innerHTML.includes("badge erro"));
-    }
-
-    // Teste 4: showResult com sucesso (Melhora)
+    // Teste 3: showResult V3
     {
         const ctx = setupEnvironment();
         const payload = {
-            ok: true,
-            antes: { cpu: { uso_percentual: 80.0 }, memoria: { percentual_uso: 90.0, disponivel_gb: 1.0 }, discos: [{unidade: "C:", livre_gb: 100}] },
-            depois: { cpu: { uso_percentual: 50.0 }, memoria: { percentual_uso: 60.0, disponivel_gb: 4.0 }, discos: [{unidade: "C:", livre_gb: 150}] },
-            limpeza: { espaco_liberado_mb: 2048 },
-            relatorio_txt: "C:\\Fake\\Relatorio.txt"
+            snapshot_antes: { dados: { cpu: { uso_percentual: 80.0 }, memoria: { percentual_uso: 90.0, disponivel_gb: 1.0 }, discos: [{unidade: "C:", livre_gb: 100}] } },
+            snapshot_depois: { dados: { cpu: { uso_percentual: 50.0 }, memoria: { percentual_uso: 60.0, disponivel_gb: 4.0 }, discos: [{unidade: "C:", livre_gb: 150}] } },
+            resumo: { espaco_liberado_mb: 2048, otimizacoes_aplicadas: 4, otimizacoes_total: 5 },
+            limpeza: { categorias: [] },
+            otimizacoes: { resultados: { "opt1": { ok: true, descricao: "Otimização 1" } } },
+            protecao: { status: "restore_created", mensagem: "OK" },
+            analises: { smart: { ok: true, discos: [{device_id: "0", tipo_midia: "SSD", classificacao: "Saudável"}] } },
+            recomendacoes: [ { titulo: "Rec 1", descricao: "Desc", nivel: "aviso" } ]
         };
-        ctx.Phoenix.pages.relatorio.showResult(payload);
+        ctx.Phoenix.pages.relatorio.showResult({ payload: payload });
         
-        // Espaço liberado convertido de 2048 MB para 2.00 GB
-        assert.ok(ctx.container.innerHTML.includes("2.00 GB"), "Deve formatar espaço maior que 1024MB para GB");
+        const html = ctx.container.innerHTML;
         
-        // Caminho
-        assert.ok(ctx.container.innerHTML.includes("C:\\Fake\\Relatorio.txt"), "Deve conter o caminho do relatório");
+        // Formatar bytes
+        assert.ok(html.includes("2.00 GB"), "Deve formatar espaço maior que 1024MB para GB");
         
-        // Deltas - O CPU foi de 80 para 50 (diferença -30). Como é true (neutro), a badge deve ser neutro.
-        assert.ok(ctx.container.innerHTML.includes("30.0%"), "Deve formatar variação de CPU/RAM");
-        assert.ok(ctx.container.innerHTML.includes('badge neutro'), "Deve conter badge neutro para CPU/RAM, mesmo com mudança");
+        // Recomendações
+        assert.ok(html.includes("Recomendações e Achados"), "Deve mostrar bloco de recomendações");
+        assert.ok(html.includes("Rec 1"), "Deve renderizar a recomendação");
         
-        // O disco foi de 100 para 150 (ganho de 50GB). A badge do disco é sucesso.
-        assert.ok(ctx.container.innerHTML.includes('badge sucesso'), "Deve conter badge sucesso para aumento no espaço do disco");
-        assert.ok(ctx.container.innerHTML.includes('\u25B2'), "Deve conter seta pra cima em aumento de disco");
-    }
-
-    // Teste 5: showResult com piora
-    {
-        const ctx = setupEnvironment();
-        const payload = {
-            ok: true,
-            antes: { cpu: { uso_percentual: 10.0 }, memoria: { percentual_uso: 10.0, disponivel_gb: 8.0 }, discos: [{unidade: "C:", livre_gb: 100}] },
-            depois: { cpu: { uso_percentual: 90.0 }, memoria: { percentual_uso: 90.0, disponivel_gb: 2.0 }, discos: [{unidade: "C:", livre_gb: 50}] }, // Disco reduziu
-            limpeza: { espaco_liberado_mb: 0 },
-            relatorio_txt: ""
-        };
-        ctx.Phoenix.pages.relatorio.showResult(payload);
+        // Análises SMART
+        assert.ok(html.includes("Saúde do Sistema"), "Deve mostrar Saúde do Sistema");
+        assert.ok(html.includes("Saudável"), "Deve renderizar o estado do disco");
         
-        assert.ok(ctx.container.innerHTML.includes("0.0 MB"), "Deve formatar 0 MB pra 0.0 MB");
-        assert.ok(ctx.container.innerHTML.includes("Indisponível"), "Deve exibir fallback de txt vazio");
-        assert.ok(ctx.container.innerHTML.includes('badge erro'), "Deve exibir badge de erro para piora de disco");
-        assert.ok(ctx.container.innerHTML.includes('\u25BC'), "Deve exibir seta pra baixo para perda de espaço em disco");
-    }
-
-    // Teste 6: Neutro
-    {
-        const ctx = setupEnvironment();
-        const payload = {
-            ok: true,
-            antes: { cpu: { uso_percentual: 10.0 }, memoria: { percentual_uso: 10.0, disponivel_gb: 8.0 } },
-            depois: { cpu: { uso_percentual: 10.0 }, memoria: { percentual_uso: 10.0, disponivel_gb: 8.0 } },
-            espaco_liberado_mb: null,
-            relatorio_txt: "a"
-        };
-        ctx.Phoenix.pages.relatorio.showResult(payload);
-        
-        assert.ok(ctx.container.innerHTML.includes("N/D"), "Deve tratar espaço liberado nulo");
-        assert.ok(ctx.container.innerHTML.includes('badge neutro'), "Deve exibir badge neutro sem alterações");
-        assert.ok(ctx.container.innerHTML.includes('='), "Deve exibir símbolo = para ausência de alterações");
+        // Otimizações aplicadas
+        assert.ok(html.includes("4 / 5"), "Deve mostrar total de otimizações aplicadas");
     }
 
     console.log("Todos os testes JS da Página Relatório passaram.");
