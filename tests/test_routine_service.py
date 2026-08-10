@@ -299,3 +299,44 @@ def test_routine_service_relatorio_integration(tmp_path):
     conteudo_txt = caminho_txt.read_text(encoding="utf-8")
     assert "PHOENIX OPTIMIZER" in conteudo_txt
     assert "Integração" in conteudo_txt
+
+def test_smart_recommendations():
+    service = RoutineService(FakeDiagnostico(), FakeLimpeza(), FakeOtimizacao(), FakeLogs(), FakeRelatorio(), FakeSmart(), FakeDriverCheck())
+
+    # Saudável -> no warning
+    payload = {"analises": {"smart": {"ok": True, "discos": [{"health_status": "Healthy", "classificacao": "Saudável"}]}}, "depois": {}}
+    service._gerar_recomendacoes_deterministicas(payload)
+    assert not any(r["codigo"] == "DISK_HEALTH_WARNING" for r in payload.get("recomendacoes", []))
+
+    # Atenção -> warning
+    payload = {"analises": {"smart": {"ok": True, "discos": [{"health_status": "Healthy", "classificacao": "Atenção"}]}}, "depois": {}}
+    service._gerar_recomendacoes_deterministicas(payload)
+    assert any(r["codigo"] == "DISK_HEALTH_WARNING" for r in payload.get("recomendacoes", []))
+
+    # Crítico -> warning
+    payload = {"analises": {"smart": {"ok": True, "discos": [{"health_status": "Healthy", "classificacao": "Crítico"}]}}, "depois": {}}
+    service._gerar_recomendacoes_deterministicas(payload)
+    assert any(r["codigo"] == "DISK_HEALTH_WARNING" for r in payload.get("recomendacoes", []))
+
+def test_driver_recommendations():
+    service = RoutineService(FakeDiagnostico(), FakeLimpeza(), FakeOtimizacao(), FakeLogs(), FakeRelatorio(), FakeSmart(), FakeDriverCheck())
+
+    # Atualizado -> no warning
+    payload = {"analises": {"drivers": {"ok": True, "resultados": [{"classificacao": "Atualizado"}]}}, "depois": {}}
+    service._gerar_recomendacoes_deterministicas(payload)
+    assert not any(r["codigo"] == "DRIVER_REVIEW_RECOMMENDED" for r in payload.get("recomendacoes", []))
+
+    # Desconhecido -> no warning
+    payload = {"analises": {"drivers": {"ok": True, "resultados": [{"classificacao": "Desconhecido"}]}}, "depois": {}}
+    service._gerar_recomendacoes_deterministicas(payload)
+    assert not any(r["codigo"] == "DRIVER_REVIEW_RECOMMENDED" for r in payload.get("recomendacoes", []))
+
+    # Pode estar desatualizado -> warning
+    payload = {"analises": {"drivers": {"ok": True, "resultados": [{"classificacao": "Pode estar desatualizado"}]}}, "depois": {}}
+    service._gerar_recomendacoes_deterministicas(payload)
+    assert any(r["codigo"] == "DRIVER_REVIEW_RECOMMENDED" for r in payload.get("recomendacoes", []))
+
+    # Desatualizado -> warning
+    payload = {"analises": {"drivers": {"ok": True, "resultados": [{"classificacao": "Desatualizado"}]}}, "depois": {}}
+    service._gerar_recomendacoes_deterministicas(payload)
+    assert any(r["codigo"] == "DRIVER_REVIEW_RECOMMENDED" for r in payload.get("recomendacoes", []))

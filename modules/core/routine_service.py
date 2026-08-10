@@ -292,7 +292,7 @@ class RoutineService:
         smart = payload.get("analises", {}).get("smart", {})
         if smart.get("ok"):
             discos = smart.get("discos", [])
-            if any(d.get("health_status", "").lower() not in ["healthy", "saudável"] for d in discos):
+            if any(d.get("classificacao") in ["Atenção", "Crítico"] for d in discos):
                 recs.append({
                     "codigo": "DISK_HEALTH_WARNING",
                     "nivel": "erro",
@@ -313,7 +313,7 @@ class RoutineService:
 
         # 4. Drivers
         drivers = payload.get("analises", {}).get("drivers", {})
-        if drivers.get("ok") and any(d.get("classificacao") in ["Desatualizado", "Aviso"] for d in drivers.get("resultados", [])):
+        if drivers.get("ok") and any(d.get("classificacao") in ["Pode estar desatualizado", "Desatualizado"] for d in drivers.get("resultados", [])):
             recs.append({
                 "codigo": "DRIVER_REVIEW_RECOMMENDED",
                 "nivel": "aviso",
