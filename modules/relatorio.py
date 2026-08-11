@@ -188,9 +188,10 @@ def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois:
     else:
         for k, v in resultados_otim.items():
             status = "APLICADO" if v.get("ok") else "FALHOU"
-            if before_state:
-                is_active_before = before_state.get(k, False)
-                estado_antes = "Ativo" if is_active_before else "Inativo"
+            if before_state and k in before_state:
+                item_before = before_state[k]
+                is_active_before = item_before.get("ativo", False)
+                estado_antes = "Já aplicado" if is_active_before else "Não aplicado"
                 linhas.append(f"- {v.get('descricao', k)}")
                 linhas.append(f"    Antes: {estado_antes} | Ação: Otimizar | Resultado: {status}")
             else:

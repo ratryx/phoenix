@@ -150,13 +150,23 @@ def _calcular_idade_driver_dias(data_raw) -> int | None:
     return (datetime.now() - dt).days
 
 
-def _classificar_driver(idade_dias: int | None) -> tuple:
+def is_virtual_adapter(name: str, manufacturer: str) -> bool:
+    """Detects virtual/software display adapters based on common indicators."""
+    indicators = ["virtual", "remote", "parsec", "citrix", "vmware", "hyper-v"]
+    combined = f"{name} {manufacturer}".lower()
+    return any(ind in combined for ind in indicators)
+
+
+def _classificar_driver(idade_dias: int | None, tipo_adaptador: str = "fisico") -> tuple:
     """
-    Classifica o driver com base na sua idade:
+    Classifica o driver com base na sua idade e tipo de adaptador:
+    - Adaptador virtual: ignora a idade
     - < 90 dias: Atualizado
     - 90-365 dias: Pode estar desatualizado
     - > 365 dias: Desatualizado
     """
+    if tipo_adaptador == "virtual":
+        return "Adaptador virtual", "dim", "Adaptador virtual — atualização não avaliada"
     if idade_dias is None:
         return "Desconhecido", "dim", "Não foi possível determinar a data do driver."
 
@@ -190,10 +200,11 @@ def verificar_drivers_gpu(cancel_event=None) -> list:
 
         data_driver = _parse_driver_date(data_driver_raw)
         idade_dias = _calcular_idade_driver_dias(data_driver_raw)
-        classificacao, cor, mensagem = _classificar_driver(idade_dias)
+        tipo_adaptador = "virtual" if is_virtual_adapter(nome, str(fabricante)) else "fisico"
+        classificacao, cor, mensagem = _classificar_driver(idade_dias, tipo_adaptador)
 
         link_download = LINKS_DOWNLOAD.get(fabricante, "")
-        if not link_download:
+        if not link_download and tipo_adaptador != "virtual":
             # Tentar por nome parcial
             for chave, url in LINKS_DOWNLOAD.items():
                 if chave.upper() in str(fabricante).upper() or chave.upper() in nome.upper():
@@ -206,6 +217,7 @@ def verificar_drivers_gpu(cancel_event=None) -> list:
             "versao_driver": str(versao_driver),
             "data_driver": data_driver,
             "idade_dias": idade_dias,
+            "tipo_adaptador": tipo_adaptador,
             "classificacao": classificacao,
             "cor": cor,
             "mensagem": mensagem,
@@ -262,8 +274,7 @@ def executar_verificacao_drivers(id_atendimento: str = None, cancel_event=None) 
 
     if desatualizados > 0:
         console.print(Panel(
-            f"[bold red][AVISO] {desatualizados} driver(s) desatualizado(s)! "
-            f"Atualizar drivers é a forma mais eficaz de melhorar o desempenho em jogos.[/bold red]",
+            f"[bold red][AVISO] {desatualizados} driver(s) desatualizado(s) detectado(s).[/bold red]",
             border_style="red"
         ))
     elif possiveis > 0:

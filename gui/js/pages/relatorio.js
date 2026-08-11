@@ -42,7 +42,7 @@
         if (text !== undefined && text !== null) el.textContent = text;
         return el;
     }
-    
+
     function formatarStatusLimpeza(status, ignorados) {
         var s = String(status).toLowerCase();
         if (s === "parcial" || ignorados > 0) return "CONCLUÍDO COM EXCEÇÕES";
@@ -51,7 +51,7 @@
         if (s === "unsupported" || s === "não aplicável" || s === "nao aplicavel") return "NÃO APLICÁVEL";
         return s.toUpperCase();
     }
-    
+
     function statusLimpezaClass(status) {
         var s = String(status).toLowerCase();
         if (s.includes("exceções") || s.includes("excecoes")) return "aviso";
@@ -94,15 +94,40 @@
             tbody.appendChild(tr);
         }
 
-        // Grade Cards
+        // A. Identity
+        var cardId = createEl("div", "card");
+        cardId.style.marginBottom = "20px";
+        var titleId = createEl("h3", "", "Identificação do Atendimento");
+        titleId.style.marginTop = "0";
+        cardId.appendChild(titleId);
+
+        var listId = createEl("ul", "lista-simples");
+        listId.appendChild(createEl("li", "", "Cliente: " + (antes.cliente || "Não informado")));
+        listId.appendChild(createEl("li", "", "Atendimento ID: " + (payload.id_atendimento || "N/D")));
+        listId.appendChild(createEl("li", "", "Data/Hora: " + (depois.data_hora || "N/D")));
+        if (antes.sistema) {
+            listId.appendChild(createEl("li", "", "SO: " + (antes.sistema.sistema || "") + " " + (antes.sistema.versao || "")));
+            listId.appendChild(createEl("li", "", "CPU: " + (antes.sistema.processador || "N/D")));
+        }
+        if (antes.memoria) {
+            listId.appendChild(createEl("li", "", "RAM Total: " + (antes.memoria.total_gb || "N/D") + " GB"));
+        }
+        cardId.appendChild(listId);
+        container.appendChild(cardId);
+
+        // B. Summary Cards
         var gradeCards = createEl("div", "grade-cards");
         gradeCards.style.marginBottom = "20px";
+
+        var isRiskAccepted = protecao.status === "risk_accepted";
+        var protecaoStyle = isRiskAccepted ? "font-size: 14px; margin-top: 8px; color: #f59e0b; font-weight: bold;" : "font-size: 14px; margin-top: 8px;";
 
         var metricas = [
             { r: "Espaço Recuperado", v: formatarBytes(resumo.espaco_liberado_mb) },
             { r: "Itens Removidos", v: String(resumo.itens_removidos || 0) },
             { r: "Otimizações", v: (resumo.otimizacoes_aplicadas || 0) + " / " + (resumo.otimizacoes_total || 0) },
-            { r: "Proteção", v: formatarProtecao(protecao.status, protecao.mensagem), style: "font-size: 14px; margin-top: 8px;" }
+            { r: "Duração", v: formatarSegundos(payload.duracao_segundos) },
+            { r: "Proteção", v: formatarProtecao(protecao.status, protecao.mensagem), style: protecaoStyle }
         ];
 
         metricas.forEach(function(m) {
@@ -114,14 +139,23 @@
             gradeCards.appendChild(card);
         });
         container.appendChild(gradeCards);
-        
-        // Recomendações
+
+        // C1. Achados do Sistema
+        var startup = analises.startup || {};
+        if (startup.ok) {
+            var cardAchados = createEl("div", "card");
+            cardAchados.appendChild(createEl("strong", "", "Achados do Sistema"));
+            var ulAchados = createEl("ul", "lista-simples");
+            ulAchados.style.marginTop = "12px";
+            ulAchados.appendChild(createEl("li", "", "Entradas de inicialização: " + (startup.total || 0) + " (Alto impacto: " + (startup.alto_impacto || 0) + ")"));
+            cardAchados.appendChild(ulAchados);
+            container.appendChild(cardAchados);
+        }
+
+        // C2. Recomendações
         if (recs.length > 0) {
             var cardRecs = createEl("div", "card");
-            var strRecs = document.createElement("strong");
-            strRecs.textContent = "Recomendações e Achados";
-            cardRecs.appendChild(strRecs);
-            
+            cardRecs.appendChild(createEl("strong", "", "Recomendações"));
             var ulRecs = createEl("ul", "lista-simples");
             ulRecs.style.marginTop = "12px";
             recs.forEach(function(r) {
@@ -130,80 +164,154 @@
                 var cor = r.nivel === "sucesso" ? "#10b981" : (r.nivel === "aviso" ? "#f59e0b" : (r.nivel === "erro" ? "#ef4444" : "#3b82f6"));
                 li.style.borderLeft = "4px solid " + cor;
                 li.style.paddingLeft = "8px";
-                
+
                 var title = createEl("div", "", "");
                 var b = document.createElement("strong");
                 b.textContent = r.titulo;
                 title.appendChild(b);
                 li.appendChild(title);
-                
+
                 var desc = createEl("div", "texto-secundario", r.descricao);
                 li.appendChild(desc);
-                
                 ulRecs.appendChild(li);
             });
             cardRecs.appendChild(ulRecs);
             container.appendChild(cardRecs);
         }
 
-        // Análises (SMART e Drivers)
+        // D. Saúde do Sistema (SMART / Drivers Detailed)
         var hasSmart = analises.smart && analises.smart.ok;
         var hasDrivers = analises.drivers && analises.drivers.ok;
-        
+
         if (hasSmart || hasDrivers) {
             var cardAnalises = createEl("div", "card");
-            var strAnalises = document.createElement("strong");
-            strAnalises.textContent = "Saúde do Sistema";
-            cardAnalises.appendChild(strAnalises);
-            
+            cardAnalises.appendChild(createEl("strong", "", "Saúde do Sistema"));
+
             var flex = createEl("div", "");
             flex.style.display = "flex";
+            flex.style.flexDirection = "column";
             flex.style.gap = "20px";
             flex.style.marginTop = "12px";
-            
+
             if (hasSmart) {
                 var divSmart = createEl("div", "");
-                divSmart.style.flex = "1";
                 divSmart.appendChild(createEl("strong", "texto-secundario", "Discos (SMART)"));
                 var ulSmart = createEl("ul", "lista-simples");
                 var discos = analises.smart.discos || [];
                 discos.forEach(function(d) {
-                    var text = "Disco " + d.device_id + " (" + d.tipo_midia + "): " + d.classificacao;
-                    var li = createEl("li", "", text);
+                    var li = createEl("li", "", "");
+                    li.appendChild(createEl("strong", "", "Disco " + d.device_id + " (" + (d.tipo_midia || "N/D") + "): "));
+                    li.appendChild(document.createTextNode(d.classificacao));
+
+                    var subUl = createEl("ul", "lista-simples");
+                    subUl.style.marginLeft = "20px";
+                    subUl.style.fontSize = "0.9em";
+                    subUl.appendChild(createEl("li", "", "Modelo: " + (d.modelo || "N/D")));
+                    subUl.appendChild(createEl("li", "", "Capacidade: " + (d.capacidade_gb || "N/D") + " GB"));
+                    subUl.appendChild(createEl("li", "", "Temperatura: " + (d.temperatura || "N/D")));
+                    subUl.appendChild(createEl("li", "", "Horas de uso: " + (d.horas_ligado || "N/D")));
+                    if (d.alertas && d.alertas.length > 0) {
+                        subUl.appendChild(createEl("li", "texto-erro", "Alertas: " + d.alertas.join(", ")));
+                    }
+                    li.appendChild(subUl);
                     ulSmart.appendChild(li);
                 });
                 divSmart.appendChild(ulSmart);
                 flex.appendChild(divSmart);
             }
-            
+
             if (hasDrivers) {
                 var divDrivers = createEl("div", "");
-                divDrivers.style.flex = "1";
-                divDrivers.appendChild(createEl("strong", "texto-secundario", "Drivers"));
+                divDrivers.appendChild(createEl("strong", "texto-secundario", "Drivers de Vídeo"));
                 var ulDrivers = createEl("ul", "lista-simples");
                 var resultDrivers = analises.drivers.resultados || [];
                 if (resultDrivers.length === 0) {
-                     ulDrivers.appendChild(createEl("li", "", "OK"));
+                     ulDrivers.appendChild(createEl("li", "", "Nenhum driver de vídeo reportado."));
                 } else {
                      resultDrivers.forEach(function(d) {
-                         var text = d.nome + ": " + d.classificacao;
-                         var li = createEl("li", "", text);
+                         var li = createEl("li", "", "");
+                         li.appendChild(createEl("strong", "", d.nome + " (" + (d.fabricante || "N/D") + "): "));
+                         li.appendChild(document.createTextNode(d.classificacao));
+
+                         var subUl = createEl("ul", "lista-simples");
+                         subUl.style.marginLeft = "20px";
+                         subUl.style.fontSize = "0.9em";
+                         subUl.appendChild(createEl("li", "", "Tipo: " + (d.tipo_adaptador || "N/D")));
+                         subUl.appendChild(createEl("li", "", "Versão: " + (d.versao_driver || "N/D")));
+                         subUl.appendChild(createEl("li", "", "Data do driver: " + (d.data_driver || "N/D")));
+                         li.appendChild(subUl);
                          ulDrivers.appendChild(li);
                      });
                 }
                 divDrivers.appendChild(ulDrivers);
                 flex.appendChild(divDrivers);
             }
-            
+
             cardAnalises.appendChild(flex);
             container.appendChild(cardAnalises);
         }
 
-        // Detalhes da Limpeza
+        // F. Trabalho Realizado (Otimizações)
+        var cardOtim = createEl("div", "card");
+        cardOtim.appendChild(createEl("strong", "", "Trabalho Realizado (Otimizações)"));
+
+        var tabOtim = createEl("table", "tabela-dados");
+        tabOtim.style.marginTop = "12px";
+        var tHeadOtim = document.createElement("thead");
+        tHeadOtim.innerHTML = "<tr><th>Ação</th><th>Antes</th><th>Ação do Sistema</th><th>Status</th></tr>";
+        tabOtim.appendChild(tHeadOtim);
+
+        var tBodyOtim = document.createElement("tbody");
+        var resultados_otim = otim.resultados || {};
+        var before_state = otim.before_state || {};
+        var chaves_otim = Object.keys(resultados_otim);
+
+        if (chaves_otim.length === 0) {
+            var trVazioO = document.createElement("tr");
+            var tdVazioO = createEl("td", "texto-secundario", "Nenhuma otimização aplicada.");
+            tdVazioO.colSpan = 4;
+            trVazioO.appendChild(tdVazioO);
+            tBodyOtim.appendChild(trVazioO);
+        } else {
+            chaves_otim.forEach(function(k) {
+                var r = resultados_otim[k];
+                var status = r.ok ? "APLICADO" : "FALHOU";
+                var cor = r.ok ? "sucesso" : "erro";
+                var nome = r.descricao || k;
+
+                var estadoAntes = "N/D";
+                if (before_state[k]) {
+                    estadoAntes = before_state[k].ativo ? "Já aplicado" : "Não aplicado";
+                }
+
+                var tr = document.createElement("tr");
+                tr.appendChild(createEl("td", "", nome));
+                tr.appendChild(createEl("td", "", estadoAntes));
+                tr.appendChild(createEl("td", "", "Otimizar"));
+                var tdStatus = document.createElement("td");
+                tdStatus.appendChild(createEl("span", "badge " + cor, status));
+                tr.appendChild(tdStatus);
+                tBodyOtim.appendChild(tr);
+            });
+
+            if (cond && cond.otimizacao_disco && cond.otimizacao_disco.executado) {
+                var tr = document.createElement("tr");
+                tr.appendChild(createEl("td", "", "Otimização de Armazenamento (" + cond.otimizacao_disco.saida + ")"));
+                tr.appendChild(createEl("td", "", "N/D"));
+                tr.appendChild(createEl("td", "", "Otimizar"));
+                var tdStatus = document.createElement("td");
+                tdStatus.appendChild(createEl("span", "badge sucesso", "APLICADO"));
+                tr.appendChild(tdStatus);
+                tBodyOtim.appendChild(tr);
+            }
+        }
+        tabOtim.appendChild(tBodyOtim);
+        cardOtim.appendChild(tabOtim);
+        container.appendChild(cardOtim);
+
+        // E. Detalhes da Limpeza (com Totais)
         var cardLimpeza = createEl("div", "card");
-        var strLimpeza = document.createElement("strong");
-        strLimpeza.textContent = "Detalhes da Limpeza";
-        cardLimpeza.appendChild(strLimpeza);
+        cardLimpeza.appendChild(createEl("strong", "", "Detalhes da Limpeza"));
 
         var tabLimpeza = createEl("table", "tabela-dados");
         tabLimpeza.style.marginTop = "12px";
@@ -213,6 +321,9 @@
 
         var tBodyLimpeza = document.createElement("tbody");
         var categorias = limpeza.categorias || [];
+        var totalRemovidos = 0;
+        var totalPreservados = 0;
+
         if (categorias.length === 0) {
             var trVazioL = document.createElement("tr");
             var tdVazioL = createEl("td", "texto-secundario", "Nenhuma categoria processada.");
@@ -224,6 +335,9 @@
                 var removidos = cat.arquivos_removidos || 0;
                 var ignorados = cat.arquivos_ignorados || 0;
                 var mb = (cat.espaco_liberado_bytes || 0) / (1024*1024);
+
+                totalRemovidos += removidos;
+                totalPreservados += ignorados;
 
                 var tr = document.createElement("tr");
                 tr.appendChild(createEl("td", "", cat.nome || "Desconhecido"));
@@ -238,101 +352,72 @@
                 tr.appendChild(tdStatus);
                 tBodyLimpeza.appendChild(tr);
             });
+
+            var trFooter = document.createElement("tr");
+            trFooter.style.fontWeight = "bold";
+            trFooter.appendChild(createEl("td", "", "TOTAIS"));
+            trFooter.appendChild(createEl("td", "", String(totalRemovidos)));
+            trFooter.appendChild(createEl("td", "", String(totalPreservados)));
+            trFooter.appendChild(createEl("td", "", formatarBytes(resumo.espaco_liberado_mb)));
+            trFooter.appendChild(createEl("td", "", ""));
+            tBodyLimpeza.appendChild(trFooter);
         }
         tabLimpeza.appendChild(tBodyLimpeza);
         cardLimpeza.appendChild(tabLimpeza);
         container.appendChild(cardLimpeza);
 
-        // Otimizações Aplicadas
-        var cardOtim = createEl("div", "card");
-        var strOtim = document.createElement("strong");
-        strOtim.textContent = "Otimizações Aplicadas";
-        cardOtim.appendChild(strOtim);
-
-        var tabOtim = createEl("table", "tabela-dados");
-        tabOtim.style.marginTop = "12px";
-        var tHeadOtim = document.createElement("thead");
-        tHeadOtim.innerHTML = "<tr><th>Ação</th><th>Status</th></tr>";
-        tabOtim.appendChild(tHeadOtim);
-
-        var tBodyOtim = document.createElement("tbody");
-        var resultados_otim = otim.resultados || {};
-        var chaves_otim = Object.keys(resultados_otim);
-
-        if (chaves_otim.length === 0) {
-            var trVazioO = document.createElement("tr");
-            var tdVazioO = createEl("td", "texto-secundario", "Nenhuma otimização aplicada.");
-            tdVazioO.colSpan = 2;
-            trVazioO.appendChild(tdVazioO);
-            tBodyOtim.appendChild(trVazioO);
-        } else {
-            chaves_otim.forEach(function(k) {
-                var r = resultados_otim[k];
-                var status = r.ok ? "APLICADO" : "FALHOU";
-                var cor = r.ok ? "sucesso" : "erro";
-                var nome = r.descricao || k;
-
-                var tr = document.createElement("tr");
-                tr.appendChild(createEl("td", "", nome));
-                var tdStatus = document.createElement("td");
-                tdStatus.appendChild(createEl("span", "badge " + cor, status));
-                tr.appendChild(tdStatus);
-                tBodyOtim.appendChild(tr);
-            });
-            
-            // Condicionais
-            if (cond && cond.otimizacao_disco && cond.otimizacao_disco.executado) {
-                var tr = document.createElement("tr");
-                tr.appendChild(createEl("td", "", "Otimização de Armazenamento (" + cond.otimizacao_disco.saida + ")"));
-                var tdStatus = document.createElement("td");
-                tdStatus.appendChild(createEl("span", "badge sucesso", "APLICADO"));
-                tr.appendChild(tdStatus);
-                tBodyOtim.appendChild(tr);
-            }
-        }
-        tabOtim.appendChild(tBodyOtim);
-        cardOtim.appendChild(tabOtim);
-        container.appendChild(cardOtim);
-
-        // Estado do Sistema
+        // G. Estado do Sistema (Antes vs Depois)
         if (antes.cpu && depois.cpu) {
             var cardEstado = createEl("div", "card");
-            var strEstado = document.createElement("strong");
-            strEstado.textContent = "Estado do Sistema (Antes vs Depois)";
-            cardEstado.appendChild(strEstado);
-    
-            var pNota = createEl("p", "texto-secundario", "Nota: Uso de CPU/RAM são métricas oscilantes e não refletem necessariamente o ganho de desempenho em jogos.");
+            cardEstado.appendChild(createEl("strong", "", "Estado do Sistema (Antes vs Depois)"));
+
+            var pNota = createEl("p", "texto-secundario", "Nota: CPU e RAM são medições pontuais e podem variar durante o uso. Isoladamente, essas métricas não representam ganho ou perda de desempenho.");
             pNota.style.margin = "8px 0";
             cardEstado.appendChild(pNota);
-    
+
             var tabEstado = createEl("table", "tabela-dados");
             var tHeadEstado = document.createElement("thead");
             tHeadEstado.innerHTML = "<tr><th>Métrica</th><th>Antes</th><th>Depois</th></tr>";
             tabEstado.appendChild(tHeadEstado);
-    
+
             var tBodyEstado = document.createElement("tbody");
-    
+
             addLinhaComparativa(tBodyEstado, "Uso de CPU", antes.cpu.uso_percentual, depois.cpu.uso_percentual, "%");
             addLinhaComparativa(tBodyEstado, "Uso de RAM", antes.memoria.percentual_uso, depois.memoria.percentual_uso, "%");
             addLinhaComparativa(tBodyEstado, "RAM Disponível", antes.memoria.disponivel_gb, depois.memoria.disponivel_gb, " GB");
-    
-            // Discos
+
             if (antes.discos && depois.discos) {
                 var dAntes = {};
                 antes.discos.forEach(function(d) { dAntes[d.unidade] = d.livre_gb; });
                 var dDepois = {};
                 depois.discos.forEach(function(d) { dDepois[d.unidade] = d.livre_gb; });
-    
+
                 Object.keys(dAntes).forEach(function(u) {
                     if (dDepois[u] !== undefined) {
                         addLinhaComparativa(tBodyEstado, "Armazenamento Livre (" + u + ")", dAntes[u], dDepois[u], " GB");
                     }
                 });
             }
-    
+
             tabEstado.appendChild(tBodyEstado);
             cardEstado.appendChild(tabEstado);
             container.appendChild(cardEstado);
+        }
+
+        // H. Botões de Ação
+        if (Phoenix.bridge) {
+            var actionContainer = createEl("div", "");
+            actionContainer.style.display = "flex";
+            actionContainer.style.gap = "10px";
+            actionContainer.style.marginTop = "20px";
+
+            var btnAbrirPasta = createEl("button", "botao", "Abrir pasta do relatório");
+            btnAbrirPasta.onclick = function() {
+                Phoenix.bridge.abrir_pasta_relatorio(payload.id_atendimento);
+            };
+            actionContainer.appendChild(btnAbrirPasta);
+
+            container.appendChild(actionContainer);
         }
     };
 

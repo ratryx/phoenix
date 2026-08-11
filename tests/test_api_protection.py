@@ -63,14 +63,16 @@ def test_confirmar_risco_before_failed_attempt_rejected(api):
     assert res["ok"] is False
     assert api._protection_state == "not_attempted"
 
+@patch("modules.core.gui_logger.GUILogger.log")
 @patch("modules.otimizacao.criar_ponto_restauracao")
-def test_confirmar_risco_after_failed_attempt_sets_accepted(mock_criar, api):
+def test_confirmar_risco_after_failed_attempt_sets_accepted(mock_criar, mock_log, api):
     mock_criar.return_value = {"ok": False}
     _run_sync(api, "criar_ponto_restauracao")
     
     res = api.confirmar_risco_protecao()
     assert res["ok"] is True
     assert api._protection_state == "risk_accepted"
+    mock_log.assert_called_once_with("Ponto de restauração", "AVISO", "Execução autorizada sem ponto de restauração pelo operador.")
     
     # Mutação deve funcionar agora
     with patch("modules.otimizacao.executar_otimizacao_geral") as mock_otim:

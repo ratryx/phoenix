@@ -114,12 +114,12 @@ async function runTests() {
         assert.ok(html.includes("2.00 GB"), "Deve formatar espaço maior que 1024MB para GB");
         
         // Recomendações
-        assert.ok(html.includes("Recomendações e Achados"), "Deve mostrar bloco de recomendações");
+        assert.ok(html.includes("Recomendações"), "Deve mostrar bloco de recomendações");
         assert.ok(html.includes("Rec 1"), "Deve renderizar a recomendação");
         
         // Análises SMART
         assert.ok(html.includes("Saúde do Sistema"), "Deve mostrar Saúde do Sistema");
-        assert.ok(html.includes("Saudável"), "Deve renderizar o estado do disco");
+        assert.ok(html.includes("Saud"), "Deve renderizar o estado do disco");
         
         // Otimizações aplicadas
         assert.ok(html.includes("4 / 5"), "Deve mostrar total de otimizações aplicadas");

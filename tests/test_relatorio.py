@@ -56,7 +56,7 @@ def test_exportar_relatorio_txt_v2(tmp_path):
 
     snapshot_antes = {'cliente': 'Teste', 'dados': {'cpu': {'uso_percentual': 50}, 'memoria': {'percentual_uso': 50, 'disponivel_gb': 4}, 'discos': [{'unidade': 'C:', 'livre_gb': 10}]}}
     snapshot_depois = {'data_hora': '2026-08-08 12:00:00', 'dados': {'cpu': {'uso_percentual': 40}, 'memoria': {'percentual_uso': 40, 'disponivel_gb': 6}, 'discos': [{'unidade': 'C:', 'livre_gb': 20}]}}
-    
+
     payload_mock = {
         'duracao_segundos': 120,
         'resumo': {
@@ -88,3 +88,29 @@ def test_exportar_relatorio_txt_v2(tmp_path):
     assert 'Espaço liberado: 500.00 MB' in conteudo_txt
     assert 'Otimizações aplicadas: 4 de 5' in conteudo_txt
     assert 'Status de proteção: Ponto de restauração criado e verificado' in conteudo_txt
+
+def test_exportar_relatorio_txt_before_state_contract(tmp_path):
+    saida_txt = tmp_path / 'relatorio_before_state.txt'
+    snapshot_antes = {'cliente': 'Teste', 'dados': {'cpu': {'uso_percentual': 50}, 'memoria': {'percentual_uso': 50, 'disponivel_gb': 4}, 'discos': [{'unidade': 'C:', 'livre_gb': 10}]}}
+    snapshot_depois = snapshot_antes
+
+    payload_mock = {
+        'otimizacoes': {
+            'before_state': {
+                'plano_energia': {'ativo': False, 'descricao': 'Plano'},
+                'modo_jogo': {'ativo': True, 'descricao': 'Modo Jogo'}
+            },
+            'resultados': {
+                'plano_energia': {'ok': True, 'descricao': 'Plano'},
+                'modo_jogo': {'ok': True, 'descricao': 'Modo Jogo'},
+                'sem_estado': {'ok': True, 'descricao': 'Sem Estado'}
+            }
+        },
+    }
+
+    exportar_relatorio_txt(payload_mock, snapshot_antes, snapshot_depois, saida_txt)
+
+    conteudo = saida_txt.read_text(encoding='utf-8')
+    assert "Antes: Não aplicado | Ação: Otimizar | Resultado: APLICADO" in conteudo
+    assert "Antes: Já aplicado | Ação: Otimizar | Resultado: APLICADO" in conteudo
+    assert "- Sem Estado -> APLICADO" in conteudo

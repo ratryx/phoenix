@@ -326,6 +326,11 @@ def test_driver_recommendations():
     service._gerar_recomendacoes_deterministicas(payload)
     assert not any(r["codigo"] == "DRIVER_REVIEW_RECOMMENDED" for r in payload.get("recomendacoes", []))
 
+    # Adaptador virtual -> no warning
+    payload = {"analises": {"drivers": {"ok": True, "resultados": [{"classificacao": "Adaptador virtual"}]}}, "depois": {}}
+    service._gerar_recomendacoes_deterministicas(payload)
+    assert not any(r["codigo"] == "DRIVER_REVIEW_RECOMMENDED" for r in payload.get("recomendacoes", []))
+
     # Desconhecido -> no warning
     payload = {"analises": {"drivers": {"ok": True, "resultados": [{"classificacao": "Desconhecido"}]}}, "depois": {}}
     service._gerar_recomendacoes_deterministicas(payload)

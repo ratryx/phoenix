@@ -110,7 +110,8 @@ class RoutineService:
             check_cancel()
             if job_context: job_context.update_progress(45, "Aplicando otimizações seguras...")
             try:
-                before_state = self._otimizacao.verificar_status_otimizacoes()
+                before_state_raw = self._otimizacao.verificar_status_otimizacoes()
+                before_state = {item["id"]: {"ativo": item["ativo"], "descricao": item["descricao"], "detalhe": item.get("detalhe", "")} for item in before_state_raw.get("itens", [])}
                 optimization_result = self._otimizacao.executar_otimizacao_geral(
                     id_atendimento,
                     cancel_event=job_context.cancel_event if job_context else None,

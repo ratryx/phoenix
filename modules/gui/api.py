@@ -315,6 +315,8 @@ class PhoenixAPI:
     def confirmar_risco_protecao(self) -> dict:
         if self._restore_attempt_failed:
             self._protection_state = "risk_accepted"
+            from modules.core.gui_logger import GUILogger
+            GUILogger.log("Ponto de restauração", "AVISO", "Execução autorizada sem ponto de restauração pelo operador.")
             return {"ok": True}
         return {"ok": False, "erro": "Não é possível confirmar risco sem uma falha prévia de restauração.", "codigo": "INVALID_RISK_ACCEPTANCE"}
 
