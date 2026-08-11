@@ -148,11 +148,18 @@ class GUILogger:
         op = friendly_names.get(op_raw, op_raw)
 
         if status == "done":
-            parcial = res.get("parcial", False)
-            if parcial:
-                cls.log(op, "AVISO", f"Operação '{op}' concluída com avisos.")
+            if op_raw == "criar_ponto_restauracao":
+                if res.get("ok"):
+                    cls.log(op, "OK", "Ponto de restauração criado e verificado.")
+                else:
+                    erro = res.get("erro", "Não foi possível criar um ponto de restauração.")
+                    cls.log(op, "AVISO", f"{erro}")
             else:
-                cls.log(op, "OK", f"Operação '{op}' concluída com sucesso.")
+                parcial = res.get("parcial", False)
+                if parcial:
+                    cls.log(op, "AVISO", f"Operação '{op}' concluída com avisos.")
+                else:
+                    cls.log(op, "OK", f"Operação '{op}' concluída com sucesso.")
         elif status == "failed":
             codigo = res.get("codigo", "ERRO_DESCONHECIDO")
             if codigo == "JOB_CONFLICT":

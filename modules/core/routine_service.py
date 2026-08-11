@@ -110,10 +110,12 @@ class RoutineService:
             check_cancel()
             if job_context: job_context.update_progress(45, "Aplicando otimizações seguras...")
             try:
+                before_state = self._otimizacao.verificar_status_otimizacoes()
                 optimization_result = self._otimizacao.executar_otimizacao_geral(
                     id_atendimento,
                     cancel_event=job_context.cancel_event if job_context else None,
                 )
+                optimization_result["before_state"] = before_state
                 if optimization_result.get("codigo") == "COMMAND_CANCELLED":
                     raise JobCancelledError()
             except JobCancelledError:

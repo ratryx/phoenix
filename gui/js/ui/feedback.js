@@ -104,62 +104,70 @@
             if (info.length > 0) {
                 subtitulo.textContent = info.join(" | ");
             }
-            
+
             const detalhesContainer = document.getElementById('overlay-detalhes-limpeza');
-            if (detalhesContainer && detalhes.categorias) {
-                detalhesContainer.style.display = 'block';
-                
-                const contadores = document.getElementById('overlay-progresso-numerico');
-                if (contadores) {
-                    let catAtualStr = detalhes.categoria ? `${detalhes.categoria} — ` : '';
-                    let percStr = detalhes.categoria_percentual !== undefined ? `${detalhes.categoria_percentual}%` : '';
-                    let proc = detalhes.arquivos_processados || 0;
-                    let tot = detalhes.arquivos_total || 0;
-                    let lib = detalhes.espaco_liberado_mb !== undefined ? detalhes.espaco_liberado_mb : 0;
-                    
-                    contadores.replaceChildren();
-                    
-                    if (catAtualStr || percStr) {
-                        const pCat = document.createElement('div');
-                        pCat.textContent = `${catAtualStr}${percStr}`;
-                        contadores.appendChild(pCat);
-                    }
-                    const pCont = document.createElement('div');
-                    pCont.textContent = `${proc} / ${tot} itens`;
-                    pCont.style.fontWeight = 'normal';
-                    contadores.appendChild(pCont);
-                    
-                    const pEsp = document.createElement('div');
-                    pEsp.textContent = `${lib} MB liberados`;
-                    pEsp.style.fontWeight = 'normal';
-                    contadores.appendChild(pEsp);
-                }
-                
-                const lista = document.getElementById('overlay-categorias');
-                if (lista) {
-                    lista.replaceChildren();
-                    for (let c of detalhes.categorias) {
-                        const div = document.createElement('div');
-                        let st = 'Aguardando';
-                        let cor = 'var(--cor-texto-secundario)';
-                        
-                        if (c.status === 'limpando') { 
-                            st = c.percentual !== undefined ? `Limpando ${c.percentual}%` : 'Limpando...'; 
-                            cor = 'var(--cor-alerta-texto)'; 
-                        } else if (c.status === 'concluido') { 
-                            st = 'Concluído'; 
-                            cor = 'var(--cor-sucesso-texto)'; 
-                        } else if (c.status === 'parcial') { 
-                            st = 'Parcial'; 
-                            cor = 'var(--cor-alerta-texto)'; 
-                        } else if (c.status === 'falhou') { 
-                            st = 'Falhou'; 
-                            cor = 'var(--cor-erro-texto)'; 
+            if (detalhesContainer) {
+                if (!detalhes.categorias) {
+                    detalhesContainer.style.display = 'none';
+                    if (subtitulo) subtitulo.textContent = "";
+                } else {
+                    detalhesContainer.style.display = 'block';
+
+                    const contadores = document.getElementById('overlay-progresso-numerico');
+                    if (contadores) {
+                        let catAtualStr = detalhes.categoria ? `${detalhes.categoria} — ` : '';
+                        let percStr = detalhes.categoria_percentual !== undefined ? `${detalhes.categoria_percentual}%` : '';
+                        let proc = detalhes.arquivos_processados || 0;
+                        let tot = detalhes.arquivos_total || 0;
+                        let lib = detalhes.espaco_liberado_mb !== undefined ? detalhes.espaco_liberado_mb : 0;
+
+                        contadores.replaceChildren();
+
+                        if (catAtualStr || percStr) {
+                            const pCat = document.createElement('div');
+                            pCat.textContent = `${catAtualStr}${percStr}`;
+                            contadores.appendChild(pCat);
                         }
-                        
-                        div.textContent = `[${st}] ${c.nome}`;
-                        div.style.color = cor;
-                        lista.appendChild(div);
+                        const pCont = document.createElement('div');
+                        pCont.textContent = `${proc} / ${tot} itens`;
+                        pCont.style.fontWeight = 'normal';
+                        contadores.appendChild(pCont);
+
+                        const pEsp = document.createElement('div');
+                        pEsp.textContent = `${lib} MB liberados`;
+                        pEsp.style.fontWeight = 'normal';
+                        contadores.appendChild(pEsp);
+                    }
+
+                    const lista = document.getElementById('overlay-categorias');
+                    if (lista) {
+                        lista.replaceChildren();
+                        for (let c of detalhes.categorias) {
+                            const div = document.createElement('div');
+                            let st = 'Aguardando';
+                            let cor = 'var(--cor-texto-secundario)';
+
+                            if (c.status === 'limpando') {
+                                st = c.percentual !== undefined ? `Limpando ${c.percentual}%` : 'Limpando...';
+                                cor = 'var(--cor-alerta-texto)';
+                            } else if (c.status === 'concluido') {
+                                st = 'Concluído';
+                                cor = 'var(--cor-sucesso-texto)';
+                            } else if (c.status === 'parcial') {
+                                st = 'Concluído com exceções';
+                                cor = 'var(--cor-alerta-texto)';
+                            } else if (c.status === 'falhou') {
+                                st = 'Falhou';
+                                cor = 'var(--cor-erro-texto)';
+                            } else if (c.status === 'vazio') {
+                                st = 'Nada a limpar';
+                                cor = 'var(--cor-texto-secundario)';
+                            }
+
+                            div.textContent = `[${st}] ${c.nome}`;
+                            div.style.color = cor;
+                            lista.appendChild(div);
+                        }
                     }
                 }
             }

@@ -361,7 +361,9 @@ class ProgressTracker:
 
     def start_category(self, cat_id):
         if self.current_cat and self.current_cat["status"] == "limpando":
-            if self.current_cat["arquivos_ignorados"] > 0:
+            if self.current_cat["arquivos_total"] == 0:
+                self.current_cat["status"] = "vazio"
+            elif self.current_cat["arquivos_ignorados"] > 0:
                 self.current_cat["status"] = "parcial"
             else:
                 self.current_cat["status"] = "concluido"
@@ -377,6 +379,12 @@ class ProgressTracker:
         self.total_arquivos += 1
 
     def increment_processed(self, cat_id, removed=0, ignored=0, bytes_liberados=0):
+        cat = self.cat_map[cat_id]
+        if cat["processados_na_categoria"] + (removed + ignored) > cat["arquivos_total"]:
+            excess = (cat["processados_na_categoria"] + (removed + ignored)) - cat["arquivos_total"]
+            cat["arquivos_total"] += excess
+            self.total_arquivos += excess
+
         self.arquivos_processados += (removed + ignored)
         self.arquivos_removidos += removed
         self.arquivos_ignorados += ignored
@@ -437,7 +445,12 @@ class ProgressTracker:
         self.fase = "concluido" if success else "falhou"
         if self.current_cat:
             if self.fase == "concluido":
-                self.current_cat["status"] = "parcial" if self.current_cat["arquivos_ignorados"] > 0 else "concluido"
+                if self.current_cat["arquivos_total"] == 0:
+                    self.current_cat["status"] = "vazio"
+                elif self.current_cat["arquivos_ignorados"] > 0:
+                    self.current_cat["status"] = "parcial"
+                else:
+                    self.current_cat["status"] = "concluido"
             else:
                 self.current_cat["status"] = "falhou"
             self.current_cat["percentual"] = 100

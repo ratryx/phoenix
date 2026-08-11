@@ -150,8 +150,12 @@ def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois:
         "PHOENIX OPTIMIZER - RELATÓRIO TÉCNICO V3",
         "=" * 50,
         f"Cliente: {cliente}",
+        f"Atendimento ID: {payload.get('id_atendimento', 'N/D')}",
         f"Data: {snapshot_depois.get('data_hora', '')}",
         f"Duração: {payload.get('duracao_segundos', 0)}s",
+        f"Sistema Operacional: {snapshot_antes.get('sistema', {}).get('sistema', '')} {snapshot_antes.get('sistema', {}).get('versao', '')}",
+        f"Processador: {snapshot_antes.get('sistema', {}).get('processador', 'N/D')}",
+        f"Memória RAM Total: {snapshot_antes.get('memoria', {}).get('total_gb', 'N/D')} GB",
         "",
         "--- A. RESULTADO DO ATENDIMENTO ---",
         f"Espaço liberado: {resumo.get('espaco_liberado_mb', 0):.2f} MB",
@@ -178,12 +182,19 @@ def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois:
     linhas.append("")
     linhas.append("--- C. TRABALHO REALIZADO (Otimizações) ---")
     resultados_otim = otim.get("resultados", {})
+    before_state = otim.get("before_state", {})
     if not resultados_otim:
         linhas.append("Nenhuma otimização aplicada.")
     else:
         for k, v in resultados_otim.items():
             status = "APLICADO" if v.get("ok") else "FALHOU"
-            linhas.append(f"- {v.get('descricao', k)} -> {status}")
+            if before_state:
+                is_active_before = before_state.get(k, False)
+                estado_antes = "Ativo" if is_active_before else "Inativo"
+                linhas.append(f"- {v.get('descricao', k)}")
+                linhas.append(f"    Antes: {estado_antes} | Ação: Otimizar | Resultado: {status}")
+            else:
+                linhas.append(f"- {v.get('descricao', k)} -> {status}")
 
     cond = payload.get("acoes_condicionais", {})
     if cond.get("otimizacao_disco", {}).get("executado"):
@@ -195,21 +206,27 @@ def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois:
     if not categorias:
         linhas.append("Nenhuma categoria processada.")
     else:
+        total_removidos = 0
+        total_preservados = 0
         for cat in categorias:
             nome = cat.get("nome", "Desconhecido")
             removidos = cat.get("arquivos_removidos", 0)
             ignorados = cat.get("arquivos_ignorados", 0)
+            total_removidos += removidos
+            total_preservados += ignorados
             mb = cat.get("espaco_liberado_bytes", 0) / (1024*1024)
             status = _formatar_status_limpeza(cat.get("status", ""), ignorados)
             linhas.append(f"- {nome}: {removidos} removidos, {ignorados} preservados, {mb:.2f} MB recuperados [{status}]")
+        linhas.append("")
+        linhas.append(f"TOTAL: {total_removidos} itens removidos | {total_preservados} itens preservados")
 
     linhas.append("")
     linhas.append("--- E. SAÚDE DO SISTEMA ---")
     drivers = analises.get("drivers", {})
-    if drivers.get("ok"):
+    if drivers.get("ok") and drivers.get("resultados"):
         linhas.append("Drivers:")
         for dr in drivers.get("resultados", []):
-            linhas.append(f"  - {dr.get('nome')}: {dr.get('classificacao')}")
+            linhas.append(f"  - {dr.get('nome')} ({dr.get('fabricante')}): {dr.get('classificacao')}")
     else:
         linhas.append("Drivers: Análise indisponível.")
 

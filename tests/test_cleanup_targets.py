@@ -108,3 +108,19 @@ def test_lixeira_desativada():
 def test_lixeira_ativada():
     alvos = _obter_alvos_limpeza(incluir_lixeira=True)
     assert 'lixeira' in alvos
+
+def test_progress_tracker_invariant():
+    from modules.core.cleanup_service import ProgressTracker
+    tracker = ProgressTracker(None)
+    tracker.add_category('test', 'Test Category')
+    tracker.set_fase('contando')
+    tracker.start_category('test')
+    for _ in range(5):
+        tracker.add_count('test')
+    tracker.set_fase('limpando')
+    tracker.start_category('test')
+    for _ in range(6):
+        tracker.increment_processed('test', removed=1, ignored=0)
+    assert tracker.arquivos_processados <= tracker.total_arquivos
+    assert tracker.cat_map['test']['processados_na_categoria'] <= tracker.cat_map['test']['arquivos_total']
+    assert tracker.total_arquivos == 6
