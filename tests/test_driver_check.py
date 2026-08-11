@@ -20,7 +20,7 @@ def test_virtual_adapter_classification():
 def test_physical_adapter_classification():
     classificacao, _, _ = _classificar_driver(10, "fisico")
     assert classificacao == "Atualizado"
-    
+
     classificacao, _, _ = _classificar_driver(400, "fisico")
     assert classificacao == "Desatualizado"
 
@@ -42,14 +42,58 @@ def test_verificar_drivers_gpu_virtual_flow(mock_nvidia, mock_wmi):
         }
     ]
     mock_nvidia.return_value = None
-    
+
     resultados = verificar_drivers_gpu()
     assert len(resultados) == 2
-    
+
     parsec = resultados[0]
     assert parsec["tipo_adaptador"] == "virtual"
     assert parsec["classificacao"] == "Adaptador virtual"
-    
+
     nvidia = resultados[1]
     assert nvidia["tipo_adaptador"] == "fisico"
     assert nvidia["classificacao"] == "Desatualizado"
+from modules.driver_check import executar_verificacao_drivers
+from io import StringIO
+from rich.console import Console
+
+@patch("modules.driver_check.verificar_drivers_gpu")
+def test_executar_verificacao_somente_virtual(mock_verificar):
+    mock_verificar.return_value = [
+        {"nome": "Parsec", "fabricante": "Parsec", "versao_driver": "1.0", "data_driver": "01/01/2020", "idade_dias": 1000, "tipo_adaptador": "virtual", "classificacao": "Adaptador virtual", "cor": "dim", "mensagem": "", "link_download": ""}
+    ]
+
+    with patch("modules.driver_check.console", Console(file=StringIO(), force_terminal=False)) as mock_console:
+        executar_verificacao_drivers()
+        output = mock_console.file.getvalue()
+
+        assert "Nenhum driver físico de GPU requer revisão" in output
+        assert "1 adaptador(es) virtual(is) não foram avaliados" in output
+
+@patch("modules.driver_check.verificar_drivers_gpu")
+def test_executar_verificacao_fisico_atualizado_e_virtual(mock_verificar):
+    mock_verificar.return_value = [
+        {"nome": "Parsec", "fabricante": "Parsec", "versao_driver": "1.0", "data_driver": "01/01/2020", "idade_dias": 1000, "tipo_adaptador": "virtual", "classificacao": "Adaptador virtual", "cor": "dim", "mensagem": "", "link_download": ""},
+        {"nome": "NVIDIA", "fabricante": "NVIDIA", "versao_driver": "1.0", "data_driver": "01/01/2020", "idade_dias": 10, "tipo_adaptador": "fisico", "classificacao": "Atualizado", "cor": "green", "mensagem": "", "link_download": ""}
+    ]
+
+    with patch("modules.driver_check.console", Console(file=StringIO(), force_terminal=False)) as mock_console:
+        executar_verificacao_drivers()
+        output = mock_console.file.getvalue()
+
+        assert "Nenhum driver físico de GPU requer revisão" in output
+        assert "1 adaptador(es) virtual(is) não foram avaliados" in output
+
+@patch("modules.driver_check.verificar_drivers_gpu")
+def test_executar_verificacao_fisico_desatualizado_e_virtual(mock_verificar):
+    mock_verificar.return_value = [
+        {"nome": "Parsec", "fabricante": "Parsec", "versao_driver": "1.0", "data_driver": "01/01/2020", "idade_dias": 1000, "tipo_adaptador": "virtual", "classificacao": "Adaptador virtual", "cor": "dim", "mensagem": "", "link_download": ""},
+        {"nome": "NVIDIA", "fabricante": "NVIDIA", "versao_driver": "1.0", "data_driver": "01/01/2020", "idade_dias": 1000, "tipo_adaptador": "fisico", "classificacao": "Desatualizado", "cor": "red", "mensagem": "", "link_download": ""}
+    ]
+
+    with patch("modules.driver_check.console", Console(file=StringIO(), force_terminal=False)) as mock_console:
+        executar_verificacao_drivers()
+        output = mock_console.file.getvalue()
+
+        assert "1 driver(s) desatualizado(s) detectado(s)" in output
+        assert "1 adaptador(es) virtual(is) não foram avaliados" in output

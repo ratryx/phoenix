@@ -271,6 +271,7 @@ def executar_verificacao_drivers(id_atendimento: str = None, cancel_event=None) 
     # Resumo
     desatualizados = sum(1 for g in resultados if g["classificacao"] == "Desatualizado")
     possiveis = sum(1 for g in resultados if g["classificacao"] == "Pode estar desatualizado")
+    virtuais = sum(1 for g in resultados if g.get("tipo_adaptador") == "virtual")
 
     if desatualizados > 0:
         console.print(Panel(
@@ -285,9 +286,12 @@ def executar_verificacao_drivers(id_atendimento: str = None, cancel_event=None) 
         ))
     else:
         console.print(Panel(
-            "[bold green][OK] Todos os drivers de GPU estão atualizados![/bold green]",
+            "[bold green][OK] Nenhum driver físico de GPU requer revisão.[/bold green]",
             border_style="green"
         ))
+
+    if virtuais > 0:
+        console.print(f"  [dim]{virtuais} adaptador(es) virtual(is) não foram avaliados para atualização.[/dim]")
 
     if id_atendimento:
         from modules import logs

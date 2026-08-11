@@ -424,6 +424,36 @@ class PhoenixAPI:
 
     # ---------- Logs / relatório ----------
 
+    def abrir_pasta_relatorio(self, id_atendimento: str) -> dict:
+        """Abre a pasta contendo os relatórios (logs oficiais)."""
+        from modules import logs
+        from modules.core.windows_command import run_windows_command, to_public_result
+        try:
+            pasta = logs.obter_pasta_logs()
+            if not pasta.exists():
+                return {"ok": False, "erro": "Pasta não encontrada"}
+            # Usa abstração segura para não bloquear o backend
+            res_obj = run_windows_command(f'explorer "{pasta}"', timeout_seconds=5.0)
+            res = to_public_result(res_obj)
+            return {"ok": res["ok"], "codigo": res.get("returncode", res.get("codigo", 0))}
+        except Exception as e:
+            return {"ok": False, "erro": str(e)}
+
+    def abrir_relatorio_html(self, id_atendimento: str) -> dict:
+        """Abre o relatório HTML específico do atendimento."""
+        from modules import logs
+        from modules.core.windows_command import run_windows_command, to_public_result
+        try:
+            pasta = logs.obter_pasta_logs()
+            arquivo = pasta / f"{id_atendimento}_relatorio.html"
+            if not arquivo.exists():
+                return {"ok": False, "erro": "Relatório HTML não encontrado"}
+            res_obj = run_windows_command(f'explorer "{arquivo}"', timeout_seconds=5.0)
+            res = to_public_result(res_obj)
+            return {"ok": res["ok"], "codigo": res.get("returncode", res.get("codigo", 0))}
+        except Exception as e:
+            return {"ok": False, "erro": str(e)}
+
     def obter_historico(self) -> dict:
         try:
             atendimentos = logs.listar_atendimentos()

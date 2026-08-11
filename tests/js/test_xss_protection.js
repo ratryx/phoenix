@@ -48,6 +48,9 @@ function createMockDOM() {
             error: function () { context.errors.push(Array.from(arguments)); },
             log: function () { context.logs.push(Array.from(arguments)); }
         },
+        navigator: {
+            clipboard: { writeText: function(text) { return Promise.resolve(); } }
+        },
         Phoenix: {
             pages: {},
             bridge: {
@@ -215,7 +218,7 @@ async function testRelatorioV2() {
         process.exit(1);
     }
 
-    // Verify content text
+    // Executa os scripts no contexto
     const allText = findTextContent(container);
     if (!allText.includes(payload1) || !allText.includes(payload2)) {
         console.error("Payload not found in textContent!");

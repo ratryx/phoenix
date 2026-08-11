@@ -34,6 +34,13 @@ function setupEnvironment() {
             error: function () { context.errors.push(Array.from(arguments)); },
             log: function () { context.logs.push(Array.from(arguments)); }
         },
+        navigator: {
+            clipboard: {
+                writeText: function(text) {
+                    return Promise.resolve();
+                }
+            }
+        },
         Phoenix: { pages: {} }
     };
     context.window.Phoenix = context.Phoenix;
@@ -97,32 +104,63 @@ async function runTests() {
     {
         const ctx = setupEnvironment();
         const payload = {
-            snapshot_antes: { dados: { cpu: { uso_percentual: 80.0 }, memoria: { percentual_uso: 90.0, disponivel_gb: 1.0 }, discos: [{unidade: "C:", livre_gb: 100}] } },
-            snapshot_depois: { dados: { cpu: { uso_percentual: 50.0 }, memoria: { percentual_uso: 60.0, disponivel_gb: 4.0 }, discos: [{unidade: "C:", livre_gb: 150}] } },
+            antes: { dados: { cpu: { uso_percentual: 80.0 }, memoria: { percentual_uso: 90.0, disponivel_gb: 1.0 }, discos: [{unidade: "C:", livre_gb: 100}] }, cliente: "John Doe" },
+            depois: { dados: { cpu: { uso_percentual: 50.0 }, memoria: { percentual_uso: 60.0, disponivel_gb: 4.0 }, discos: [{unidade: "C:", livre_gb: 150}] } },
             resumo: { espaco_liberado_mb: 2048, otimizacoes_aplicadas: 4, otimizacoes_total: 5 },
-            limpeza: { categorias: [] },
-            otimizacoes: { resultados: { "opt1": { ok: true, descricao: "Otimização 1" } } },
+            limpeza: { categorias: [{nome: "Cache", arquivos_removidos: 5, arquivos_ignorados: 0, espaco_liberado_bytes: 1024, status: "concluido"}] },
+            otimizacoes: { resultados: { "opt1": { ok: true, descricao: "Otimização 1" } }, before_state: { "opt1": { ativo: false } } },
             protecao: { status: "restore_created", mensagem: "OK" },
-            analises: { smart: { ok: true, discos: [{device_id: "0", tipo_midia: "SSD", classificacao: "Saudável"}] } },
-            recomendacoes: [ { titulo: "Rec 1", descricao: "Desc", nivel: "aviso" } ]
+            analises: {
+                startup: { ok: true, total: 10, alto_impacto: 2 },
+                smart: { ok: true, discos: [{device_id: "0", nome: "SSD Pro", tipo_midia: "SSD", tamanho_gb: 500, classificacao: "Saudável", confiabilidade: { temperatura_c: 35, horas_uso: 100, wear_percent: 5, erros_leitura: 0, erros_escrita: 0 }, alertas: []}] },
+                drivers: { ok: true, resultados: [{nome: "Virtual GPU", fabricante: "Parsec", classificacao: "Adaptador virtual", tipo_adaptador: "virtual"}] }
+            },
+            recomendacoes: [ { titulo: "Rec 1", descricao: "Desc", nivel: "aviso" } ],
+            duracao_segundos: 45,
+            relatorio_html: "C:\\Fake\\Relatorio.html"
         };
         ctx.Phoenix.pages.relatorio.showResult({ payload: payload });
-        
+
         const html = ctx.container.innerHTML;
-        
+
         // Formatar bytes
         assert.ok(html.includes("2.00 GB"), "Deve formatar espaço maior que 1024MB para GB");
-        
+
         // Recomendações
         assert.ok(html.includes("Recomendações"), "Deve mostrar bloco de recomendações");
         assert.ok(html.includes("Rec 1"), "Deve renderizar a recomendação");
-        
-        // Análises SMART
+
+        // Análises SMART reais
         assert.ok(html.includes("Saúde do Sistema"), "Deve mostrar Saúde do Sistema");
-        assert.ok(html.includes("Saud"), "Deve renderizar o estado do disco");
-        
-        // Otimizações aplicadas
+        assert.ok(html.includes("SSD Pro"), "Deve renderizar o nome do disco");
+        assert.ok(html.includes("35°C"), "Deve renderizar a temperatura");
+        assert.ok(html.includes("5%"), "Deve renderizar desgaste");
+
+        // Achados startup
+        assert.ok(html.includes("2 programa(s) de inicialização com potencial impacto"), "Deve exibir a wording correta de startup");
+
+        // Identidade
+        assert.ok(html.includes("John Doe"), "Deve exibir o cliente");
+        assert.ok(html.includes("45s"), "Deve exibir duração");
+
+        // Drivers virtuais
+        assert.ok(html.includes("Virtual GPU"), "Deve exibir drivers");
+        assert.ok(html.includes("Adaptador virtual"), "Deve mostrar classificação de driver virtual");
+
+        // Otimizações aplicadas e before state
         assert.ok(html.includes("4 / 5"), "Deve mostrar total de otimizações aplicadas");
+        assert.ok(html.includes("Não aplicado"), "Deve mostrar before_state formatado");
+
+        // Totais de Limpeza
+        assert.ok(html.includes("TOTAIS"), "Deve mostrar resumo do footer de limpeza");
+        assert.ok(html.includes("5"), "Deve mostrar total removidos");
+
+        // CPU/RAM neutro
+        assert.ok(html.includes("oscilações momentâneas"), "Deve exibir texto neutro de CPU/RAM");
+
+        // Ações
+        assert.ok(html.includes("Abrir relatório HTML"), "Deve exibir CTA Abrir relatório HTML");
+        assert.ok(html.includes("Copiar resumo"), "Deve exibir CTA Copiar resumo");
     }
 
     console.log("Todos os testes JS da Página Relatório passaram.");

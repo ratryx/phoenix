@@ -147,7 +147,7 @@
             cardAchados.appendChild(createEl("strong", "", "Achados do Sistema"));
             var ulAchados = createEl("ul", "lista-simples");
             ulAchados.style.marginTop = "12px";
-            ulAchados.appendChild(createEl("li", "", "Entradas de inicialização: " + (startup.total || 0) + " (Alto impacto: " + (startup.alto_impacto || 0) + ")"));
+            ulAchados.appendChild(createEl("li", "", (startup.alto_impacto || 0) + " programa(s) de inicialização com potencial impacto identificado(s)."));
             cardAchados.appendChild(ulAchados);
             container.appendChild(cardAchados);
         }
@@ -206,10 +206,18 @@
                     var subUl = createEl("ul", "lista-simples");
                     subUl.style.marginLeft = "20px";
                     subUl.style.fontSize = "0.9em";
-                    subUl.appendChild(createEl("li", "", "Modelo: " + (d.modelo || "N/D")));
-                    subUl.appendChild(createEl("li", "", "Capacidade: " + (d.capacidade_gb || "N/D") + " GB"));
-                    subUl.appendChild(createEl("li", "", "Temperatura: " + (d.temperatura || "N/D")));
-                    subUl.appendChild(createEl("li", "", "Horas de uso: " + (d.horas_ligado || "N/D")));
+                    if (d.nome) subUl.appendChild(createEl("li", "", "Nome/modelo: " + d.nome));
+                    if (d.tipo_midia) subUl.appendChild(createEl("li", "", "Tipo: " + d.tipo_midia));
+                    if (d.tamanho_gb) subUl.appendChild(createEl("li", "", "Capacidade: " + d.tamanho_gb + " GB"));
+
+                    if (d.confiabilidade) {
+                        var c = d.confiabilidade;
+                        if (c.temperatura_c !== undefined && c.temperatura_c !== null) subUl.appendChild(createEl("li", "", "Temperatura: " + c.temperatura_c + "°C"));
+                        if (c.horas_uso !== undefined && c.horas_uso !== null) subUl.appendChild(createEl("li", "", "Horas de uso: " + c.horas_uso));
+                        if (c.wear_percent !== undefined && c.wear_percent !== null) subUl.appendChild(createEl("li", "", "Desgaste: " + c.wear_percent + "%"));
+                        if (c.erros_leitura) subUl.appendChild(createEl("li", "texto-erro", "Erros de leitura: " + c.erros_leitura));
+                        if (c.erros_escrita) subUl.appendChild(createEl("li", "texto-erro", "Erros de escrita: " + c.erros_escrita));
+                    }
                     if (d.alertas && d.alertas.length > 0) {
                         subUl.appendChild(createEl("li", "texto-erro", "Alertas: " + d.alertas.join(", ")));
                     }
@@ -405,18 +413,59 @@
         }
 
         // H. Botões de Ação
+        // H. Botões de Ação
+        var actionContainer = createEl("div", "");
+        actionContainer.style.display = "flex";
+        actionContainer.style.gap = "10px";
+        actionContainer.style.marginTop = "20px";
+        actionContainer.style.flexWrap = "wrap";
+
         if (Phoenix.bridge) {
-            var actionContainer = createEl("div", "");
-            actionContainer.style.display = "flex";
-            actionContainer.style.gap = "10px";
-            actionContainer.style.marginTop = "20px";
+            if (Phoenix.bridge.abrir_pasta_relatorio) {
+                var btnAbrirPasta = createEl("button", "botao", "Abrir pasta do relatório");
+                btnAbrirPasta.onclick = function() {
+                    Phoenix.bridge.abrir_pasta_relatorio(payload.id_atendimento);
+                };
+                actionContainer.appendChild(btnAbrirPasta);
+            }
+            if (Phoenix.bridge.abrir_relatorio_html && payload.relatorio_html) {
+                var btnAbrirHtml = createEl("button", "botao", "Abrir relatório HTML");
+                btnAbrirHtml.onclick = function() {
+                    Phoenix.bridge.abrir_relatorio_html(payload.id_atendimento);
+                };
+                actionContainer.appendChild(btnAbrirHtml);
+            }
+        }
 
-            var btnAbrirPasta = createEl("button", "botao", "Abrir pasta do relatório");
-            btnAbrirPasta.onclick = function() {
-                Phoenix.bridge.abrir_pasta_relatorio(payload.id_atendimento);
+        if (typeof window.print === "function") {
+            var btnImprimir = createEl("button", "botao", "Imprimir / PDF");
+            btnImprimir.onclick = function() {
+                try {
+                    window.print();
+                } catch (e) {
+                    console.error("Falha ao imprimir", e);
+                }
             };
-            actionContainer.appendChild(btnAbrirPasta);
+            actionContainer.appendChild(btnImprimir);
+        }
 
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            var btnCopiar = createEl("button", "botao", "Copiar resumo");
+            btnCopiar.onclick = function() {
+                var resumoTexto = "Relatório Phoenix Optimizer - " + (antes.cliente || "Cliente") + "\n";
+                resumoTexto += "Espaço liberado: " + (resumo.espaco_liberado_mb ? (resumo.espaco_liberado_mb / 1024).toFixed(2) + " GB" : "0 GB") + "\n";
+                resumoTexto += "Otimizações: " + (resumo.otimizacoes_aplicadas || 0) + "/" + (resumo.otimizacoes_total || 0) + "\n";
+                navigator.clipboard.writeText(resumoTexto).then(function() {
+                    btnCopiar.textContent = "Copiado!";
+                    setTimeout(function() { btnCopiar.textContent = "Copiar resumo"; }, 2000);
+                }).catch(function(e) {
+                    console.error("Falha ao copiar", e);
+                });
+            };
+            actionContainer.appendChild(btnCopiar);
+        }
+
+        if (actionContainer.children.length > 0) {
             container.appendChild(actionContainer);
         }
     };
