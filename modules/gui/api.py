@@ -428,31 +428,55 @@ class PhoenixAPI:
         """Abre a pasta contendo os relatórios (logs oficiais)."""
         from modules import logs
         from modules.core.windows_command import run_windows_command, to_public_result
+        import re
         try:
+            if not isinstance(id_atendimento, str) or not re.match(r'^[\w-]+$', id_atendimento):
+                return {"ok": False, "erro": "Identificador de atendimento inválido."}
+
             pasta = logs.obter_pasta_logs()
             if not pasta.exists():
-                return {"ok": False, "erro": "Pasta não encontrada"}
+                return {"ok": False, "erro": "A pasta de relatórios não foi encontrada."}
+
             # Usa abstração segura para não bloquear o backend
-            res_obj = run_windows_command(f'explorer "{pasta}"', timeout_seconds=5.0)
-            res = to_public_result(res_obj)
-            return {"ok": res["ok"], "codigo": res.get("returncode", res.get("codigo", 0))}
-        except Exception as e:
-            return {"ok": False, "erro": str(e)}
+            res_obj = run_windows_command(
+                args=["explorer.exe", str(pasta)],
+                operation_name="abrir_pasta_relatorio",
+                timeout_seconds=5.0
+            )
+            res = to_public_result(res_obj, error_message="Não foi possível abrir a pasta de relatórios.")
+            return {"ok": res["ok"], "codigo": res.get("returncode", res.get("codigo", 0)), "erro": res.get("erro", "")}
+        except Exception:
+            return {"ok": False, "erro": "Erro interno ao tentar abrir a pasta."}
 
     def abrir_relatorio_html(self, id_atendimento: str) -> dict:
         """Abre o relatório HTML específico do atendimento."""
         from modules import logs
         from modules.core.windows_command import run_windows_command, to_public_result
+        import re
         try:
+            # Traversal check: only allow safe filename characters
+            if not isinstance(id_atendimento, str) or not re.match(r'^[\w-]+$', id_atendimento):
+                return {"ok": False, "erro": "Identificador de atendimento inválido."}
+
             pasta = logs.obter_pasta_logs()
             arquivo = pasta / f"{id_atendimento}_relatorio.html"
+
+            # Additional safety check
+            if arquivo.parent != pasta:
+                return {"ok": False, "erro": "Caminho de relatório inválido."}
+
             if not arquivo.exists():
-                return {"ok": False, "erro": "Relatório HTML não encontrado"}
-            res_obj = run_windows_command(f'explorer "{arquivo}"', timeout_seconds=5.0)
-            res = to_public_result(res_obj)
-            return {"ok": res["ok"], "codigo": res.get("returncode", res.get("codigo", 0))}
-        except Exception as e:
-            return {"ok": False, "erro": str(e)}
+                return {"ok": False, "erro": "O relatório HTML não foi encontrado no sistema."}
+
+            res_obj = run_windows_command(
+                args=["explorer.exe", str(arquivo)],
+                operation_name="abrir_relatorio_html",
+                timeout_seconds=5.0
+            )
+            res = to_public_result(res_obj, error_message="Não foi possível abrir o relatório HTML.")
+            return {"ok": res["ok"], "codigo": res.get("returncode", res.get("codigo", 0)), "erro": res.get("erro", "")}
+        except Exception:
+            return {"ok": False, "erro": "Erro interno ao tentar abrir o relatório."}
 
     def obter_historico(self) -> dict:
         try:

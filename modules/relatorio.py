@@ -128,7 +128,7 @@ def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois:
     """Exporta o relatório técnico V3 em txt."""
     dados_antes = snapshot_antes
     dados_depois = snapshot_depois
-    cliente = snapshot_antes.get("cliente", "não informado")
+    cliente = payload.get("cliente", "não informado")
     
     resumo = payload.get("resumo", {})
     limpeza = payload.get("limpeza", {})
@@ -151,7 +151,7 @@ def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois:
         "=" * 50,
         f"Cliente: {cliente}",
         f"Atendimento ID: {payload.get('id_atendimento', 'N/D')}",
-        f"Data: {snapshot_depois.get('data_hora', '')}",
+        f"Data: {payload.get('data_hora', '')}",
         f"Duração: {payload.get('duracao_segundos', 0)}s",
         f"Sistema Operacional: {snapshot_antes.get('sistema', {}).get('sistema', '')} {snapshot_antes.get('sistema', {}).get('versao', '')}",
         f"Processador: {snapshot_antes.get('sistema', {}).get('processador', 'N/D')}",
@@ -227,12 +227,16 @@ def exportar_relatorio_txt(payload: dict, snapshot_antes: dict, snapshot_depois:
     if drivers.get("ok") and drivers.get("resultados"):
         linhas.append("Drivers:")
         for dr in drivers.get("resultados", []):
-            linhas.append(f"  - {dr.get('nome')} ({dr.get('fabricante')}): {dr.get('classificacao')}")
+            tipo = "Virtual" if dr.get("virtual") else "Físico"
+            linhas.append(f"  - {dr.get('nome')} ({tipo}) [{dr.get('fabricante')}]: {dr.get('classificacao')}")
     else:
         linhas.append("Drivers: Análise indisponível.")
 
     linhas.append("")
     linhas.append("--- F. ESTADO OBSERVADO (Antes -> Depois) ---")
+    linhas.append("Nota: CPU e RAM são medições pontuais e podem variar durante o uso.")
+    linhas.append("Isoladamente, essas métricas não representam ganho ou perda de desempenho.")
+    linhas.append("")
     try:
         linhas.append(f"Uso de CPU:      {dados_antes['cpu']['uso_percentual']}%  ->  {dados_depois['cpu']['uso_percentual']}%")
         linhas.append(f"Uso de RAM:      {dados_antes['memoria']['percentual_uso']}%  ->  {dados_depois['memoria']['percentual_uso']}%")
@@ -273,7 +277,7 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
 
     dados_antes = snapshot_antes
     dados_depois = snapshot_depois
-    cliente = escape_safe(snapshot_antes.get("cliente", "não informado"))
+    cliente = escape_safe(payload.get("cliente", "não informado"))
     
     resumo = payload.get("resumo", {})
     limpeza = payload.get("limpeza", {})
@@ -320,7 +324,8 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
     drivers_html = ""
     if analises.get("drivers", {}).get("ok"):
         for dr in analises.get("drivers", {}).get("resultados", []):
-            drivers_html += f"<li>{escape_safe(dr.get('nome'))}: {escape_safe(dr.get('classificacao'))}</li>"
+            tipo = "Virtual" if dr.get("virtual") else "Físico"
+            drivers_html += f"<li>{escape_safe(dr.get('nome'))} ({tipo}): {escape_safe(dr.get('classificacao'))}</li>"
 
     try:
         cpu_antes = f"{dados_antes['cpu']['uso_percentual']}%"
@@ -378,22 +383,22 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
 <body>
     <div class="container">
         <h1>Phoenix Optimizer<br><small style="color:#8b949e; font-size:16px;">Relatório Técnico V3</small></h1>
-        <p><strong>Cliente:</strong> {cliente}<br><strong>Data:</strong> {escape_safe(snapshot_depois.get('data_hora', ''))}<br><strong>Duração:</strong> {payload.get('duracao_segundos', 0)}s</p>
+        <p><strong>Cliente:</strong> {cliente}<br><strong>Data:</strong> {escape_safe(payload.get('data_hora', ''))}<br><strong>Duração:</strong> {payload.get('duracao_segundos', 0)}s</p>
 
         <div class="section">
             <h2>A. RESULTADO DO ATENDIMENTO</h2>
             <div class="grid">
                 <div class="card">
                     <div class="title">Espaço Recuperado</div>
-                    <div class="value">{{resumo.get('espaco_liberado_mb', 0):.2f}} MB</div>
+                    <div class="value">{resumo.get('espaco_liberado_mb', 0):.2f} MB</div>
                 </div>
                 <div class="card">
                     <div class="title">Itens Removidos</div>
-                    <div class="value">{{resumo.get('itens_removidos', 0)}}</div>
+                    <div class="value">{resumo.get('itens_removidos', 0)}</div>
                 </div>
                 <div class="card">
                     <div class="title">Otimizações</div>
-                    <div class="value">{{resumo.get('otimizacoes_aplicadas', 0)}} / {{resumo.get('otimizacoes_total', 0)}}</div>
+                    <div class="value">{resumo.get('otimizacoes_aplicadas', 0)} / {resumo.get('otimizacoes_total', 0)}</div>
                 </div>
                 <div class="card">
                     <div class="title">Proteção</div>
@@ -438,6 +443,7 @@ def exportar_relatorio_html(payload: dict, snapshot_antes: dict, snapshot_depois
 
         <div class="section">
             <h2>D. OBSERVAÇÃO DO ESTADO (Antes -> Depois)</h2>
+            <p style="font-size: 12px; color: #8b949e;">Nota: CPU e RAM são medições pontuais e podem variar durante o uso. Isoladamente, essas métricas não representam ganho ou perda de desempenho.</p>
             <table>
                 <thead>
                     <tr><th>Métrica</th><th>Antes</th><th>Depois</th></tr>

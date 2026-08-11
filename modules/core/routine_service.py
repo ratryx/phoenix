@@ -78,7 +78,6 @@ class RoutineService:
             check_cancel()
             if job_context: job_context.update_progress(5, "Diagnosticando sistema (inicial)...")
             dados_antes = self._diagnostico.coletar_diagnostico_silencioso()
-            dados_antes["cliente"] = nome_cliente
             self._logs.salvar_snapshot(id_atendimento, "antes", dados_antes, nome_cliente)
             self._logs.registrar_acao(id_atendimento, "Diagnóstico inicial coletado", nome_cliente=nome_cliente)
             
@@ -228,6 +227,8 @@ class RoutineService:
             payload = {
                 "ok": True,
                 "id_atendimento": id_atendimento,
+                "cliente": nome_cliente or "não informado",
+                "data_hora": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
                 "duracao_segundos": int(duracao),
                 "resumo": {
                     "espaco_liberado_mb": limpeza_resultado.get("espaco_liberado_mb", 0.0),
@@ -288,7 +289,7 @@ class RoutineService:
                 "codigo": "STARTUP_HIGH_IMPACT",
                 "nivel": "aviso",
                 "titulo": "Programas de Inicialização",
-                "descricao": f"Foram detectados {startup.get('alto_impacto', 0)} programas de alto impacto ou excesso de itens no boot. Considere revisar a aba Otimização."
+                "descricao": f"Foram detectados {startup.get('alto_impacto', 0)} programas com potencial impacto na inicialização. Considere revisar quais programas realmente precisam iniciar com o Windows."
             })
 
         # 2. Disk Health

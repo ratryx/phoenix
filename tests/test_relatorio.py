@@ -9,7 +9,6 @@ def test_exportar_relatorio_html_escapes_xss(tmp_path):
     payload = "<script>alert('xss')</script>"
 
     snapshot_antes = {
-        "cliente": payload,
         "dados": {
             "cpu": {"uso_percentual": 50},
             "memoria": {"percentual_uso": 50, "disponivel_gb": 4},
@@ -20,7 +19,6 @@ def test_exportar_relatorio_html_escapes_xss(tmp_path):
     }
 
     snapshot_depois = {
-        "data_hora": payload,
         "dados": {
             "cpu": {"uso_percentual": 40},
             "memoria": {"percentual_uso": 40, "disponivel_gb": 6},
@@ -31,6 +29,8 @@ def test_exportar_relatorio_html_escapes_xss(tmp_path):
     }
 
     payload_mock = {
+        "cliente": payload,
+        "data_hora": payload,
         "resumo": {"espaco_liberado_mb": 500},
         "limpeza": {"categorias": []},
         "otimizacoes": {},

@@ -41,7 +41,13 @@ function setupEnvironment() {
                 }
             }
         },
-        Phoenix: { pages: {} }
+        Phoenix: { 
+            pages: {},
+            bridge: {
+                abrir_pasta_relatorio: function() {},
+                abrir_relatorio_html: function() {}
+            }
+        }
     };
     context.window.Phoenix = context.Phoenix;
     function getHTML(node) {
@@ -104,8 +110,10 @@ async function runTests() {
     {
         const ctx = setupEnvironment();
         const payload = {
-            antes: { dados: { cpu: { uso_percentual: 80.0 }, memoria: { percentual_uso: 90.0, disponivel_gb: 1.0 }, discos: [{unidade: "C:", livre_gb: 100}] }, cliente: "John Doe" },
-            depois: { dados: { cpu: { uso_percentual: 50.0 }, memoria: { percentual_uso: 60.0, disponivel_gb: 4.0 }, discos: [{unidade: "C:", livre_gb: 150}] } },
+            cliente: "John Doe",
+            data_hora: "10/08/2026 14:00:00",
+            antes: { cpu: { uso_percentual: 80.0 }, memoria: { percentual_uso: 90.0, disponivel_gb: 1.0 }, discos: [{unidade: "C:", livre_gb: 100}], sistema: { sistema: "Windows", versao: "10", processador: "Intel" } },
+            depois: { cpu: { uso_percentual: 50.0 }, memoria: { percentual_uso: 60.0, disponivel_gb: 4.0 }, discos: [{unidade: "C:", livre_gb: 150}], sistema: { sistema: "Windows", versao: "10", processador: "Intel" } },
             resumo: { espaco_liberado_mb: 2048, otimizacoes_aplicadas: 4, otimizacoes_total: 5 },
             limpeza: { categorias: [{nome: "Cache", arquivos_removidos: 5, arquivos_ignorados: 0, espaco_liberado_bytes: 1024, status: "concluido"}] },
             otimizacoes: { resultados: { "opt1": { ok: true, descricao: "Otimização 1" } }, before_state: { "opt1": { ativo: false } } },
@@ -156,7 +164,7 @@ async function runTests() {
         assert.ok(html.includes("5"), "Deve mostrar total removidos");
 
         // CPU/RAM neutro
-        assert.ok(html.includes("oscilações momentâneas"), "Deve exibir texto neutro de CPU/RAM");
+        assert.ok(html.includes("CPU e RAM são medições pontuais"), "Deve exibir texto neutro de CPU/RAM");
 
         // Ações
         assert.ok(html.includes("Abrir relatório HTML"), "Deve exibir CTA Abrir relatório HTML");

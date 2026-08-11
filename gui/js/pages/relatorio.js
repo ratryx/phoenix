@@ -102,9 +102,9 @@
         cardId.appendChild(titleId);
 
         var listId = createEl("ul", "lista-simples");
-        listId.appendChild(createEl("li", "", "Cliente: " + (antes.cliente || "Não informado")));
+        listId.appendChild(createEl("li", "", "Cliente: " + (payload.cliente || "Não informado")));
         listId.appendChild(createEl("li", "", "Atendimento ID: " + (payload.id_atendimento || "N/D")));
-        listId.appendChild(createEl("li", "", "Data/Hora: " + (depois.data_hora || "N/D")));
+        listId.appendChild(createEl("li", "", "Data/Hora: " + (payload.data_hora || "N/D")));
         if (antes.sistema) {
             listId.appendChild(createEl("li", "", "SO: " + (antes.sistema.sistema || "") + " " + (antes.sistema.versao || "")));
             listId.appendChild(createEl("li", "", "CPU: " + (antes.sistema.processador || "N/D")));
