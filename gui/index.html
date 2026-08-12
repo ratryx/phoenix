@@ -735,49 +735,51 @@
 
 
 <!-- Overlay de processamento -->
-
 <div class="overlay-processando" id="overlay-processando">
-
   <div class="overlay-progresso-card">
-
-    <div class="overlay-icone" id="overlay-icone"></div>
-
-    <div class="overlay-titulo" id="overlay-titulo">Processando...</div>
-
-    <div class="overlay-subtitulo" id="overlay-subtitulo">
-
-      Aguarde, isso pode levar alguns segundos
-
+    <div class="overlay-cabecalho" style="display:flex; justify-content:space-between; width:100%; align-items:center; margin-bottom:16px;">
+      <div style="display:flex; gap:12px; align-items:center;">
+        <div class="overlay-icone" id="overlay-icone" style="font-size:28px; margin:0; display:none;"></div>
+        <div>
+          <div class="overlay-titulo" id="overlay-titulo">Otimizando Sistema</div>
+          <div class="overlay-subtitulo" id="overlay-subtitulo" style="margin:0;">Aguarde, isso pode levar alguns minutos...</div>
+        </div>
+      </div>
+      <div id="overlay-fase-badge" style="background:rgba(216, 155, 74, 0.15); color:var(--cor-primaria); padding:4px 10px; border-radius:100px; font-size:12px; font-weight:600; display:none;">Fase 1/5</div>
     </div>
 
-    <div class="overlay-barra-container">
+    <!-- Stepper de fases -->
+    <div class="overlay-stepper" id="overlay-stepper" style="display:none; width:100%; margin-bottom:16px;"></div>
 
+    <div class="overlay-barra-container" style="margin:8px 0;">
       <div class="overlay-barra-fill" id="overlay-barra-fill"></div>
-
     </div>
-
-    <div class="overlay-status" id="overlay-status">Iniciando...</div>
-
+    <div class="overlay-status" id="overlay-status" style="margin-bottom:16px;">Iniciando...</div>
     
-
-    <div id="overlay-detalhes-limpeza" style="display: none; margin-top: 15px; font-size: 13px; text-align: left;">
-
-      <div id="overlay-progresso-numerico" style="font-weight: 600; color: var(--cor-texto); margin-bottom: 8px;"></div>
-
-      <div id="overlay-categorias" style="font-size: 12px; color: var(--cor-texto-secundario); max-height: 80px; overflow-y: auto;"></div>
-
+    <div id="overlay-detalhes-limpeza" style="display: none; width:100%; font-size: 13px; text-align: left;">
+      <!-- Métricas Resumo -->
+      <div class="overlay-resumo-metricas" style="display:flex; gap:12px; margin-bottom:12px;">
+        <div class="metrica-card" style="flex:1; background:rgba(0,0,0,0.2); padding:10px; border-radius:var(--raio-sm); border:1px solid rgba(255,255,255,0.05);">
+          <div style="font-size:11px; color:var(--cor-texto-secundario); text-transform:uppercase;">Itens Verificados</div>
+          <div id="overlay-progresso-numerico" style="font-size:18px; font-weight:600; color:var(--cor-texto);">0 / 0</div>
+        </div>
+        <div class="metrica-card" style="flex:1; background:rgba(0,0,0,0.2); padding:10px; border-radius:var(--raio-sm); border:1px solid rgba(255,255,255,0.05);">
+          <div style="font-size:11px; color:var(--cor-texto-secundario); text-transform:uppercase;">Espaço Liberado</div>
+          <div id="overlay-resumo-espaco" style="font-size:18px; font-weight:600; color:var(--cor-sucesso);">0 MB</div>
+        </div>
+      </div>
+      
+      <!-- Atividade Recente -->
+      <div class="overlay-recent-activity" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.04); border-radius:var(--raio-sm); padding:10px;">
+        <div style="font-size:11px; color:var(--cor-texto-secundario); margin-bottom:8px; text-transform:uppercase; font-weight:600;">Atividade Recente</div>
+        <div id="overlay-categorias" style="font-size: 12px; color: var(--cor-texto-secundario); max-height: 90px; overflow-y: auto; display:flex; flex-direction:column; gap:4px;"></div>
+      </div>
     </div>
-
     
-
-    <div style="margin-top: 16px;">
-
+    <div style="margin-top: 16px; width:100%; display:flex; justify-content:flex-end;">
       <button class="botao" id="overlay-btn-cancelar" style="display: none;">Cancelar</button>
-
     </div>
-
   </div>
-
 </div>
 
 
