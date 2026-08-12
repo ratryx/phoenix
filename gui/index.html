@@ -816,6 +816,32 @@
 
 
 
+<!-- Modal de Risco do Ponto de Restauração -->
+<div class="modal-container" id="modal-risco-restauracao">
+  <div class="modal-card">
+    <div class="modal-cabecalho">
+      <h2 id="modal-risco-titulo">Erro ao Criar Ponto de Restauração</h2>
+    </div>
+    <div class="modal-conteudo" style="align-items:flex-start; margin-bottom:16px;">
+      <div class="modal-status-icon erro" id="modal-risco-icon" style="margin-top:2px;">[AVISO]</div>
+      <div style="flex:1;">
+        <p id="modal-risco-motivo" style="margin:0 0 8px 0; font-size:14px; font-weight:600; color:var(--cor-alerta);"></p>
+        <p id="modal-risco-impacto" style="margin:0; font-size:13px; line-height:1.5; color:var(--cor-texto-secundario);">
+          Não será possível reverter automaticamente em caso de problemas. Deseja continuar sem proteção?
+        </p>
+      </div>
+    </div>
+    <div class="modal-botoes" id="modal-risco-botoes" style="flex-wrap:wrap; justify-content:flex-end;">
+      <button class="botao" id="btn-modal-risco-abrir" style="margin-right:auto; border-color:rgba(255,255,255,0.15);">Abrir Proteção do Sistema</button>
+      <button class="botao" id="btn-modal-risco-tentar">Tentar Novamente</button>
+      <button class="botao primario" id="btn-modal-risco-continuar">Continuar sem proteção</button>
+      <button class="botao" id="btn-modal-risco-cancelar">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+
+
 <div class="modal-container" id="modal-confirmacao">
 
   <div class="modal-card">

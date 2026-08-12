@@ -223,6 +223,40 @@ def criar_ponto_restauracao(cancel_event=None) -> dict:
 
     seq_antes = seq_antes_info["sequence"]
 
+    # Preflight Check: Services and System Protection status
+    preflight_script = """
+    $ErrorActionPreference = 'SilentlyContinue'
+    $vss = Get-Service -Name VSS
+    $swprv = Get-Service -Name swprv
+    if (($vss -and $vss.StartType -eq 'Disabled') -or ($swprv -and $swprv.StartType -eq 'Disabled')) {
+        Write-Output 'SERVICES_DISABLED'
+        exit 0
+    }
+    $regDisabled = Get-ItemPropertyValue -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore' -Name 'DisableSR' -ErrorAction SilentlyContinue
+    $polDisabled = Get-ItemPropertyValue -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\SystemRestore' -Name 'DisableSR' -ErrorAction SilentlyContinue
+    if ($regDisabled -eq 1 -or $polDisabled -eq 1) {
+        Write-Output 'RESTORE_DISABLED'
+        exit 0
+    }
+    Write-Output 'OK'
+    """
+    preflight_res = run_windows_command(["powershell", "-NoProfile", "-NonInteractive", "-Command", preflight_script], operation_name="Preflight Restore Point", timeout_seconds=15.0)
+    
+    if preflight_res.ok:
+        out_pf = preflight_res.stdout.strip()
+        if "SERVICES_DISABLED" in out_pf:
+            return {
+                "ok": False,
+                "erro": "Os serviços necessários (VSS/swprv) estão desativados.",
+                "codigo": "SERVICES_DISABLED"
+            }
+        elif "RESTORE_DISABLED" in out_pf:
+            return {
+                "ok": False,
+                "erro": "A Restauração do Sistema está desativada no Windows.",
+                "codigo": "RESTORE_DISABLED"
+            }
+
     comando = [
         "powershell",
         "-NoProfile",

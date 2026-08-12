@@ -313,12 +313,19 @@ class PhoenixAPI:
         return {"job_id": job_id}
 
     def confirmar_risco_protecao(self) -> dict:
-        if self._restore_attempt_failed:
-            self._protection_state = "risk_accepted"
-            from modules.core.gui_logger import GUILogger
-            GUILogger.log("Ponto de restauração", "AVISO", "Execução autorizada sem ponto de restauração pelo operador.")
+        """Confirma o risco de executar sem ponto de restauração."""
+        self._protection_state = "risk_accepted"
+        from modules.core.gui_logger import GUILogger
+        GUILogger.log("Ponto de restauração", "AVISO", "Execução autorizada sem ponto de restauração pelo operador.")
+        return {"ok": True}
+        
+    def abrir_protecao_sistema(self) -> dict:
+        import subprocess
+        try:
+            subprocess.Popen("SystemPropertiesProtection.exe")
             return {"ok": True}
-        return {"ok": False, "erro": "Não é possível confirmar risco sem uma falha prévia de restauração.", "codigo": "INVALID_RISK_ACCEPTANCE"}
+        except Exception as e:
+            return {"ok": False, "erro": str(e)}
 
     def _require_protection(self):
         if self._protection_state not in ("restore_created", "risk_accepted"):

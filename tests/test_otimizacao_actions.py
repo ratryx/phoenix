@@ -70,7 +70,9 @@ def test_executar_otimizacao_gaming_partial(mock_log, mock_gpu, mock_gamebar, mo
 def test_criar_ponto_restauracao_no_existing_success(mock_verif, mock_run, mock_seq, mock_admin):
     mock_seq.return_value = {"ok": True, "sequence": 0}
     from modules.core.windows_command import CommandResult
-    mock_run.return_value = CommandResult(ok=True, code="COMMAND_OK", returncode=0, stdout="", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    pf_res = CommandResult(ok=True, code="COMMAND_OK", returncode=0, stdout="OK", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    ok_res = CommandResult(ok=True, code="COMMAND_OK", returncode=0, stdout="", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    mock_run.side_effect = [pf_res, ok_res]
     mock_verif.return_value = True
 
     res = criar_ponto_restauracao()
@@ -84,7 +86,9 @@ def test_criar_ponto_restauracao_no_existing_success(mock_verif, mock_run, mock_
 def test_criar_ponto_restauracao_existing_success(mock_verif, mock_run, mock_seq, mock_admin):
     mock_seq.return_value = {"ok": True, "sequence": 15}
     from modules.core.windows_command import CommandResult
-    mock_run.return_value = CommandResult(ok=True, code="COMMAND_OK", returncode=0, stdout="", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    pf_res = CommandResult(ok=True, code="COMMAND_OK", returncode=0, stdout="OK", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    ok_res = CommandResult(ok=True, code="COMMAND_OK", returncode=0, stdout="", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    mock_run.side_effect = [pf_res, ok_res]
     mock_verif.return_value = True
 
     res = criar_ponto_restauracao()
@@ -106,7 +110,9 @@ def test_criar_ponto_restauracao_before_query_failure(mock_seq, mock_admin):
 def test_criar_ponto_restauracao_after_query_failure(mock_verif, mock_run, mock_seq, mock_admin):
     mock_seq.return_value = {"ok": True, "sequence": 10}
     from modules.core.windows_command import CommandResult
-    mock_run.return_value = CommandResult(ok=True, code="COMMAND_OK", returncode=0, stdout="", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    pf_res = CommandResult(ok=True, code="COMMAND_OK", returncode=0, stdout="OK", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    ok_res = CommandResult(ok=True, code="COMMAND_OK", returncode=0, stdout="", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    mock_run.side_effect = [pf_res, ok_res]
     # _verificar_ponto_restauracao_especifico retorna false quando falha ou não encontra
     mock_verif.return_value = False
 
@@ -120,7 +126,9 @@ def test_criar_ponto_restauracao_after_query_failure(mock_verif, mock_run, mock_
 def test_criar_ponto_restauracao_command_failure(mock_run, mock_seq, mock_admin):
     mock_seq.return_value = {"ok": True, "sequence": 5}
     from modules.core.windows_command import CommandResult
-    mock_run.return_value = CommandResult(ok=False, code="COMMAND_FAILED", returncode=1, stdout="", stderr="access denied", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    pf_res = CommandResult(ok=True, code="COMMAND_OK", returncode=0, stdout="OK", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    fail_res = CommandResult(ok=False, code="COMMAND_FAILED", returncode=1, stdout="", stderr="access denied", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    mock_run.side_effect = [pf_res, fail_res]
 
     res = criar_ponto_restauracao()
     assert res["ok"] is False
@@ -133,7 +141,9 @@ def test_criar_ponto_restauracao_command_failure(mock_run, mock_seq, mock_admin)
 def test_criar_ponto_restauracao_unrelated_point_appearing(mock_verif, mock_run, mock_seq, mock_admin):
     mock_seq.return_value = {"ok": True, "sequence": 5}
     from modules.core.windows_command import CommandResult
-    mock_run.return_value = CommandResult(ok=True, code="COMMAND_OK", returncode=0, stdout="", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    pf_res = CommandResult(ok=True, code="COMMAND_OK", returncode=0, stdout="OK", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    ok_res = CommandResult(ok=True, code="COMMAND_OK", returncode=0, stdout="", stderr="", timed_out=False, cancelled=False, duration_ms=100, termination_ok=True)
+    mock_run.side_effect = [pf_res, ok_res]
     # Mesmo se o comando rodou, se a query nao encontra o nosso (encontrou de outro software)
     mock_verif.return_value = False
 

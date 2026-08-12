@@ -80,6 +80,46 @@
         });
     }
 
+    function exibirModalRiscoRestore(motivo) {
+        return new Promise((resolve) => {
+            var modal = document.getElementById("modal-risco-restauracao");
+            if (!modal) {
+                // Fallback in case HTML not present
+                resolve('continuar');
+                return;
+            }
+            
+            var motivoEl = document.getElementById("modal-risco-motivo");
+            motivoEl.textContent = motivo || "Falha desconhecida.";
+
+            var btnAbrir = document.getElementById("btn-modal-risco-abrir");
+            var btnTentar = document.getElementById("btn-modal-risco-tentar");
+            var btnContinuar = document.getElementById("btn-modal-risco-continuar");
+            var btnCancelar = document.getElementById("btn-modal-risco-cancelar");
+
+            function closeAndResolve(action) {
+                modal.classList.remove("visivel");
+                btnAbrir.removeEventListener("click", onAbrir);
+                btnTentar.removeEventListener("click", onTentar);
+                btnContinuar.removeEventListener("click", onContinuar);
+                btnCancelar.removeEventListener("click", onCancelar);
+                resolve(action);
+            }
+
+            function onAbrir() { closeAndResolve('abrir'); }
+            function onTentar() { closeAndResolve('tentar'); }
+            function onContinuar() { closeAndResolve('continuar'); }
+            function onCancelar() { closeAndResolve('cancelar'); }
+
+            btnAbrir.addEventListener("click", onAbrir);
+            btnTentar.addEventListener("click", onTentar);
+            btnContinuar.addEventListener("click", onContinuar);
+            btnCancelar.addEventListener("click", onCancelar);
+
+            modal.classList.add("visivel");
+        });
+    }
+
     operation.runProtected = async function (acaoFn) {
         if (criandoPonto) return;
         
@@ -132,76 +172,49 @@
                 });
             } else {
                 feedback.esconderOverlay(true, false);
-                return new Promise((resolve, reject) => {
-                    setTimeout(async () => {
-                        const continuar = await confirmarComModalLegado(
-                            'Ponto de restauração indisponível',
-                            'Não foi possível criar um ponto de restauração do sistema. Deseja continuar com a otimização mesmo assim? Em caso de problemas, não será possível reverter automaticamente.',
-                            'alerta'
-                        );
-                        criandoPonto = false;
-                        if (continuar) {
-                            try {
-                                const confirmacao = await Phoenix.bridge.call("confirmar_risco_protecao");
-                                if (confirmacao && confirmacao.ok) {
-                                    STATE.protectionState = 'risk_accepted';
-                                    try {
-                                        const result = await acaoFn();
-                                        resolve(result);
-                                    } catch (err) {
-                                        reject(err);
-                                    }
-                                } else {
-                                    resolve(undefined);
-                                }
-                            } catch (e) {
-                                console.error("[ERRO] Falha ao confirmar risco:", e);
-                                resolve(undefined);
-                            }
-                        } else {
-                            resolve(undefined);
-                        }
-                    }, 1300);
-                });
+                return handleRestoreFailure(res ? res.erro : "Falha desconhecida", acaoFn);
             }
         } catch(e) {
             console.error("[ERRO] Ponto de restauração:", e);
             clearInterval(progressoTimer);
             feedback.esconderOverlay(true, true);
-            
-            return new Promise((resolve, reject) => {
-                setTimeout(async () => {
-                    const continuar = await confirmarComModalLegado(
-                        'Erro ao criar ponto de restauração',
-                        'Ocorreu um erro interno ao tentar criar o ponto de restauração. Deseja continuar com a otimização mesmo assim?',
-                        'erro'
-                    );
-                    criandoPonto = false;
-                    if (continuar) {
-                        try {
-                            const confirmacao = await Phoenix.bridge.call("confirmar_risco_protecao");
-                            if (confirmacao && confirmacao.ok) {
-                                STATE.protectionState = 'risk_accepted';
-                                try {
-                                    const result = await acaoFn();
-                                    resolve(result);
-                                } catch (err) {
-                                    reject(err);
-                                }
-                            } else {
-                                resolve(undefined);
-                            }
-                        } catch (e) {
-                            console.error("[ERRO] Falha ao confirmar risco:", e);
-                            resolve(undefined);
-                        }
-                    } else {
-                        resolve(undefined);
-                    }
-                }, 1300);
-            });
+            return handleRestoreFailure("Ocorreu um erro interno ao tentar criar o ponto de restauração.", acaoFn);
         }
     };
+
+    async function handleRestoreFailure(erroMsg, acaoFn) {
+        criandoPonto = false;
+        
+        while (true) {
+            const action = await exibirModalRiscoRestore(erroMsg);
+            
+            if (action === 'cancelar') {
+                return undefined;
+            } else if (action === 'abrir') {
+                try {
+                    await bridge.call("abrir_protecao_sistema");
+                } catch (err) {
+                    console.error("Falha ao abrir sysdm.cpl", err);
+                }
+                // Continues the loop, allowing them to retry or continue
+            } else if (action === 'tentar') {
+                return await operation.runProtected(acaoFn);
+            } else if (action === 'continuar') {
+                try {
+                    const confirmacao = await bridge.call("confirmar_risco_protecao");
+                    if (confirmacao && confirmacao.ok) {
+                        STATE.protectionState = 'risk_accepted';
+                        return await acaoFn();
+                    } else {
+                        return undefined;
+                    }
+                } catch (e) {
+                    console.error("[ERRO] Falha ao confirmar risco:", e);
+                    return undefined;
+                }
+            }
+        }
+    }
 
     Phoenix.operations = Phoenix.operations || {};
     Phoenix.operations.restorePoint = operation;
