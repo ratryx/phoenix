@@ -114,6 +114,8 @@ def gerar_relatorio_comparativo(snapshot_antes: dict, snapshot_depois: dict, esp
 
 def _formatar_status_limpeza(status: str, ignorados: int) -> str:
     status = status.lower()
+    if status == "vazio":
+        return "NADA A LIMPAR"
     if status == "parcial" or ignorados > 0:
         return "CONCLUÍDO COM EXCEÇÕES"
     elif status in ("concluido", "concluído"):

@@ -5,6 +5,7 @@
 
 
     var _barraProgresso = null;
+    var _hideTimeout = null;
 
 
 
@@ -36,6 +37,11 @@
             }
             _barraProgresso = { barra, fill, textoEl };
             return;
+        }
+
+        if (_hideTimeout) {
+            clearTimeout(_hideTimeout);
+            _hideTimeout = null;
         }
 
         const overlay = document.getElementById('overlay-processando');
@@ -261,7 +267,12 @@
 
 
 
-        setTimeout(() => {
+        if (_hideTimeout) {
+            clearTimeout(_hideTimeout);
+            _hideTimeout = null;
+        }
+
+        _hideTimeout = setTimeout(() => {
 
             if (overlay) overlay.classList.remove('visivel');
 

@@ -296,12 +296,22 @@ class RoutineService:
         smart = payload.get("analises", {}).get("smart", {})
         if smart.get("ok"):
             discos = smart.get("discos", [])
-            if any(d.get("classificacao") in ["Atenção", "Crítico"] for d in discos):
+            has_critico = any(d.get("classificacao") == "Crítico" for d in discos)
+            has_atencao = any(d.get("classificacao") == "Atenção" for d in discos)
+
+            if has_critico:
+                recs.append({
+                    "codigo": "DISK_HEALTH_CRITICAL",
+                    "nivel": "erro",
+                    "titulo": "Saúde do Disco (Crítico)",
+                    "descricao": "Atenção crítica à saúde de um ou mais discos. Recomenda-se realizar um backup imediatamente e providenciar a substituição do componente."
+                })
+            elif has_atencao:
                 recs.append({
                     "codigo": "DISK_HEALTH_WARNING",
-                    "nivel": "erro",
-                    "titulo": "Saúde do Disco",
-                    "descricao": "Atenção crítica à saúde de um ou mais discos. Considere realizar um backup imediatamente e providenciar a substituição do componente."
+                    "nivel": "aviso",
+                    "titulo": "Saúde do Disco (Atenção)",
+                    "descricao": "Um ou mais discos requerem atenção ou monitoramento. Verifique a temperatura ou outros alertas e monitore o desempenho do componente."
                 })
 
         # 3. Disk Space

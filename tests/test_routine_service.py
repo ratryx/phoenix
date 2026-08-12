@@ -306,17 +306,23 @@ def test_smart_recommendations():
     # Saudável -> no warning
     payload = {"analises": {"smart": {"ok": True, "discos": [{"health_status": "Healthy", "classificacao": "Saudável"}]}}, "depois": {}}
     service._gerar_recomendacoes_deterministicas(payload)
-    assert not any(r["codigo"] == "DISK_HEALTH_WARNING" for r in payload.get("recomendacoes", []))
+    assert not any(r["codigo"].startswith("DISK_HEALTH") for r in payload.get("recomendacoes", []))
 
-    # Atenção -> warning
+    # Atenção -> warning (nivel aviso, not erro)
     payload = {"analises": {"smart": {"ok": True, "discos": [{"health_status": "Healthy", "classificacao": "Atenção"}]}}, "depois": {}}
     service._gerar_recomendacoes_deterministicas(payload)
-    assert any(r["codigo"] == "DISK_HEALTH_WARNING" for r in payload.get("recomendacoes", []))
+    recs = [r for r in payload.get("recomendacoes", []) if r["codigo"] == "DISK_HEALTH_WARNING"]
+    assert len(recs) == 1
+    assert recs[0]["nivel"] == "aviso"
+    assert "substituição" not in recs[0]["descricao"]
 
-    # Crítico -> warning
+    # Crítico -> critical (nivel erro)
     payload = {"analises": {"smart": {"ok": True, "discos": [{"health_status": "Healthy", "classificacao": "Crítico"}]}}, "depois": {}}
     service._gerar_recomendacoes_deterministicas(payload)
-    assert any(r["codigo"] == "DISK_HEALTH_WARNING" for r in payload.get("recomendacoes", []))
+    recs = [r for r in payload.get("recomendacoes", []) if r["codigo"] == "DISK_HEALTH_CRITICAL"]
+    assert len(recs) == 1
+    assert recs[0]["nivel"] == "erro"
+    assert "substituição" in recs[0]["descricao"]
 
 def test_driver_recommendations():
     service = RoutineService(FakeDiagnostico(), FakeLimpeza(), FakeOtimizacao(), FakeLogs(), FakeRelatorio(), FakeSmart(), FakeDriverCheck())

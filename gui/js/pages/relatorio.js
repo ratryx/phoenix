@@ -45,6 +45,7 @@
 
     function formatarStatusLimpeza(status, ignorados) {
         var s = String(status).toLowerCase();
+        if (s === "vazio") return "NADA A LIMPAR";
         if (s === "parcial" || ignorados > 0) return "CONCLUÍDO COM EXCEÇÕES";
         if (s === "concluido" || s === "concluído") return "CONCLUÍDO";
         if (s === "erro" || s === "falhou") return "FALHOU";
@@ -56,6 +57,7 @@
         var s = String(status).toLowerCase();
         if (s.includes("exceções") || s.includes("excecoes")) return "aviso";
         if (s === "concluído" || s === "concluido") return "sucesso";
+        if (s === "nada a limpar") return "neutro";
         if (s === "falhou") return "erro";
         return "neutro";
     }
@@ -420,18 +422,19 @@
         actionContainer.style.marginTop = "20px";
         actionContainer.style.flexWrap = "wrap";
 
-        if (Phoenix.bridge) {
-            if (Phoenix.bridge.abrir_pasta_relatorio) {
-                var btnAbrirPasta = createEl("button", "botao", "Abrir pasta do relatório");
-                btnAbrirPasta.onclick = function() {
-                    Phoenix.bridge.abrir_pasta_relatorio(payload.id_atendimento);
-                };
-                actionContainer.appendChild(btnAbrirPasta);
-            }
-            if (Phoenix.bridge.abrir_relatorio_html && payload.relatorio_html) {
+        if (Phoenix.bridge && typeof Phoenix.bridge.call === "function") {
+            var btnAbrirPasta = createEl("button", "botao", "Abrir pasta do relatório");
+            btnAbrirPasta.onclick = function() {
+                Phoenix.bridge.call("abrir_pasta_relatorio", payload.id_atendimento)
+                    .catch(e => console.error("Erro ao abrir pasta", e));
+            };
+            actionContainer.appendChild(btnAbrirPasta);
+
+            if (payload.relatorio_html) {
                 var btnAbrirHtml = createEl("button", "botao", "Abrir relatório HTML");
                 btnAbrirHtml.onclick = function() {
-                    Phoenix.bridge.abrir_relatorio_html(payload.id_atendimento);
+                    Phoenix.bridge.call("abrir_relatorio_html", payload.id_atendimento)
+                        .catch(e => console.error("Erro ao abrir HTML", e));
                 };
                 actionContainer.appendChild(btnAbrirHtml);
             }
@@ -452,9 +455,19 @@
         if (navigator.clipboard && navigator.clipboard.writeText) {
             var btnCopiar = createEl("button", "botao", "Copiar resumo");
             btnCopiar.onclick = function() {
-                var resumoTexto = "Relatório Phoenix Optimizer - " + (antes.cliente || "Cliente") + "\n";
-                resumoTexto += "Espaço liberado: " + (resumo.espaco_liberado_mb ? (resumo.espaco_liberado_mb / 1024).toFixed(2) + " GB" : "0 GB") + "\n";
+                var resumoTexto = "Relatório Phoenix Optimizer - " + (payload.cliente || "Cliente") + "\n";
+                resumoTexto += "Espaço liberado: " + formatarBytes(resumo.espaco_liberado_mb) + "\n";
+                var removidos = 0;
+                if (limpeza.categorias) {
+                    limpeza.categorias.forEach(function(c) {
+                        removidos += (c.arquivos_removidos || 0);
+                    });
+                }
+                resumoTexto += "Itens removidos: " + removidos + "\n";
                 resumoTexto += "Otimizações: " + (resumo.otimizacoes_aplicadas || 0) + "/" + (resumo.otimizacoes_total || 0) + "\n";
+                resumoTexto += "Duração: " + formatarSegundos(resumo.duracao_segundos) + "\n";
+                resumoTexto += "Proteção: " + formatarProtecao(protecao.status, protecao.mensagem) + "\n";
+
                 navigator.clipboard.writeText(resumoTexto).then(function() {
                     btnCopiar.textContent = "Copiado!";
                     setTimeout(function() { btnCopiar.textContent = "Copiar resumo"; }, 2000);

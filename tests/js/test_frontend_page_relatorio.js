@@ -44,8 +44,9 @@ function setupEnvironment() {
         Phoenix: { 
             pages: {},
             bridge: {
-                abrir_pasta_relatorio: function() {},
-                abrir_relatorio_html: function() {}
+                call: function(methodName, args) {
+                    return Promise.resolve({ ok: true });
+                }
             }
         }
     };
