@@ -37,6 +37,7 @@ function setupEnvironment() {
         navigator: {
             clipboard: {
                 writeText: function(text) {
+                    context.clipboardText = text;
                     return Promise.resolve();
                 }
             }
@@ -170,6 +171,34 @@ async function runTests() {
         // Ações
         assert.ok(html.includes("Abrir relatório HTML"), "Deve exibir CTA Abrir relatório HTML");
         assert.ok(html.includes("Copiar resumo"), "Deve exibir CTA Copiar resumo");
+    }
+
+    // Teste 4: clipboard summary duration fix
+    {
+        const ctx = setupEnvironment();
+        const payload = {
+            cliente: "John Doe",
+            resumo: { espaco_liberado_mb: 2048, otimizacoes_aplicadas: 4, otimizacoes_total: 5 },
+            limpeza: { categorias: [] },
+            otimizacoes: {},
+            protecao: { status: "restore_created", mensagem: "OK" },
+            duracao_segundos: 78
+        };
+        ctx.Phoenix.pages.relatorio.showResult({ payload: payload });
+
+        const botoes = ctx.container.children[ctx.container.children.length - 1].children;
+        let btnCopiar = null;
+        for (let i = 0; i < botoes.length; i++) {
+            if (botoes[i].textContent === "Copiar resumo") {
+                btnCopiar = botoes[i];
+                break;
+            }
+        }
+
+        assert.ok(btnCopiar, "Botão copiar deve existir");
+        btnCopiar.onclick();
+
+        assert.ok(ctx.clipboardText && ctx.clipboardText.includes("Duração: 1m 18s"), "Deve formatar corretamente a duração de 78s");
     }
 
     console.log("Todos os testes JS da Página Relatório passaram.");

@@ -465,7 +465,7 @@
                 }
                 resumoTexto += "Itens removidos: " + removidos + "\n";
                 resumoTexto += "Otimizações: " + (resumo.otimizacoes_aplicadas || 0) + "/" + (resumo.otimizacoes_total || 0) + "\n";
-                resumoTexto += "Duração: " + formatarSegundos(resumo.duracao_segundos) + "\n";
+                resumoTexto += "Duração: " + formatarSegundos(payload.duracao_segundos) + "\n";
                 resumoTexto += "Proteção: " + formatarProtecao(protecao.status, protecao.mensagem) + "\n";
 
                 navigator.clipboard.writeText(resumoTexto).then(function() {
