@@ -40,6 +40,12 @@ async function runTests() {
         overlayAberto: false,
         mockModal: {
             'modal-restauracao': { classList: { add: () => { sandbox.modalAberto = true; }, remove: () => { sandbox.modalAberto = false; } } },
+            'modal-risco-restauracao': { classList: { add: () => { sandbox.modalAberto = true; }, remove: () => { sandbox.modalAberto = false; } } },
+            'modal-risco-motivo': { textContent: '' },
+            'btn-modal-risco-abrir': { addEventListener: (ev, cb) => { if (ev === 'click') sandbox.mockAbrirClick = cb; }, removeEventListener: () => {} },
+            'btn-modal-risco-tentar': { addEventListener: (ev, cb) => { if (ev === 'click') sandbox.mockTentarClick = cb; }, removeEventListener: () => {} },
+            'btn-modal-risco-continuar': { addEventListener: (ev, cb) => { if (ev === 'click') sandbox.mockConfirmarClick = cb; }, removeEventListener: () => {} },
+            'btn-modal-risco-cancelar': { addEventListener: (ev, cb) => { if (ev === 'click') sandbox.mockCancelarClick = cb; }, removeEventListener: () => {} },
             'modal-titulo': { textContent: '' },
             'modal-mensagem': { textContent: '' },
             'modal-icon': { className: '', textContent: '' },
@@ -201,6 +207,27 @@ async function runTests() {
             assert(e.message === "Erro teste", "erro preservado");
         }
         assert(erroAcao, "exceção propagada");
+
+        // 17. falha com modal ausente deve cancelar operação
+        sandbox.Phoenix.state.protectionState = 'not_attempted';
+        sandbox.Phoenix.jobs.awaitJob = async () => ({ ok: false }); // forçar falha
+        // Remover modal mockado
+        const oldModal = sandbox.mockModal['modal-risco-restauracao'];
+        sandbox.mockModal['modal-risco-restauracao'] = null;
+        let acaoAposModalAusente = false;
+        let originalConsoleError = console.error;
+        let errorLogged = false;
+        console.error = (msg) => {
+            if (msg && msg.includes("[ERRO FATAL] Modal de risco")) {
+                errorLogged = true;
+            }
+        };
+        const resModalAusente = await operation.runProtected(async () => { acaoAposModalAusente = true; });
+        console.error = originalConsoleError;
+        assert(resModalAusente === undefined, "operação cancelada se modal estiver ausente");
+        assert(acaoAposModalAusente === false, "ação não é executada se modal ausente");
+        assert(errorLogged, "erro fatal logado por segurança");
+        sandbox.mockModal['modal-risco-restauracao'] = oldModal;
 
         console.log("Todos os testes JS do Ponto de Restauração passaram.");
     } catch (e) {

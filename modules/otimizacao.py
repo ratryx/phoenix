@@ -213,17 +213,7 @@ def criar_ponto_restauracao(cancel_event=None) -> dict:
             "codigo": "NO_ADMIN"
         }
 
-    seq_antes_info = obter_ultimo_restore_point_sequence()
-    if not seq_antes_info["ok"]:
-        return {
-            "ok": False,
-            "erro": seq_antes_info["erro"],
-            "codigo": seq_antes_info["codigo"]
-        }
-
-    seq_antes = seq_antes_info["sequence"]
-
-    # Preflight Check: Services and System Protection status
+    # Preflight Check: Services and System Protection policy status
     preflight_script = """
     $ErrorActionPreference = 'SilentlyContinue'
     $vss = Get-Service -Name VSS
@@ -232,8 +222,8 @@ def criar_ponto_restauracao(cancel_event=None) -> dict:
         Write-Output 'SERVICES_DISABLED'
         exit 0
     }
-    $regDisabled = Get-ItemPropertyValue -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore' -Name 'DisableSR' -ErrorAction SilentlyContinue
-    $polDisabled = Get-ItemPropertyValue -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows NT\SystemRestore' -Name 'DisableSR' -ErrorAction SilentlyContinue
+    $regDisabled = Get-ItemPropertyValue -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\SystemRestore' -Name 'DisableSR' -ErrorAction SilentlyContinue
+    $polDisabled = Get-ItemPropertyValue -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\SystemRestore' -Name 'DisableSR' -ErrorAction SilentlyContinue
     if ($regDisabled -eq 1 -or $polDisabled -eq 1) {
         Write-Output 'RESTORE_DISABLED'
         exit 0
@@ -253,9 +243,19 @@ def criar_ponto_restauracao(cancel_event=None) -> dict:
         elif "RESTORE_DISABLED" in out_pf:
             return {
                 "ok": False,
-                "erro": "A Restauração do Sistema está desativada no Windows.",
+                "erro": "A Restauração do Sistema está desativada globalmente por política no Windows.",
                 "codigo": "RESTORE_DISABLED"
             }
+
+    seq_antes_info = obter_ultimo_restore_point_sequence()
+    if not seq_antes_info["ok"]:
+        return {
+            "ok": False,
+            "erro": seq_antes_info["erro"],
+            "codigo": seq_antes_info["codigo"]
+        }
+
+    seq_antes = seq_antes_info["sequence"]
 
     comando = [
         "powershell",

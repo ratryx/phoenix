@@ -187,15 +187,15 @@
                     if (c.status === 'limpando') {
                         st = c.percentual !== undefined ? `Limpando ${c.percentual}%` : 'Limpando...';
                         cor = 'var(--cor-alerta-texto)';
-                        iconeBadge = '[⚡]';
+                        iconeBadge = '[]';
                     } else if (c.status === 'concluido') {
                         st = 'Concluído';
                         cor = 'var(--cor-sucesso-texto)';
-                        iconeBadge = '[✓]';
+                        iconeBadge = '[OK]';
                     } else if (c.status === 'parcial') {
                         st = 'Exceções';
                         cor = 'var(--cor-alerta-texto)';
-                        iconeBadge = '[!]';
+                        iconeBadge = '[AVISO]';
                     } else if (c.status === 'falhou') {
                         st = 'Falhou';
                         cor = 'var(--cor-erro-texto)';

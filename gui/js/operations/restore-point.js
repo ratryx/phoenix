@@ -85,7 +85,8 @@
             var modal = document.getElementById("modal-risco-restauracao");
             if (!modal) {
                 // Fallback in case HTML not present
-                resolve('continuar');
+                console.error("[ERRO FATAL] Modal de risco de restauração não encontrado no DOM. Abortando operação por segurança.");
+                resolve('cancelar');
                 return;
             }
             
