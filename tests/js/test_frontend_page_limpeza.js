@@ -102,9 +102,11 @@ async function runTests() {
         await new Promise(r => setTimeout(r, 60)); // Let step 1 (progress) run
         
         const numerico = sandbox.document.getElementById('overlay-progresso-numerico');
+        const espaco = sandbox.document.getElementById('overlay-resumo-espaco');
         const categorias = sandbox.document.getElementById('overlay-categorias');
-        assert(numerico.innerHTML.includes("10 / 20 itens"), "DOM: processados/total rendering");
-        assert(numerico.innerHTML.includes("50 MB"), "DOM: liberado rendering");
+        assert(numerico.textContent.includes("10 / 20"), "DOM: processados/total rendering");
+        assert(!numerico.textContent.includes("itens"), "DOM: 'itens' text is no longer inside the numeric badge");
+        assert(espaco.textContent.includes("50 MB"), "DOM: liberado rendering");
         console.log("NUMERICO:", numerico.innerHTML);
         console.log("CATEGORIAS:", categorias.innerHTML);
         assert(categorias.innerHTML.includes("Cache Chrome"), "DOM: list rendering");
@@ -122,6 +124,7 @@ async function runTests() {
         console.log("verificar_tarefa_calls:", verificar_tarefa_calls);
         assert(verificar_tarefa_calls >= 2, "Polling continuou após abort até terminal");
         
+
         const container = sandbox.document.getElementById('conteudo-limpeza');
         assert(container.innerHTML.includes("Cancelado"), "Snapshot terminal renderizado (Cancelado)");
         assert(container.innerHTML.includes("10 itens processados"), "Snapshot terminal: itens");
@@ -159,6 +162,27 @@ async function runTests() {
         assert(container.innerHTML.includes("50 / 100 itens"), "Sucesso parcial: exibe processados e total");
         assert(container.innerHTML.includes("40 removidos"), "Sucesso parcial: exibe removidos");
         assert(container.innerHTML.includes("Parcial"), "Sucesso parcial: exibe badge parcial");
+
+        // TEST: UNKNOWN/ZERO TOTAL (Verificando...)
+        is_cancelled = false;
+        sandbox.window.Phoenix.bridge.call = async (ep, arg) => {
+            if (ep === "executar_limpeza") return { job_id: '996' };
+            if (ep === "cancelar_tarefa") {
+                is_cancelled = true;
+                return {};
+            }
+            if (ep === "verificar_tarefa") {
+                if (is_cancelled) {
+                    return { status: "cancelled", resultado: { ok: false, erro: "Cancelado" } };
+                }
+                return { status: "running", progresso: 10, detalhes_progresso: { arquivos_processados: 5, arquivos_total: 0, espaco_liberado_mb: 0, categorias: [] } };
+            }
+        };
+        const execPromiseZero = btn.onclick();
+        await new Promise(r => setTimeout(r, 20));
+        assert(sandbox.document.getElementById('overlay-progresso-numerico').textContent.includes("Verificando..."), "DOM: shows Verificando... when total is zero");
+        sandbox.document.getElementById('overlay-btn-cancelar').onclick();
+        await execPromiseZero;
 
         console.log("Todos os testes JS de limpeza (integração real) passaram.");
     } catch(e) {

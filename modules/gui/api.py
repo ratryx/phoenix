@@ -327,12 +327,8 @@ class PhoenixAPI:
         return {"ok": True}
         
     def abrir_protecao_sistema(self) -> dict:
-        import subprocess
-        try:
-            subprocess.Popen(["SystemPropertiesProtection.exe"], shell=False)
-            return {"ok": True}
-        except Exception:
-            return {"ok": False, "codigo": "OPEN_PROTECTION_FAILED", "erro": "Não foi possível abrir as configurações de proteção do sistema."}
+        from modules.core.windows_command import launch_system_applet
+        return launch_system_applet(["SystemPropertiesProtection.exe"])
 
     def _require_protection(self):
         if self._protection_state not in ("restore_created", "risk_accepted"):

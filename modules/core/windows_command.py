@@ -288,3 +288,29 @@ def to_public_result(
         payload["erro"] = error_message
 
     return payload
+
+def launch_system_applet(args: Sequence[str]) -> Dict[str, Any]:
+    """
+    Launches a whitelisted system applet safely (fire-and-forget, GUI).
+    """
+    if not isinstance(args, (list, tuple)) or not args:
+        return {"ok": False, "codigo": "INVALID_ARGS", "erro": "Argumentos inválidos."}
+
+    exe = args[0]
+    allowed_applets = {"SystemPropertiesProtection.exe"}
+    if exe not in allowed_applets:
+        return {"ok": False, "codigo": "APPLET_NOT_ALLOWED", "erro": "Executável não permitido."}
+
+    try:
+        import sys
+        if sys.platform == "win32":
+            CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+            creationflags = CREATE_NO_WINDOW
+        else:
+            creationflags = 0
+
+        subprocess.Popen(args, shell=False, creationflags=creationflags)
+        return {"ok": True}
+    except Exception:
+        logger.error("Falha ao abrir o applet do sistema.")
+        return {"ok": False, "codigo": "OPEN_PROTECTION_FAILED", "erro": "Não foi possível abrir as configurações de proteção do sistema."}

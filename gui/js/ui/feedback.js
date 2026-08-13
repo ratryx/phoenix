@@ -187,7 +187,7 @@
                     if (c.status === 'limpando') {
                         st = c.percentual !== undefined ? `Limpando ${c.percentual}%` : 'Limpando...';
                         cor = 'var(--cor-alerta-texto)';
-                        iconeBadge = '[]';
+                        iconeBadge = '[>]';
                     } else if (c.status === 'concluido') {
                         st = 'Concluído';
                         cor = 'var(--cor-sucesso-texto)';

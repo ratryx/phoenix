@@ -71,8 +71,7 @@ def test_no_subprocess_outside_windows_command():
     launcher_file = project_root / "launcher.py"
     
     allowed_files = [
-        modules_dir / "core" / "windows_command.py",
-        modules_dir / "gui" / "api.py"
+        modules_dir / "core" / "windows_command.py"
     ]
     
     files_to_scan = list(modules_dir.rglob("*.py"))
